@@ -1,0 +1,18 @@
+meta {
+  name: Verifty OTP
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{SERVER_URL}}/api/v1/auth/otp/verify
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "phone": "+201234567890",
+    "otp": "650291"
+  }
+}

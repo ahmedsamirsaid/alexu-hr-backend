@@ -1,0 +1,406 @@
+package main
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/banumusa/backend/adapters/db"
+	httpAdapter "github.com/banumusa/backend/adapters/http"
+	"github.com/banumusa/backend/adapters/legacy"
+	"github.com/banumusa/backend/adapters/notifications/fcm"
+	"github.com/banumusa/backend/adapters/notifications/noop"
+	"github.com/banumusa/backend/adapters/scheduler"
+	"github.com/banumusa/backend/core/ports"
+	"github.com/banumusa/backend/core/usecases"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+)
+
+func main() {
+	cfg := LoadConfig()
+
+	sqliteDB, err := db.NewSQLiteDB(cfg.DBPath)
+	if err != nil {
+		slog.Error("main.main.connect_database", "error", err)
+		os.Exit(1)
+	}
+	defer sqliteDB.Close()
+
+	if err := runMigrations(sqliteDB.DB(), cfg.DBMigrationsPath); err != nil {
+		slog.Error("main.main.run_migrations", "error", err)
+		os.Exit(1)
+	}
+
+	// Existing repositories
+	employeeRepo := db.NewEmployeeRepository()
+	leaveTypeRepo := db.NewLeaveTypeRepository()
+	leaveBalanceRepo := db.NewLeaveBalanceRepository()
+	leaveRecordRepo := db.NewLeaveRecordRepository()
+	balanceTxRepo := db.NewLeaveBalanceTransactionRepository()
+	weekendRepo := db.NewWeekendConfigRepository()
+	holidayInstanceRepo := db.NewHolidayInstanceRepository()
+
+	// Auth repositories
+	userRepo := db.NewUserRepository()
+	roleRepo := db.NewRoleRepository()
+	permissionRepo := db.NewPermissionRepository()
+	otpRepo := db.NewOTPRepository()
+	refreshTokenRepo := db.NewRefreshTokenRepository()
+
+	// Department repository
+	departmentRepo := db.NewDepartmentRepository()
+
+	// Approval flow repositories
+	approvalFlowRepo := db.NewApprovalFlowRepository()
+	approvalFlowStepRepo := db.NewApprovalFlowStepRepository()
+	approvalRequestRepo := db.NewApprovalRequestRepository()
+	approvalActionRepo := db.NewApprovalActionRepository()
+	leaveRequestRepo := db.NewLeaveRequestRepository()
+
+	// Device token repository
+	deviceTokenRepo := db.NewDeviceTokenRepository()
+
+	// Notification service
+	var notificationService ports.NotificationService
+	if cfg.FCMEnabled {
+		fcmService, err := fcm.NewFCMNotificationService(context.Background(), fcm.Config{
+			ServiceAccountJSONPath: cfg.FCMServiceAccountPath,
+			DeviceTokenRepo:        deviceTokenRepo,
+			DB:                     sqliteDB,
+		})
+		if err != nil {
+			slog.Error("main.main.init_fcm", "error", err)
+			os.Exit(1)
+		}
+		notificationService = fcmService
+		slog.Info("main.main.fcm_enabled")
+	} else {
+		notificationService = noop.NewNoopNotificationService()
+		slog.Info("main.main.fcm_disabled")
+	}
+
+	leaveSync := legacy.NewNoopLeaveSyncAdapter()
+
+	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayInstanceRepo)
+
+	// Leave use cases
+	recordLeaveUC := usecases.NewRecordLeaveUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveBalanceRepo,
+		leaveRecordRepo,
+		balanceTxRepo,
+		workingDaysCalc,
+		leaveSync,
+	)
+
+	getBalanceUC := usecases.NewGetBalanceUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveBalanceRepo,
+	)
+
+	listLeaveRecordsUC := usecases.NewListLeaveRecordsUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveRecordRepo,
+	)
+
+	listAllLeaveRecordsUC := usecases.NewListAllLeaveRecordsUseCase(
+		sqliteDB,
+		leaveTypeRepo,
+		leaveRecordRepo,
+	)
+
+	// Dashboard use cases
+	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo)
+
+	// Employee use cases
+	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo)
+	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
+	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
+	exportEmployeesUC := usecases.NewExportEmployeesUseCase(sqliteDB, employeeRepo)
+	exportEmployeesPDFUC := usecases.NewExportEmployeesPDFUseCase(sqliteDB, employeeRepo, cfg.FontPath)
+	generateTemplateUC := usecases.NewGenerateImportTemplateUseCase()
+	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(sqliteDB, employeeRepo, departmentRepo)
+	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(sqliteDB, employeeRepo)
+
+	// JWT service
+	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret)
+
+	// Auth use cases
+	requestOTPUC := usecases.NewRequestOTPUseCase(sqliteDB, otpRepo, userRepo)
+	verifyOTPUC := usecases.NewVerifyOTPUseCase(
+		sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo, otpRepo, refreshTokenRepo,
+		jwtService, cfg.DevOTPBypass, cfg.DevBypassOTP, cfg.RefreshTokenDays,
+	)
+	loginPasswordUC := usecases.NewLoginPasswordUseCase(
+		sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo, refreshTokenRepo,
+		jwtService, cfg.DevOTPBypass, cfg.DevBypassOTP, cfg.RefreshTokenDays,
+	)
+	refreshTokenUC := usecases.NewRefreshTokenUseCase(
+		sqliteDB, userRepo, roleRepo, refreshTokenRepo,
+		jwtService, cfg.RefreshTokenDays,
+	)
+	logoutUC := usecases.NewLogoutUseCase(sqliteDB, refreshTokenRepo)
+	getCurrentUserUC := usecases.NewGetCurrentUserUseCase(sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo)
+
+	// User management use cases
+	listUsersUC := usecases.NewListUsersUseCase(sqliteDB, userRepo, roleRepo, employeeRepo)
+	createUserUC := usecases.NewCreateUserUseCase(sqliteDB, userRepo)
+	updateUserUC := usecases.NewUpdateUserUseCase(sqliteDB, userRepo)
+	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo)
+	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo)
+
+	// Role management use cases
+	listRolesUC := usecases.NewListRolesUseCase(sqliteDB, roleRepo, permissionRepo)
+	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo)
+	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo)
+	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
+
+	// Approval Flow use cases (admin)
+	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
+	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
+	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
+	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
+	createApprovalFlowStepUC := usecases.NewCreateApprovalFlowStepUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
+	updateApprovalFlowStepUC := usecases.NewUpdateApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, roleRepo)
+	deleteApprovalFlowStepUC := usecases.NewDeleteApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo)
+
+	// Department use cases (admin)
+	listDepartmentsUC := usecases.NewListDepartmentsUseCase(sqliteDB, departmentRepo)
+	getDepartmentUC := usecases.NewGetDepartmentUseCase(sqliteDB, departmentRepo, roleRepo, employeeRepo)
+	createDepartmentUC := usecases.NewCreateDepartmentUseCase(sqliteDB, departmentRepo)
+	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(sqliteDB, departmentRepo)
+	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo)
+	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
+
+	// Leave Type use cases (admin)
+	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
+
+	// Leave Request use cases
+	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveBalanceRepo,
+		leaveRequestRepo,
+		leaveRecordRepo,
+		balanceTxRepo,
+		approvalRequestRepo,
+		approvalActionRepo,
+		approvalFlowStepRepo,
+		workingDaysCalc,
+		notificationService,
+		roleRepo,
+	)
+	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
+		sqliteDB,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		approvalActionRepo,
+	)
+	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(
+		sqliteDB,
+		leaveRequestRepo,
+		approvalRequestRepo,
+	)
+	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
+		sqliteDB,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		employeeRepo,
+		leaveTypeRepo,
+	)
+
+	// Approval use cases
+	listPendingApprovalsUC := usecases.NewListPendingApprovalsUseCase(
+		sqliteDB,
+		userRepo,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		approvalFlowStepRepo,
+		roleRepo,
+	)
+	approveRequestUC := usecases.NewApproveRequestUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveTypeRepo,
+		leaveBalanceRepo,
+		leaveRecordRepo,
+		balanceTxRepo,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		approvalActionRepo,
+		approvalFlowStepRepo,
+		roleRepo,
+		notificationService,
+		userRepo,
+	)
+	rejectRequestUC := usecases.NewRejectRequestUseCase(
+		sqliteDB,
+		employeeRepo,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		approvalActionRepo,
+		approvalFlowStepRepo,
+		roleRepo,
+		notificationService,
+		leaveTypeRepo,
+		userRepo,
+	)
+	getApprovalHistoryUC := usecases.NewGetApprovalHistoryUseCase(
+		sqliteDB,
+		approvalRequestRepo,
+		approvalActionRepo,
+		employeeRepo,
+	)
+
+	// Device token use cases
+	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
+	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
+
+	// Scheduler use cases
+	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
+		sqliteDB,
+		leaveRequestRepo,
+		approvalRequestRepo,
+		approvalActionRepo,
+		cfg.ExpiredLeaveGraceDays,
+	)
+
+	// Handlers
+	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC)
+	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
+	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC)
+	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
+	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, listPermissionsUC)
+	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
+	approvalFlowHandler := httpAdapter.NewApprovalFlowHandler(
+		listApprovalFlowsUC,
+		createApprovalFlowUC,
+		updateApprovalFlowUC,
+		listApprovalFlowStepsUC,
+		createApprovalFlowStepUC,
+		updateApprovalFlowStepUC,
+		deleteApprovalFlowStepUC,
+	)
+	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
+		submitLeaveRequestUC,
+		cancelLeaveRequestUC,
+		listLeaveRequestsUC,
+		getLeaveRequestUC,
+		listPendingApprovalsUC,
+		approveRequestUC,
+		rejectRequestUC,
+		getApprovalHistoryUC,
+		getCurrentUserUC,
+	)
+	departmentHandler := httpAdapter.NewDepartmentHandler(
+		listDepartmentsUC,
+		getDepartmentUC,
+		createDepartmentUC,
+		updateDepartmentUC,
+		assignDepartmentManagerUC,
+		removeDepartmentManagerUC,
+	)
+	deviceTokenHandler := httpAdapter.NewDeviceTokenHandler(registerDeviceTokenUC, unregisterDeviceTokenUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+
+	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
+		LeaveHandler:         leaveHandler,
+		EmployeeHandler:      employeeHandler,
+		AuthHandler:          authHandler,
+		UserHandler:          userHandler,
+		RoleHandler:          roleHandler,
+		DashboardHandler:     dashboardHandler,
+		ApprovalFlowHandler:  approvalFlowHandler,
+		LeaveRequestHandler:  leaveRequestHandler,
+		DepartmentHandler:    departmentHandler,
+		DeviceTokenHandler:   deviceTokenHandler,
+		LeaveTypeHandler:     leaveTypeHandler,
+		JWTService:           jwtService,
+		AuthEnabled:          cfg.AuthEnabled,
+	})
+
+	// Start scheduler if enabled
+	var sched *scheduler.Scheduler
+	if cfg.SchedulerEnabled {
+		sched = scheduler.New(autoRejectExpiredUC, cfg.SchedulerIntervalHours)
+		sched.Start(context.Background())
+		slog.Info("main.main.scheduler_enabled", "interval_hours", cfg.SchedulerIntervalHours, "grace_days", cfg.ExpiredLeaveGraceDays)
+	} else {
+		slog.Info("main.main.scheduler_disabled")
+	}
+
+	// Setup graceful shutdown
+	server := &http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%s", cfg.Port),
+		Handler: router,
+	}
+
+	// Channel to listen for interrupt signals
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("main.main.server_listening", "addr", server.Addr, "auth_enabled", cfg.AuthEnabled)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("main.main.server_error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-stop
+	slog.Info("main.main.shutdown_initiated")
+
+	// Stop scheduler first
+	if sched != nil {
+		sched.Stop()
+	}
+
+	// Shutdown HTTP server
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		slog.Error("main.main.server_shutdown_error", "error", err)
+	}
+
+	slog.Info("main.main.shutdown_complete")
+}
+
+func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
+	driver, err := sqlite.WithInstance(sqlDB, &sqlite.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create migration driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		fmt.Sprintf("file://%s", migrationsPath),
+		"sqlite",
+		driver,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return nil
+}

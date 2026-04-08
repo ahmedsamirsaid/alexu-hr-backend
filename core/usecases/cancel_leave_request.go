@@ -1,0 +1,101 @@
+package usecases
+
+import (
+	"context"
+
+	"github.com/banumusa/backend/core/domain"
+	"github.com/banumusa/backend/core/ports"
+)
+
+type CancelLeaveRequestInput struct {
+	LeaveRequestUID string
+	ActorEmployeeUID string // Employee cancelling the request
+}
+
+type CancelLeaveRequestUseCase struct {
+	db                  ports.DB
+	leaveRequestRepo    ports.LeaveRequestRepository
+	approvalRequestRepo ports.ApprovalRequestRepository
+	approvalActionRepo  ports.ApprovalActionRepository
+}
+
+func NewCancelLeaveRequestUseCase(
+	db ports.DB,
+	leaveRequestRepo ports.LeaveRequestRepository,
+	approvalRequestRepo ports.ApprovalRequestRepository,
+	approvalActionRepo ports.ApprovalActionRepository,
+) *CancelLeaveRequestUseCase {
+	return &CancelLeaveRequestUseCase{
+		db:                  db,
+		leaveRequestRepo:    leaveRequestRepo,
+		approvalRequestRepo: approvalRequestRepo,
+		approvalActionRepo:  approvalActionRepo,
+	}
+}
+
+func (uc *CancelLeaveRequestUseCase) Execute(ctx context.Context, input CancelLeaveRequestInput) error {
+	tx, err := uc.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	leaveRequest, err := uc.leaveRequestRepo.GetByUID(ctx, tx, input.LeaveRequestUID)
+	if err != nil {
+		return err
+	}
+	if leaveRequest == nil {
+		return ErrLeaveRequestNotFound
+	}
+
+	// Check if requester is the owner
+	if leaveRequest.EmployeeUID != input.ActorEmployeeUID {
+		return ErrNotRequestOwner
+	}
+
+	approvalRequest, err := uc.approvalRequestRepo.GetByUID(ctx, tx, leaveRequest.ApprovalRequestUID)
+	if err != nil {
+		return err
+	}
+	if approvalRequest == nil {
+		return ErrApprovalRequestNotFound
+	}
+
+	// Can only cancel pending requests
+	if !approvalRequest.IsPending() {
+		if approvalRequest.Status == domain.ApprovalRequestStatusApproved {
+			return ErrCannotCancelApproved
+		}
+		return ErrRequestNotPending
+	}
+
+	// Cancel the approval request
+	approvalRequest.Cancel()
+	if err := uc.approvalRequestRepo.Update(ctx, tx, approvalRequest); err != nil {
+		return err
+	}
+
+	// Set decided_at on leave request
+	leaveRequest.SetDecided()
+	if err := uc.leaveRequestRepo.Update(ctx, tx, leaveRequest); err != nil {
+		return err
+	}
+
+	// Record cancel action
+	action := domain.NewApprovalAction(
+		approvalRequest.UID,
+		domain.ApprovalActionTypeCancel,
+		nil, // step_order is nil for cancel
+		input.ActorEmployeeUID,
+		nil,
+	)
+	if err := uc.approvalActionRepo.Create(ctx, tx, action); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}

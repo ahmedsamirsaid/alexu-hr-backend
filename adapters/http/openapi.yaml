@@ -1,0 +1,2109 @@
+openapi: 3.0.3
+info:
+  title: BanuMusa Leave Management API
+  description: |
+    HR and Leave Management System API.
+
+    ## Authentication
+    Most endpoints require a Bearer JWT token in the `Authorization` header.
+    Use the `/api/v1/auth/otp/verify` or `/api/v1/auth/login` endpoints to obtain tokens.
+
+  version: 1.0.0
+
+servers:
+  - url: https://alexu-hr-backend-production.up.railway.app
+    description: Deployed backend
+  - url: http://localhost:8080
+    description: Local development
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: validation_error
+      required: [error]
+
+    UserOutput:
+      type: object
+      properties:
+        userUid:
+          type: string
+          example: "usr_abc123"
+        phone:
+          type: string
+          example: "+966500000001"
+        employeeUid:
+          type: string
+          nullable: true
+          example: "emp_xyz789"
+        roles:
+          type: array
+          items:
+            type: string
+          example: ["admin"]
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["employees:read", "leave:record"]
+
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        user:
+          $ref: '#/components/schemas/UserOutput'
+
+    Employee:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "emp_xyz789"
+        name:
+          type: string
+          example: "Ahmed Al-Sayed"
+        mobile:
+          type: string
+          example: "+966500000001"
+        governmentId:
+          type: string
+          example: "1234567890"
+        universityId:
+          type: string
+          example: "U-00123"
+        email:
+          type: string
+          nullable: true
+          example: "ahmed@example.com"
+        hireDate:
+          type: string
+          format: date
+          example: "2023-01-15"
+        status:
+          type: string
+          enum: [active, inactive]
+          example: active
+
+    EmployeeListItem:
+      allOf:
+        - $ref: '#/components/schemas/Employee'
+        - type: object
+          properties:
+            departmentUid:
+              type: string
+              nullable: true
+              example: "dept_001"
+            user:
+              nullable: true
+              type: object
+              properties:
+                userUid:
+                  type: string
+                  example: "usr_abc123"
+                phone:
+                  type: string
+                  example: "+966500000001"
+                isActive:
+                  type: boolean
+                  example: true
+                roles:
+                  type: array
+                  items:
+                    type: string
+                  example: ["employee"]
+
+    LeaveRecord:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "lr_001"
+        startDate:
+          type: string
+          format: date
+          example: "2024-06-01"
+        endDate:
+          type: string
+          format: date
+          example: "2024-06-05"
+        days:
+          type: integer
+          example: 5
+        notes:
+          type: string
+          nullable: true
+          example: "Annual leave"
+
+    LeaveRecordListItem:
+      allOf:
+        - $ref: '#/components/schemas/LeaveRecord'
+        - type: object
+          properties:
+            leaveTypeUid:
+              type: string
+              example: "lt_annual"
+            leaveTypeCode:
+              type: string
+              example: "ANNUAL"
+            leaveTypeNameEn:
+              type: string
+              example: "Annual Leave"
+            leaveTypeNameAr:
+              type: string
+              example: "إجازة سنوية"
+            recordedAt:
+              type: string
+              format: date-time
+              example: "2024-05-28T10:00:00Z"
+
+    AllLeaveRecordListItem:
+      allOf:
+        - $ref: '#/components/schemas/LeaveRecordListItem'
+        - type: object
+          properties:
+            employeeUid:
+              type: string
+              example: "emp_xyz789"
+            employeeName:
+              type: string
+              example: "Ahmed Al-Sayed"
+
+    Balance:
+      type: object
+      properties:
+        leaveTypeUid:
+          type: string
+          example: "lt_annual"
+        leaveTypeCode:
+          type: string
+          example: "ANNUAL"
+        leaveTypeNameEn:
+          type: string
+          example: "Annual Leave"
+        leaveTypeNameAr:
+          type: string
+          example: "إجازة سنوية"
+        year:
+          type: integer
+          example: 2024
+        initialBalance:
+          type: integer
+          example: 21
+        usedBalance:
+          type: integer
+          example: 5
+        remainingBalance:
+          type: integer
+          example: 16
+
+    LeaveRequest:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "req_001"
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        employeeName:
+          type: string
+          example: "Ahmed Al-Sayed"
+        leaveTypeUid:
+          type: string
+          example: "lt_annual"
+        leaveTypeNameEn:
+          type: string
+          example: "Annual Leave"
+        leaveTypeNameAr:
+          type: string
+          example: "إجازة سنوية"
+        startDate:
+          type: string
+          format: date
+          example: "2024-06-01"
+        endDate:
+          type: string
+          format: date
+          example: "2024-06-05"
+        days:
+          type: integer
+          example: 5
+        notes:
+          type: string
+          nullable: true
+          example: "Family trip"
+        status:
+          type: string
+          enum: [pending, approved, rejected, cancelled]
+          example: pending
+        currentStep:
+          type: integer
+          example: 1
+        maxStep:
+          type: integer
+          example: 2
+        submittedAt:
+          type: string
+          format: date-time
+          example: "2024-05-28T10:00:00Z"
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    PendingApproval:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "req_001"
+        requesterUid:
+          type: string
+          example: "emp_xyz789"
+        requesterName:
+          type: string
+          example: "Ahmed Al-Sayed"
+        leaveTypeUid:
+          type: string
+          example: "lt_annual"
+        leaveTypeNameEn:
+          type: string
+          example: "Annual Leave"
+        leaveTypeNameAr:
+          type: string
+          example: "إجازة سنوية"
+        startDate:
+          type: string
+          format: date
+          example: "2024-06-01"
+        endDate:
+          type: string
+          format: date
+          example: "2024-06-05"
+        days:
+          type: integer
+          example: 5
+        currentStep:
+          type: integer
+          example: 1
+        maxStep:
+          type: integer
+          example: 2
+        submittedAt:
+          type: string
+          format: date-time
+          example: "2024-05-28T10:00:00Z"
+
+    ApprovalHistory:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "act_001"
+        action:
+          type: string
+          enum: [approved, rejected, cancelled]
+          example: approved
+        stepOrder:
+          type: integer
+          example: 1
+        actorUid:
+          type: string
+          example: "emp_mgr001"
+        actorName:
+          type: string
+          example: "Manager Name"
+        comments:
+          type: string
+          nullable: true
+          example: "Approved. Enjoy your leave."
+        actedAt:
+          type: string
+          format: date-time
+          example: "2024-05-29T09:00:00Z"
+
+    Role:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "role_001"
+        name:
+          type: string
+          example: "approver"
+        description:
+          type: string
+          example: "Can approve leave requests"
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["leave:read"]
+
+    Permission:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "perm_001"
+        code:
+          type: string
+          example: "leave:record"
+        description:
+          type: string
+          example: "Record leave for employees"
+
+    Department:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "dept_001"
+        code:
+          type: string
+          example: "ENG"
+        nameEn:
+          type: string
+          example: "Engineering"
+        nameAr:
+          type: string
+          nullable: true
+          example: "هندسة"
+        isActive:
+          type: boolean
+          example: true
+        managerUid:
+          type: string
+          nullable: true
+          example: "emp_mgr001"
+        managerName:
+          type: string
+          nullable: true
+          example: "Manager Name"
+
+    ApprovalFlow:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "af_001"
+        code:
+          type: string
+          example: "TWO_STEP"
+        nameEn:
+          type: string
+          example: "Two-Step Approval"
+        nameAr:
+          type: string
+          nullable: true
+          example: "موافقة من خطوتين"
+        description:
+          type: string
+          nullable: true
+          example: "Requires two approvers"
+        isActive:
+          type: boolean
+          example: true
+
+    ApprovalFlowStep:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "afs_001"
+        stepOrder:
+          type: integer
+          example: 1
+        roleUid:
+          type: string
+          example: "role_001"
+        roleName:
+          type: string
+          example: "approver"
+
+    LeaveType:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "lt_annual"
+        code:
+          type: string
+          example: "ANNUAL"
+        nameEn:
+          type: string
+          example: "Annual Leave"
+        nameAr:
+          type: string
+          example: "إجازة سنوية"
+        maxDaysPerYear:
+          type: integer
+          example: 21
+        maxConsecutiveDays:
+          type: integer
+          nullable: true
+          example: 14
+        isActive:
+          type: boolean
+          example: true
+
+    DashboardStats:
+      type: object
+      properties:
+        totalEmployees:
+          type: integer
+          example: 120
+        leavesToday:
+          type: integer
+          example: 5
+        pendingRequests:
+          type: integer
+          example: 3
+
+    User:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "usr_abc123"
+        phone:
+          type: string
+          example: "+966500000001"
+        isActive:
+          type: boolean
+          example: true
+        employeeUid:
+          type: string
+          nullable: true
+          example: "emp_xyz789"
+        roles:
+          type: array
+          items:
+            type: string
+          example: ["admin"]
+
+paths:
+  # ─── AUTH ───────────────────────────────────────────────────────────────────
+
+  /api/v1/auth/otp/request:
+    post:
+      tags: [Auth]
+      summary: Request OTP
+      description: Send a one-time password to the given phone number. In dev mode use OTP `112233`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  example: "+966500000001"
+      responses:
+        '200':
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OTP sent"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: Verify OTP and get tokens
+      description: Verify the OTP code and receive access + refresh tokens. Dev bypass OTP is `112233`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, otp]
+              properties:
+                phone:
+                  type: string
+                  example: "+966500000001"
+                otp:
+                  type: string
+                  example: "112233"
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: User inactive or web access denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with password
+      description: Authenticate using phone number and password.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password]
+              properties:
+                phone:
+                  type: string
+                  example: "+966500000001"
+                password:
+                  type: string
+                  example: "secret123"
+      responses:
+        '200':
+          description: Tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: New tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  refreshToken:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Logged out"
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserOutput'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── DASHBOARD ──────────────────────────────────────────────────────────────
+
+  /api/v1/dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: Get dashboard statistics
+      responses:
+        '200':
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStats'
+
+  # ─── EMPLOYEES ──────────────────────────────────────────────────────────────
+
+  /api/v1/employees:
+    get:
+      tags: [Employees]
+      summary: List employees
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+          example: active
+        - name: hire_date_from
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2023-01-01"
+        - name: hire_date_to
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-12-31"
+        - name: role
+          in: query
+          schema:
+            type: string
+          example: "employee"
+      responses:
+        '200':
+          description: List of employees
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  employees:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmployeeListItem'
+
+  /api/v1/employees/{uid}:
+    get:
+      tags: [Employees]
+      summary: Get employee by UID
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+      responses:
+        '200':
+          description: Employee details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '404':
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/employees/{uid}/department:
+    put:
+      tags: [Employees]
+      summary: Assign employee to department
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [departmentUid]
+              properties:
+                departmentUid:
+                  type: string
+                  example: "dept_001"
+      responses:
+        '204':
+          description: Assigned
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags: [Employees]
+      summary: Remove employee from department
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+      responses:
+        '204':
+          description: Removed
+
+  /api/v1/employees/import:
+    post:
+      tags: [Employees]
+      summary: Import employees from XLSX
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: integer
+                    example: 42
+                  errors:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/employees/export:
+    get:
+      tags: [Employees]
+      summary: Export employees as CSV
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: hire_date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: hire_date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/employees/export/pdf:
+    get:
+      tags: [Employees]
+      summary: Export employees as PDF
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: hire_date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: hire_date_to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: PDF file download
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/employees/import/template:
+    get:
+      tags: [Employees]
+      summary: Download import XLSX template
+      responses:
+        '200':
+          description: XLSX template
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /api/v1/employees/{employeeUid}/balance:
+    get:
+      tags: [Leave]
+      summary: Get employee leave balances
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: year
+          in: query
+          schema:
+            type: integer
+          example: 2024
+      responses:
+        '200':
+          description: Leave balances for the employee
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  balances:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Balance'
+        '404':
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/employees/{employeeUid}/leave-records:
+    get:
+      tags: [Leave]
+      summary: Get leave records for an employee
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: leaveTypeUid
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-12-31"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Leave records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveRecordListItem'
+                  total:
+                    type: integer
+                    example: 10
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 20
+
+  # ─── LEAVE (direct recording) ────────────────────────────────────────────────
+
+  /api/v1/leave:
+    post:
+      tags: [Leave]
+      summary: Record leave directly for an employee (admin)
+      description: Directly records leave without going through the approval workflow. Requires `leave:record` permission.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [employeeUid, leaveTypeUid, startDate, endDate]
+              properties:
+                employeeUid:
+                  type: string
+                  example: "emp_xyz789"
+                leaveTypeUid:
+                  type: string
+                  example: "lt_annual"
+                startDate:
+                  type: string
+                  format: date
+                  example: "2024-06-01"
+                endDate:
+                  type: string
+                  format: date
+                  example: "2024-06-05"
+                notes:
+                  type: string
+                  example: "Annual leave"
+      responses:
+        '201':
+          description: Leave recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveRecord'
+        '400':
+          description: Invalid input (insufficient balance, bad date range, etc.)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/leave-records:
+    get:
+      tags: [Leave]
+      summary: List all leave records (admin)
+      description: Paginated list of all employees' leave records. Requires `leave:read` permission.
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          example: "Ahmed"
+        - name: leaveTypeUid
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2024-12-31"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated leave records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllLeaveRecordListItem'
+                  total:
+                    type: integer
+                    example: 100
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 20
+
+  # ─── LEAVE REQUESTS ──────────────────────────────────────────────────────────
+
+  /api/v1/leave-requests:
+    post:
+      tags: [Leave Requests]
+      summary: Submit a leave request
+      description: Employee submits a leave request for approval. Auto-approved if no approval flow is configured.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leaveTypeUid, startDate, endDate]
+              properties:
+                leaveTypeUid:
+                  type: string
+                  example: "lt_annual"
+                startDate:
+                  type: string
+                  format: date
+                  example: "2024-06-01"
+                endDate:
+                  type: string
+                  format: date
+                  example: "2024-06-05"
+                notes:
+                  type: string
+                  example: "Family trip"
+      responses:
+        '201':
+          description: Leave request created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags: [Leave Requests]
+      summary: List my leave requests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated leave requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveRequest'
+                  total:
+                    type: integer
+                    example: 5
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 20
+
+  /api/v1/leave-requests/{uid}:
+    get:
+      tags: [Leave Requests]
+      summary: Get a leave request by UID
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      responses:
+        '200':
+          description: Leave request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequest'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/leave-requests/{uid}/cancel:
+    post:
+      tags: [Leave Requests]
+      summary: Cancel a leave request
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Leave request cancelled successfully"
+        '400':
+          description: Cannot cancel (wrong status)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ─── APPROVALS ───────────────────────────────────────────────────────────────
+
+  /api/v1/approvals/pending:
+    get:
+      tags: [Approvals]
+      summary: List pending approvals (for current approver)
+      responses:
+        '200':
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PendingApproval'
+
+  /api/v1/approvals/{uid}/approve:
+    post:
+      tags: [Approvals]
+      summary: Approve a leave request
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+                  example: "Approved. Have a great time!"
+      responses:
+        '200':
+          description: Approval result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                    example: "req_001"
+                  status:
+                    type: string
+                    example: "approved"
+                  currentStep:
+                    type: integer
+                    example: 2
+                  leaveRecordCreated:
+                    type: boolean
+                    example: true
+
+  /api/v1/approvals/{uid}/reject:
+    post:
+      tags: [Approvals]
+      summary: Reject a leave request
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+                  example: "Insufficient cover during this period."
+      responses:
+        '200':
+          description: Rejection result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                    example: "req_001"
+                  status:
+                    type: string
+                    example: "rejected"
+
+  /api/v1/approvals/{uid}/history:
+    get:
+      tags: [Approvals]
+      summary: Get approval history for a request
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      responses:
+        '200':
+          description: Approval history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalHistory'
+
+  # ─── USERS ───────────────────────────────────────────────────────────────────
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: List users
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Paginated users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+
+    post:
+      tags: [Users]
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  example: "+966500000099"
+                password:
+                  type: string
+                  example: "secret123"
+                employeeUid:
+                  type: string
+                  example: "emp_xyz789"
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /api/v1/users/{uid}:
+    put:
+      tags: [Users]
+      summary: Update a user
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "usr_abc123"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone:
+                  type: string
+                  example: "+966500000099"
+                password:
+                  type: string
+                  example: "newpassword"
+                employeeUid:
+                  type: string
+                  example: "emp_xyz789"
+                isActive:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User updated"
+
+  /api/v1/users/{uid}/roles:
+    post:
+      tags: [Users]
+      summary: Assign role to user
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "usr_abc123"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roleUid]
+              properties:
+                roleUid:
+                  type: string
+                  example: "role_001"
+      responses:
+        '200':
+          description: Role assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Role assigned"
+
+  /api/v1/users/{uid}/roles/{roleUid}:
+    delete:
+      tags: [Users]
+      summary: Remove role from user
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "usr_abc123"
+        - name: roleUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "role_001"
+      responses:
+        '200':
+          description: Role removed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Role removed"
+
+  # ─── ROLES & PERMISSIONS ─────────────────────────────────────────────────────
+
+  /api/v1/roles:
+    get:
+      tags: [Roles]
+      summary: List roles
+      responses:
+        '200':
+          description: All roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Role'
+
+    post:
+      tags: [Roles]
+      summary: Create a role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: "department_head"
+                description:
+                  type: string
+                  example: "Head of a department"
+      responses:
+        '201':
+          description: Role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+
+  /api/v1/roles/{uid}/permissions:
+    post:
+      tags: [Roles]
+      summary: Set permissions for a role
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "role_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissionUids]
+              properties:
+                permissionUids:
+                  type: array
+                  items:
+                    type: string
+                  example: ["perm_001", "perm_002"]
+      responses:
+        '200':
+          description: Permissions updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Permissions updated"
+
+  /api/v1/permissions:
+    get:
+      tags: [Roles]
+      summary: List all available permissions
+      responses:
+        '200':
+          description: All permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Permission'
+
+  # ─── DEPARTMENTS ─────────────────────────────────────────────────────────────
+
+  /api/v1/admin/departments:
+    get:
+      tags: [Departments]
+      summary: List departments
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          example: true
+      responses:
+        '200':
+          description: Departments list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  departments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Department'
+
+    post:
+      tags: [Departments]
+      summary: Create a department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, nameEn]
+              properties:
+                code:
+                  type: string
+                  example: "ENG"
+                nameEn:
+                  type: string
+                  example: "Engineering"
+                nameAr:
+                  type: string
+                  example: "هندسة"
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+
+  /api/v1/admin/departments/{uid}:
+    get:
+      tags: [Departments]
+      summary: Get department by UID
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dept_001"
+      responses:
+        '200':
+          description: Department details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+
+    patch:
+      tags: [Departments]
+      summary: Update a department
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dept_001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "ENG2"
+                nameEn:
+                  type: string
+                  example: "Engineering Team"
+                nameAr:
+                  type: string
+                  example: "فريق الهندسة"
+                isActive:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Department updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+
+  /api/v1/admin/departments/{uid}/manager:
+    post:
+      tags: [Departments]
+      summary: Assign manager to department
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dept_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userUid]
+              properties:
+                userUid:
+                  type: string
+                  example: "usr_mgr001"
+      responses:
+        '204':
+          description: Manager assigned
+
+    delete:
+      tags: [Departments]
+      summary: Remove manager from department
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dept_001"
+      responses:
+        '204':
+          description: Manager removed
+
+  # ─── APPROVAL FLOWS ──────────────────────────────────────────────────────────
+
+  /api/v1/admin/approval-flows:
+    get:
+      tags: [Approval Flows]
+      summary: List approval flows
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          example: true
+      responses:
+        '200':
+          description: Approval flows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flows:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalFlow'
+
+    post:
+      tags: [Approval Flows]
+      summary: Create approval flow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, nameEn]
+              properties:
+                code:
+                  type: string
+                  example: "TWO_STEP"
+                nameEn:
+                  type: string
+                  example: "Two-Step Approval"
+                nameAr:
+                  type: string
+                  example: "موافقة من خطوتين"
+                description:
+                  type: string
+                  example: "Requires two approvers in sequence"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalFlow'
+
+  /api/v1/admin/approval-flows/{uid}:
+    patch:
+      tags: [Approval Flows]
+      summary: Update approval flow
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nameEn:
+                  type: string
+                nameAr:
+                  type: string
+                description:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalFlow'
+
+  /api/v1/admin/approval-flows/{uid}/steps:
+    get:
+      tags: [Approval Flows]
+      summary: List steps of an approval flow
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+      responses:
+        '200':
+          description: Flow steps
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steps:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ApprovalFlowStep'
+
+    post:
+      tags: [Approval Flows]
+      summary: Add a step to an approval flow
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stepOrder, roleUid]
+              properties:
+                stepOrder:
+                  type: integer
+                  example: 1
+                roleUid:
+                  type: string
+                  example: "role_001"
+      responses:
+        '201':
+          description: Step created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalFlowStep'
+
+  /api/v1/admin/approval-flows/{uid}/steps/{stepUid}:
+    patch:
+      tags: [Approval Flows]
+      summary: Update an approval flow step
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+        - name: stepUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "afs_001"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stepOrder:
+                  type: integer
+                roleUid:
+                  type: string
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalFlowStep'
+
+    delete:
+      tags: [Approval Flows]
+      summary: Delete an approval flow step
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+        - name: stepUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "afs_001"
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── LEAVE TYPES ─────────────────────────────────────────────────────────────
+
+  /api/v1/admin/leave-types:
+    get:
+      tags: [Leave Types]
+      summary: List leave types
+      parameters:
+        - name: active
+          in: query
+          schema:
+            type: boolean
+          example: true
+      responses:
+        '200':
+          description: Leave types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leaveTypes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaveType'
+
+  /api/v1/admin/leave-types/{uid}/active:
+    patch:
+      tags: [Leave Types]
+      summary: Toggle leave type active status
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "lt_annual"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [isActive]
+              properties:
+                isActive:
+                  type: boolean
+                  example: false
+      responses:
+        '200':
+          description: Leave type updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveType'
+
+  # ─── DEVICE TOKENS ───────────────────────────────────────────────────────────
+
+  /api/v1/device-tokens:
+    post:
+      tags: [Device Tokens]
+      summary: Register a device token for push notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, platform]
+              properties:
+                token:
+                  type: string
+                  example: "fcm_token_abc123"
+                platform:
+                  type: string
+                  enum: [android, ios]
+                  example: "android"
+      responses:
+        '201':
+          description: Token registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                    example: "dt_001"
+
+  /api/v1/device-tokens/{uid}:
+    delete:
+      tags: [Device Tokens]
+      summary: Unregister a device token
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dt_001"
+      responses:
+        '200':
+          description: Token unregistered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Device token unregistered"

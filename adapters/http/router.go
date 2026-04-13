@@ -109,5 +109,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)
 	mux.Handle("/api/v1/", authMiddleware(protectedMux))
 
-	return mux
+	RegisterSwaggerRoutes(mux)
+
+	return CORSMiddleware(mux)
 }

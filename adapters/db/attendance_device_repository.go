@@ -77,6 +77,30 @@ func (r *AttendanceDeviceRepository) GetByAddress(ctx context.Context, q ports.Q
 	return r.scanDevice(q.QueryRowContext(ctx, query, ip, port))
 }
 
+func (r *AttendanceDeviceRepository) Update(ctx context.Context, q ports.Querier, device *domain.AttendanceDevice) error {
+	query := `
+		UPDATE attendance_devices
+		SET ip = ?, port = ?, name = ?, location = ?, status = ?, updated_at = ?
+		WHERE uid = ?`
+
+	device.UpdatedAt = time.Now()
+
+	_, err := q.ExecContext(ctx, query,
+		device.IP,
+		device.Port,
+		device.Name,
+		device.Location,
+		string(device.Status),
+		device.UpdatedAt,
+		device.UID,
+	)
+	if err != nil {
+		slog.Error("attendance_device_repository.Update.exec", "error", err, "uid", device.UID)
+	}
+
+	return err
+}
+
 func (r *AttendanceDeviceRepository) List(ctx context.Context, q ports.Querier, filter ports.AttendanceDeviceListFilter, limit, offset int) ([]*domain.AttendanceDevice, error) {
 	whereClause, whereArgs := buildAttendanceDeviceWhereClause(filter)
 

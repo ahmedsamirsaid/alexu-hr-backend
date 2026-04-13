@@ -280,6 +280,8 @@ func main() {
 	// Attendance device use cases
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
+	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
@@ -334,6 +336,8 @@ func main() {
 	attendanceDeviceHandler := httpAdapter.NewAttendanceDeviceHandler(
 		registerAttendanceDeviceUC,
 		listAttendanceDevicesUC,
+		getAttendanceDeviceUC,
+		updateAttendanceDeviceUC,
 		deleteAttendanceDeviceUC,
 		activateAttendanceDeviceUC,
 		attendanceDeviceStatsUC,

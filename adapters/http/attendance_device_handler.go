@@ -15,6 +15,8 @@ import (
 type AttendanceDeviceHandler struct {
 	registerUC *usecases.RegisterAttendanceDeviceUseCase
 	listUC     *usecases.ListAttendanceDevicesUseCase
+	getUC      *usecases.GetAttendanceDeviceUseCase
+	updateUC   *usecases.UpdateAttendanceDeviceUseCase
 	deleteUC   *usecases.DeleteAttendanceDeviceUseCase
 	activateUC *usecases.ActivateAttendanceDeviceUseCase
 	statsUC    *usecases.GetAttendanceDeviceStatsUseCase
@@ -25,6 +27,8 @@ type AttendanceDeviceHandler struct {
 func NewAttendanceDeviceHandler(
 	registerUC *usecases.RegisterAttendanceDeviceUseCase,
 	listUC *usecases.ListAttendanceDevicesUseCase,
+	getUC *usecases.GetAttendanceDeviceUseCase,
+	updateUC *usecases.UpdateAttendanceDeviceUseCase,
 	deleteUC *usecases.DeleteAttendanceDeviceUseCase,
 	activateUC *usecases.ActivateAttendanceDeviceUseCase,
 	statsUC *usecases.GetAttendanceDeviceStatsUseCase,
@@ -34,12 +38,21 @@ func NewAttendanceDeviceHandler(
 	return &AttendanceDeviceHandler{
 		registerUC: registerUC,
 		listUC:     listUC,
+		getUC:      getUC,
+		updateUC:   updateUC,
 		deleteUC:   deleteUC,
 		activateUC: activateUC,
 		statsUC:    statsUC,
 		checkUC:    checkUC,
 		checkAllUC: checkAllUC,
 	}
+}
+
+type updateAttendanceDeviceRequest struct {
+	IP       string `json:"ip"`
+	Port     int    `json:"port"`
+	Name     string `json:"name"`
+	Location string `json:"location"`
 }
 
 type registerAttendanceDeviceRequest struct {
@@ -158,6 +171,75 @@ func (h *AttendanceDeviceHandler) Delete(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Device deactivated"})
+}
+
+func (h *AttendanceDeviceHandler) Get(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeJSONError(w, http.StatusBadRequest, "validation_error", "Device UID is required")
+		return
+	}
+
+	output, err := h.getUC.Execute(r.Context(), uid)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecases.ErrAttendanceDeviceNotFound):
+			writeJSONError(w, http.StatusNotFound, "not_found", "Device not found")
+		default:
+			slog.Error("attendance_device_handler.Get.execute_usecase", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch device")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(output)
+}
+
+func (h *AttendanceDeviceHandler) Update(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeJSONError(w, http.StatusBadRequest, "validation_error", "Device UID is required")
+		return
+	}
+
+	var req updateAttendanceDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Error("attendance_device_handler.Update.decode_request", "error", err)
+		writeJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	output, err := h.updateUC.Execute(r.Context(), usecases.UpdateAttendanceDeviceInput{
+		UID:      uid,
+		IP:       req.IP,
+		Port:     req.Port,
+		Name:     req.Name,
+		Location: req.Location,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, usecases.ErrAttendanceDeviceNotFound):
+			writeJSONError(w, http.StatusNotFound, "not_found", "Device not found")
+		case errors.Is(err, usecases.ErrDeviceNameRequired):
+			writeJSONError(w, http.StatusBadRequest, "validation_error", "Name is required")
+		case errors.Is(err, usecases.ErrDeviceIPRequired):
+			writeJSONError(w, http.StatusBadRequest, "validation_error", "IP is required")
+		case errors.Is(err, usecases.ErrDeviceInvalidIP):
+			writeJSONError(w, http.StatusBadRequest, "invalid_ip", err.Error())
+		case errors.Is(err, usecases.ErrDeviceInvalidPort):
+			writeJSONError(w, http.StatusBadRequest, "invalid_port", err.Error())
+		case errors.Is(err, usecases.ErrDeviceAddressExists):
+			writeJSONError(w, http.StatusConflict, "device_address_exists", err.Error())
+		default:
+			slog.Error("attendance_device_handler.Update.execute_usecase", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to update device")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(output)
 }
 
 func (h *AttendanceDeviceHandler) Activate(w http.ResponseWriter, r *http.Request) {

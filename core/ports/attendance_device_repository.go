@@ -17,6 +17,7 @@ type AttendanceDeviceRepository interface {
 	GetByUID(ctx context.Context, q Querier, uid string) (*domain.AttendanceDevice, error)
 	GetBySerialNumber(ctx context.Context, q Querier, serialNumber string) (*domain.AttendanceDevice, error)
 	GetByAddress(ctx context.Context, q Querier, ip string, port int) (*domain.AttendanceDevice, error)
+	Update(ctx context.Context, q Querier, device *domain.AttendanceDevice) error
 	List(ctx context.Context, q Querier, filter AttendanceDeviceListFilter, limit, offset int) ([]*domain.AttendanceDevice, error)
 	ListAll(ctx context.Context, q Querier) ([]*domain.AttendanceDevice, error)
 	Count(ctx context.Context, q Querier) (int, error)

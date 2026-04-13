@@ -5,19 +5,20 @@ import (
 )
 
 type RouterConfig struct {
-	LeaveHandler         *LeaveHandler
-	EmployeeHandler      *EmployeeHandler
-	AuthHandler          *AuthHandler
-	UserHandler          *UserHandler
-	RoleHandler          *RoleHandler
-	DashboardHandler     *DashboardHandler
-	ApprovalFlowHandler  *ApprovalFlowHandler
-	LeaveRequestHandler  *LeaveRequestHandler
-	DepartmentHandler    *DepartmentHandler
-	DeviceTokenHandler   *DeviceTokenHandler
-	LeaveTypeHandler     *LeaveTypeHandler
-	JWTService           *JWTService
-	AuthEnabled          bool
+	LeaveHandler            *LeaveHandler
+	EmployeeHandler         *EmployeeHandler
+	AuthHandler             *AuthHandler
+	UserHandler             *UserHandler
+	RoleHandler             *RoleHandler
+	DashboardHandler        *DashboardHandler
+	ApprovalFlowHandler     *ApprovalFlowHandler
+	LeaveRequestHandler     *LeaveRequestHandler
+	DepartmentHandler       *DepartmentHandler
+	DeviceTokenHandler      *DeviceTokenHandler
+	AttendanceDeviceHandler *AttendanceDeviceHandler
+	LeaveTypeHandler        *LeaveTypeHandler
+	JWTService              *JWTService
+	AuthEnabled             bool
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -104,6 +105,14 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Device token routes (for push notifications)
 	protectedMux.HandleFunc("POST /api/v1/device-tokens", cfg.DeviceTokenHandler.Register)
 	protectedMux.HandleFunc("DELETE /api/v1/device-tokens/{uid}", cfg.DeviceTokenHandler.Unregister)
+
+	// Attendance device management routes (admin)
+	protectedMux.Handle("GET /api/v1/admin/attendance-devices/stats", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Stats)))
+	protectedMux.Handle("GET /api/v1/admin/attendance-devices", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.List)))
+	protectedMux.Handle("POST /api/v1/admin/attendance-devices", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Register)))
+	protectedMux.Handle("POST /api/v1/admin/attendance-devices/check-all", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.CheckAllConnections)))
+	protectedMux.Handle("POST /api/v1/admin/attendance-devices/{uid}/check-connection", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.CheckConnection)))
+	protectedMux.Handle("DELETE /api/v1/admin/attendance-devices/{uid}", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Delete)))
 
 	// Apply auth middleware to protected routes
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)

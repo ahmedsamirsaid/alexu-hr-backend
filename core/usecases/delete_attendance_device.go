@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
 
@@ -31,5 +32,5 @@ func (uc *DeleteAttendanceDeviceUseCase) Execute(ctx context.Context, uid string
 		return ErrAttendanceDeviceNotFound
 	}
 
-	return uc.repo.Delete(ctx, uc.db, uid)
+	return uc.repo.UpdateStatus(ctx, uc.db, uid, domain.AttendanceDeviceStatusDeactivated)
 }

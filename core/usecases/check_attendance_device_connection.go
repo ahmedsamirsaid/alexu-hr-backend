@@ -12,6 +12,7 @@ import (
 )
 
 var ErrCheckDeviceUIDRequired = errors.New("device uid is required")
+var ErrAttendanceDeviceDeactivated = errors.New("device is deactivated")
 
 type CheckAttendanceDeviceConnectionOutput struct {
 	UID       string `json:"uid"`
@@ -40,6 +41,9 @@ func (uc *CheckAttendanceDeviceConnectionUseCase) Execute(ctx context.Context, u
 	}
 	if device == nil {
 		return nil, ErrAttendanceDeviceNotFound
+	}
+	if device.Status == domain.AttendanceDeviceStatusDeactivated {
+		return nil, ErrAttendanceDeviceDeactivated
 	}
 
 	status := uc.checkConnectivity(ctx, device.IP, device.Port)

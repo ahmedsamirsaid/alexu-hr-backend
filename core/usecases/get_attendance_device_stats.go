@@ -8,9 +8,10 @@ import (
 )
 
 type AttendanceDeviceStatsOutput struct {
-	Total   int `json:"total"`
-	Online  int `json:"online"`
-	Offline int `json:"offline"`
+	Total       int `json:"total"`
+	Online      int `json:"online"`
+	Offline     int `json:"offline"`
+	Deactivated int `json:"deactivated"`
 }
 
 type GetAttendanceDeviceStatsUseCase struct {
@@ -33,11 +34,20 @@ func (uc *GetAttendanceDeviceStatsUseCase) Execute(ctx context.Context) (*Attend
 		return nil, err
 	}
 
-	offline := total - online
+	offline, err := uc.repo.CountByStatus(ctx, uc.db, domain.AttendanceDeviceStatusOffline)
+	if err != nil {
+		return nil, err
+	}
+
+	deactivated, err := uc.repo.CountByStatus(ctx, uc.db, domain.AttendanceDeviceStatusDeactivated)
+	if err != nil {
+		return nil, err
+	}
 
 	return &AttendanceDeviceStatsOutput{
-		Total:   total,
-		Online:  online,
-		Offline: offline,
+		Total:       total,
+		Online:      online,
+		Offline:     offline,
+		Deactivated: deactivated,
 	}, nil
 }

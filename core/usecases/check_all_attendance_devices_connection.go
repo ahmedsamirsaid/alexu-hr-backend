@@ -34,9 +34,15 @@ func (uc *CheckAllAttendanceDevicesConnectionUseCase) Execute(ctx context.Contex
 
 	online := 0
 	offline := 0
+	checkedCount := 0
 	checkedAt := time.Now()
 
 	for _, device := range devices {
+		if device.Status == domain.AttendanceDeviceStatusDeactivated {
+			continue
+		}
+
+		checkedCount++
 		status := uc.checkConnectivity()
 		if err := uc.repo.UpdateStatus(ctx, uc.db, device.UID, status); err != nil {
 			return nil, err
@@ -50,7 +56,7 @@ func (uc *CheckAllAttendanceDevicesConnectionUseCase) Execute(ctx context.Contex
 	}
 
 	return &CheckAllAttendanceDevicesConnectionOutput{
-		CheckedCount: len(devices),
+		CheckedCount: checkedCount,
 		Online:       online,
 		Offline:      offline,
 		CheckedAt:    checkedAt.Format(time.RFC3339),

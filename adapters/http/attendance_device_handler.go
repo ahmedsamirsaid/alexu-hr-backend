@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -14,6 +16,7 @@ type AttendanceDeviceHandler struct {
 	registerUC *usecases.RegisterAttendanceDeviceUseCase
 	listUC     *usecases.ListAttendanceDevicesUseCase
 	deleteUC   *usecases.DeleteAttendanceDeviceUseCase
+	activateUC *usecases.ActivateAttendanceDeviceUseCase
 	statsUC    *usecases.GetAttendanceDeviceStatsUseCase
 	checkUC    *usecases.CheckAttendanceDeviceConnectionUseCase
 	checkAllUC *usecases.CheckAllAttendanceDevicesConnectionUseCase
@@ -23,6 +26,7 @@ func NewAttendanceDeviceHandler(
 	registerUC *usecases.RegisterAttendanceDeviceUseCase,
 	listUC *usecases.ListAttendanceDevicesUseCase,
 	deleteUC *usecases.DeleteAttendanceDeviceUseCase,
+	activateUC *usecases.ActivateAttendanceDeviceUseCase,
 	statsUC *usecases.GetAttendanceDeviceStatsUseCase,
 	checkUC *usecases.CheckAttendanceDeviceConnectionUseCase,
 	checkAllUC *usecases.CheckAllAttendanceDevicesConnectionUseCase,
@@ -31,6 +35,7 @@ func NewAttendanceDeviceHandler(
 		registerUC: registerUC,
 		listUC:     listUC,
 		deleteUC:   deleteUC,
+		activateUC: activateUC,
 		statsUC:    statsUC,
 		checkUC:    checkUC,
 		checkAllUC: checkAllUC,
@@ -91,6 +96,19 @@ func (h *AttendanceDeviceHandler) Register(w http.ResponseWriter, r *http.Reques
 func (h *AttendanceDeviceHandler) List(w http.ResponseWriter, r *http.Request) {
 	page := 1
 	pageSize := 20
+	search := r.URL.Query().Get("search")
+
+	var status *domain.AttendanceDeviceStatus
+	if rawStatus := r.URL.Query().Get("status"); rawStatus != "" && rawStatus != "all" {
+		parsedStatus := domain.AttendanceDeviceStatus(strings.ToLower(rawStatus))
+		switch parsedStatus {
+		case domain.AttendanceDeviceStatusOnline, domain.AttendanceDeviceStatusOffline, domain.AttendanceDeviceStatusDeactivated:
+			status = &parsedStatus
+		default:
+			writeJSONError(w, http.StatusBadRequest, "validation_error", "Status must be one of: all, online, offline, deactivated")
+			return
+		}
+	}
 
 	if p := r.URL.Query().Get("page"); p != "" {
 		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
@@ -103,7 +121,12 @@ func (h *AttendanceDeviceHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	output, err := h.listUC.Execute(r.Context(), usecases.ListAttendanceDevicesInput{Page: page, PageSize: pageSize})
+	output, err := h.listUC.Execute(r.Context(), usecases.ListAttendanceDevicesInput{
+		Page:     page,
+		PageSize: pageSize,
+		Status:   status,
+		Search:   search,
+	})
 	if err != nil {
 		slog.Error("attendance_device_handler.List.execute_usecase", "error", err)
 		writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to list devices")
@@ -128,13 +151,38 @@ func (h *AttendanceDeviceHandler) Delete(w http.ResponseWriter, r *http.Request)
 			writeJSONError(w, http.StatusNotFound, "not_found", "Device not found")
 		default:
 			slog.Error("attendance_device_handler.Delete.execute_usecase", "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to delete device")
+			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to deactivate device")
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Device removed"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "Device deactivated"})
+}
+
+func (h *AttendanceDeviceHandler) Activate(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeJSONError(w, http.StatusBadRequest, "validation_error", "Device UID is required")
+		return
+	}
+
+	err := h.activateUC.Execute(r.Context(), uid)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecases.ErrAttendanceDeviceNotFound):
+			writeJSONError(w, http.StatusNotFound, "not_found", "Device not found")
+		case errors.Is(err, usecases.ErrAttendanceDeviceAlreadyActive):
+			writeJSONError(w, http.StatusConflict, "device_already_active", "Device is already active")
+		default:
+			slog.Error("attendance_device_handler.Activate.execute_usecase", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to activate device")
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Device activated"})
 }
 
 func (h *AttendanceDeviceHandler) Stats(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +206,8 @@ func (h *AttendanceDeviceHandler) CheckConnection(w http.ResponseWriter, r *http
 			writeJSONError(w, http.StatusBadRequest, "validation_error", "Device UID is required")
 		case errors.Is(err, usecases.ErrAttendanceDeviceNotFound):
 			writeJSONError(w, http.StatusNotFound, "not_found", "Device not found")
+		case errors.Is(err, usecases.ErrAttendanceDeviceDeactivated):
+			writeJSONError(w, http.StatusConflict, "device_deactivated", "Device is deactivated")
 		default:
 			slog.Error("attendance_device_handler.CheckConnection.execute_usecase", "error", err)
 			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to check connection")

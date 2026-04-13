@@ -113,6 +113,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/admin/attendance-devices/check-all", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.CheckAllConnections)))
 	protectedMux.Handle("POST /api/v1/admin/attendance-devices/{uid}/check-connection", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.CheckConnection)))
 	protectedMux.Handle("DELETE /api/v1/admin/attendance-devices/{uid}", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Delete)))
+	protectedMux.Handle("PATCH /api/v1/admin/attendance-devices/{uid}/activate", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Activate)))
 
 	// Apply auth middleware to protected routes
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -75,14 +77,19 @@ func (r *AttendanceDeviceRepository) GetByAddress(ctx context.Context, q ports.Q
 	return r.scanDevice(q.QueryRowContext(ctx, query, ip, port))
 }
 
-func (r *AttendanceDeviceRepository) List(ctx context.Context, q ports.Querier, limit, offset int) ([]*domain.AttendanceDevice, error) {
-	query := `
+func (r *AttendanceDeviceRepository) List(ctx context.Context, q ports.Querier, filter ports.AttendanceDeviceListFilter, limit, offset int) ([]*domain.AttendanceDevice, error) {
+	whereClause, whereArgs := buildAttendanceDeviceWhereClause(filter)
+
+	query := fmt.Sprintf(`
 		SELECT id, uid, ip, port, name, location, serial_number, status, created_at, updated_at
 		FROM attendance_devices
+		%s
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?`
+		LIMIT ? OFFSET ?`, whereClause)
 
-	rows, err := q.QueryContext(ctx, query, limit, offset)
+	args := append(whereArgs, limit, offset)
+
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		slog.Error("attendance_device_repository.List.query", "error", err)
 		return nil, err
@@ -145,6 +152,19 @@ func (r *AttendanceDeviceRepository) Count(ctx context.Context, q ports.Querier)
 		slog.Error("attendance_device_repository.Count.scan", "error", err)
 		return 0, err
 	}
+	return count, nil
+}
+
+func (r *AttendanceDeviceRepository) CountFiltered(ctx context.Context, q ports.Querier, filter ports.AttendanceDeviceListFilter) (int, error) {
+	whereClause, whereArgs := buildAttendanceDeviceWhereClause(filter)
+	query := fmt.Sprintf(`SELECT COUNT(*) FROM attendance_devices %s`, whereClause)
+
+	var count int
+	if err := q.QueryRowContext(ctx, query, whereArgs...).Scan(&count); err != nil {
+		slog.Error("attendance_device_repository.CountFiltered.scan", "error", err)
+		return 0, err
+	}
+
 	return count, nil
 }
 
@@ -232,4 +252,26 @@ func (r *AttendanceDeviceRepository) scanDeviceRow(rows *sql.Rows) (*domain.Atte
 	dev.CreatedAt = createdAt.Time
 	dev.UpdatedAt = updatedAt.Time
 	return &dev, nil
+}
+
+func buildAttendanceDeviceWhereClause(filter ports.AttendanceDeviceListFilter) (string, []any) {
+	clauses := make([]string, 0, 2)
+	args := make([]any, 0, 5)
+
+	if filter.Status != nil {
+		clauses = append(clauses, "status = ?")
+		args = append(args, string(*filter.Status))
+	}
+
+	if search := strings.TrimSpace(filter.Search); search != "" {
+		like := "%" + search + "%"
+		clauses = append(clauses, "(name LIKE ? OR location LIKE ? OR ip LIKE ? OR serial_number LIKE ? OR CAST(port AS TEXT) LIKE ?)")
+		args = append(args, like, like, like, like, like)
+	}
+
+	if len(clauses) == 0 {
+		return "", nil
+	}
+
+	return "WHERE " + strings.Join(clauses, " AND "), args
 }

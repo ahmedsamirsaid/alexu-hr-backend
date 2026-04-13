@@ -5,8 +5,9 @@ import "time"
 type AttendanceDeviceStatus string
 
 const (
-	AttendanceDeviceStatusOnline  AttendanceDeviceStatus = "online"
-	AttendanceDeviceStatusOffline AttendanceDeviceStatus = "offline"
+	AttendanceDeviceStatusOnline      AttendanceDeviceStatus = "online"
+	AttendanceDeviceStatusOffline     AttendanceDeviceStatus = "offline"
+	AttendanceDeviceStatusDeactivated AttendanceDeviceStatus = "deactivated"
 )
 
 type AttendanceDevice struct {

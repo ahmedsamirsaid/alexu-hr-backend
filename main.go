@@ -281,6 +281,7 @@ func main() {
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
 	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
@@ -334,6 +335,7 @@ func main() {
 		registerAttendanceDeviceUC,
 		listAttendanceDevicesUC,
 		deleteAttendanceDeviceUC,
+		activateAttendanceDeviceUC,
 		attendanceDeviceStatsUC,
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,

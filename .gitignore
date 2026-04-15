@@ -1,0 +1,8 @@
+data/banumusa.db-shm
+data/banumusa.db-wal
+.DS_Store
+*.log
+.gocache/
+.gocache_test/
+gozk/
+data

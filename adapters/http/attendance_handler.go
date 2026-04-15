@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -12,11 +13,16 @@ import (
 	"github.com/banumusa/backend/core/usecases"
 )
 
+type monthlyAttendanceStatsExecutor interface {
+	Execute(ctx context.Context, input usecases.GetMonthlyAttendanceStatsInput) (*usecases.GetMonthlyAttendanceStatsOutput, error)
+}
+
 type AttendanceHandler struct {
 	listDepartmentLogsUC      *usecases.ListDepartmentAttendanceLogsUseCase
 	listEmployeeLogsUC        *usecases.ListEmployeeAttendanceLogsUseCase
 	listDailyDepartmentLogsUC *usecases.ListDailyDepartmentAttendanceLogsUseCase
 	listDailyEmployeeLogsUC   *usecases.ListDailyEmployeeAttendanceLogsUseCase
+	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
 	getWorkHoursUC            *usecases.GetWorkHoursConfigUseCase
 	setWorkHoursUC            *usecases.SetWorkHoursConfigUseCase
@@ -27,6 +33,7 @@ func NewAttendanceHandler(
 	listEmployeeLogsUC *usecases.ListEmployeeAttendanceLogsUseCase,
 	listDailyDepartmentLogsUC *usecases.ListDailyDepartmentAttendanceLogsUseCase,
 	listDailyEmployeeLogsUC *usecases.ListDailyEmployeeAttendanceLogsUseCase,
+	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
 	getWorkHoursUC *usecases.GetWorkHoursConfigUseCase,
 	setWorkHoursUC *usecases.SetWorkHoursConfigUseCase,
@@ -36,6 +43,7 @@ func NewAttendanceHandler(
 		listEmployeeLogsUC:        listEmployeeLogsUC,
 		listDailyDepartmentLogsUC: listDailyDepartmentLogsUC,
 		listDailyEmployeeLogsUC:   listDailyEmployeeLogsUC,
+		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
 		getWorkHoursUC:            getWorkHoursUC,
 		setWorkHoursUC:            setWorkHoursUC,
@@ -131,6 +139,20 @@ type listDailyEmployeeLogsResponse struct {
 	Page        int                              `json:"page"`
 	PageSize    int                              `json:"pageSize"`
 	TotalPages  int                              `json:"totalPages"`
+}
+
+type workingHoursByDayResponse struct {
+	Date        string  `json:"date"`
+	WorkedHours float64 `json:"workedHours"`
+}
+
+type monthlyAttendanceStatsResponse struct {
+	EmployeeUID          string                      `json:"employeeUid"`
+	Month                string                      `json:"month"`
+	TotalWorkedHours     float64                     `json:"totalWorkedHours"`
+	AverageCheckInTime   *string                     `json:"averageCheckInTime,omitempty"`
+	MissingCheckOutCount int                         `json:"missingCheckOutCount"`
+	WorkingHoursByDay    []workingHoursByDayResponse `json:"workingHoursByDay"`
 }
 
 func (h *AttendanceHandler) ListDepartmentLogs(w http.ResponseWriter, r *http.Request) {
@@ -375,6 +397,45 @@ func (h *AttendanceHandler) GetDailySummary(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{
 		"date":      output.Date.Format("2006-01-02"),
 		"summaries": summaries,
+	})
+}
+
+func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
+	employeeUID := r.PathValue("employeeUid")
+	if employeeUID == "" {
+		writeError(w, http.StatusBadRequest, "employeeUid is required")
+		return
+	}
+
+	output, err := h.getMonthlyStatsUC.Execute(r.Context(), usecases.GetMonthlyAttendanceStatsInput{
+		EmployeeUID: employeeUID,
+	})
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	var averageCheckInTime *string
+	if output.AverageCheckInTime != nil {
+		v := output.AverageCheckInTime.Format("15:04:05")
+		averageCheckInTime = &v
+	}
+
+	workingHoursByDay := make([]workingHoursByDayResponse, 0, len(output.WorkingHoursByDay))
+	for _, item := range output.WorkingHoursByDay {
+		workingHoursByDay = append(workingHoursByDay, workingHoursByDayResponse{
+			Date:        item.Date.Format("2006-01-02"),
+			WorkedHours: item.WorkedHours,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, monthlyAttendanceStatsResponse{
+		EmployeeUID:          employeeUID,
+		Month:                output.Month,
+		TotalWorkedHours:     output.TotalWorkedHours,
+		AverageCheckInTime:   averageCheckInTime,
+		MissingCheckOutCount: output.MissingCheckOutCount,
+		WorkingHoursByDay:    workingHoursByDay,
 	})
 }
 

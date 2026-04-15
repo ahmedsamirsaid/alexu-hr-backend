@@ -201,6 +201,7 @@ func main() {
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
+	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
@@ -242,6 +243,7 @@ func main() {
 		listEmployeeAttendanceLogsUC,
 		listDailyDepartmentAttendanceLogsUC,
 		listDailyEmployeeAttendanceLogsUC,
+		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
 		getWorkHoursConfigUC,
 		setWorkHoursConfigUC,

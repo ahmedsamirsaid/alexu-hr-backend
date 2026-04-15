@@ -68,6 +68,9 @@ func main() {
 	// Device token repository
 	deviceTokenRepo := db.NewDeviceTokenRepository()
 
+	// Attendance device repository
+	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
+
 	// Notification service
 	var notificationService ports.NotificationService
 	if cfg.FCMEnabled {
@@ -274,6 +277,17 @@ func main() {
 	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
 	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
 
+	// Attendance device use cases
+	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
+	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
+	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
+	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
+
 	// Scheduler use cases
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB,
@@ -319,22 +333,34 @@ func main() {
 		removeDepartmentManagerUC,
 	)
 	deviceTokenHandler := httpAdapter.NewDeviceTokenHandler(registerDeviceTokenUC, unregisterDeviceTokenUC)
+	attendanceDeviceHandler := httpAdapter.NewAttendanceDeviceHandler(
+		registerAttendanceDeviceUC,
+		listAttendanceDevicesUC,
+		getAttendanceDeviceUC,
+		updateAttendanceDeviceUC,
+		deleteAttendanceDeviceUC,
+		activateAttendanceDeviceUC,
+		attendanceDeviceStatsUC,
+		checkAttendanceDeviceConnectionUC,
+		checkAllAttendanceDevicesConnectionUC,
+	)
 	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
 
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
-		LeaveHandler:         leaveHandler,
-		EmployeeHandler:      employeeHandler,
-		AuthHandler:          authHandler,
-		UserHandler:          userHandler,
-		RoleHandler:          roleHandler,
-		DashboardHandler:     dashboardHandler,
-		ApprovalFlowHandler:  approvalFlowHandler,
-		LeaveRequestHandler:  leaveRequestHandler,
-		DepartmentHandler:    departmentHandler,
-		DeviceTokenHandler:   deviceTokenHandler,
-		LeaveTypeHandler:     leaveTypeHandler,
-		JWTService:           jwtService,
-		AuthEnabled:          cfg.AuthEnabled,
+		LeaveHandler:            leaveHandler,
+		EmployeeHandler:         employeeHandler,
+		AuthHandler:             authHandler,
+		UserHandler:             userHandler,
+		RoleHandler:             roleHandler,
+		DashboardHandler:        dashboardHandler,
+		ApprovalFlowHandler:     approvalFlowHandler,
+		LeaveRequestHandler:     leaveRequestHandler,
+		DepartmentHandler:       departmentHandler,
+		DeviceTokenHandler:      deviceTokenHandler,
+		AttendanceDeviceHandler: attendanceDeviceHandler,
+		LeaveTypeHandler:        leaveTypeHandler,
+		JWTService:              jwtService,
+		AuthEnabled:             cfg.AuthEnabled,
 	})
 
 	// Start scheduler if enabled

@@ -29,6 +29,8 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.53.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 // indirect
 	github.com/MicahParks/keyfunc v1.9.0 // indirect
+	github.com/canhlinh/go-binary-pack v0.0.0-20181203110405-72348cf47f32 // indirect
+	github.com/canhlinh/gozk v0.0.0-20250721083631-a631ea7e93da // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -49,6 +51,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/tiendc/go-deepcopy v1.7.1 // indirect
 	github.com/xuri/efp v0.0.1 // indirect

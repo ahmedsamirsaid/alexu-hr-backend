@@ -19,7 +19,6 @@ go version
 ## Run
 
 ```bash
-cd backend
 BANU_MUSA_FCM_ENABLED=false go run .
 ```
 

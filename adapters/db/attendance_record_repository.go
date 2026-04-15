@@ -101,6 +101,45 @@ func (r *AttendanceRecordRepository) ListByDate(ctx context.Context, q ports.Que
 	return records, nil
 }
 
+func (r *AttendanceRecordRepository) ListByDateRange(ctx context.Context, q ports.Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
+	query := `
+		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
+		FROM attendance_records
+		WHERE datetime(punched_at) >= datetime(?)
+			AND datetime(punched_at) <= datetime(?)`
+
+	args := []any{startDate.Format(time.RFC3339), endDate.Format(time.RFC3339)}
+	if employeeUID != nil {
+		query += ` AND employee_uid = ?`
+		args = append(args, *employeeUID)
+	}
+	query += ` ORDER BY punched_at ASC, id ASC`
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("attendance_record_repository.ListByDateRange.query", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	records := make([]*domain.AttendanceRecord, 0)
+	for rows.Next() {
+		record, err := r.scanRecordRow(rows)
+		if err != nil {
+			slog.Error("attendance_record_repository.ListByDateRange.scan_row", "error", err)
+			return nil, err
+		}
+		records = append(records, record)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("attendance_record_repository.ListByDateRange.rows_err", "error", err)
+		return nil, err
+	}
+
+	return records, nil
+}
+
 func (r *AttendanceRecordRepository) ListByDepartmentUID(ctx context.Context, q ports.Querier, departmentUID string, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.AttendanceRecordWithEmployee, error) {
 	baseQuery := `
 		SELECT

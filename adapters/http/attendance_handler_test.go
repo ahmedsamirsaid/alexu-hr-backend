@@ -13,6 +13,17 @@ import (
 	"github.com/banumusa/backend/core/usecases"
 )
 
+type stubMonthlyAttendanceStatsUseCase struct {
+	output *usecases.GetMonthlyAttendanceStatsOutput
+	err    error
+	input  *usecases.GetMonthlyAttendanceStatsInput
+}
+
+func (s *stubMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input usecases.GetMonthlyAttendanceStatsInput) (*usecases.GetMonthlyAttendanceStatsOutput, error) {
+	s.input = &input
+	return s.output, s.err
+}
+
 type mockDepartmentRepoForAttendance struct {
 	department *domain.Department
 }
@@ -48,6 +59,7 @@ type mockAttendanceRecordRepo struct {
 	countReturn     int
 	listReturn      []*ports.AttendanceRecordWithEmployee
 	dailyListReturn []*ports.DailyAttendanceGroup
+	dateRangeReturn []*domain.AttendanceRecord
 	gotDeptUID      string
 	gotEmployeeUID  string
 	gotFilter       ports.DepartmentAttendanceLogsFilter
@@ -60,6 +72,10 @@ func (m *mockAttendanceRecordRepo) Create(ctx context.Context, q ports.Querier, 
 
 func (m *mockAttendanceRecordRepo) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
 	return nil, nil
+}
+
+func (m *mockAttendanceRecordRepo) ListByDateRange(ctx context.Context, q ports.Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
+	return m.dateRangeReturn, nil
 }
 
 func (m *mockAttendanceRecordRepo) ListByDepartmentUID(ctx context.Context, q ports.Querier, departmentUID string, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.AttendanceRecordWithEmployee, error) {
@@ -202,7 +218,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -282,7 +298,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -302,7 +318,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -316,7 +332,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -358,7 +374,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("employeeUid", "emp_1")
@@ -465,7 +481,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		&mockWorkHoursRepoForAttendance{cfg: domain.NewDefaultWorkHoursConfig()},
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -555,7 +571,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		&mockWorkHoursRepoForAttendance{cfg: domain.NewDefaultWorkHoursConfig()},
 	)
 
-	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("employeeUid", "emp_1")
@@ -600,5 +616,62 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 	}
 	if response.Records[0].CheckOutDevice == nil || *response.Records[0].CheckOutDevice != "Back Gate" {
 		t.Fatalf("checkOutDevice = %v, want Back Gate", response.Records[0].CheckOutDevice)
+	}
+}
+
+func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
+	statsUC := &stubMonthlyAttendanceStatsUseCase{
+		output: &usecases.GetMonthlyAttendanceStatsOutput{
+			Month:                "2026-04",
+			TotalWorkedHours:     26.25,
+			MissingCheckOutCount: 1,
+			AverageCheckInTime: func() *time.Time {
+				v := time.Date(2026, 4, 1, 8, 26, 15, 0, time.UTC)
+				return &v
+			}(),
+			WorkingHoursByDay: []usecases.WorkingHoursByDay{
+				{Date: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), WorkedHours: 18},
+				{Date: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), WorkedHours: 0},
+			},
+		},
+	}
+
+	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly", nil)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.GetMonthlyStats(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var response struct {
+		EmployeeUID          string  `json:"employeeUid"`
+		Month                string  `json:"month"`
+		TotalWorkedHours     float64 `json:"totalWorkedHours"`
+		AverageCheckInTime   *string `json:"averageCheckInTime"`
+		MissingCheckOutCount int     `json:"missingCheckOutCount"`
+		WorkingHoursByDay    []struct {
+			Date        string  `json:"date"`
+			WorkedHours float64 `json:"workedHours"`
+		} `json:"workingHoursByDay"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+
+	if statsUC.input == nil || statsUC.input.EmployeeUID != "emp_1" {
+		t.Fatalf("employeeUid input = %+v, want emp_1", statsUC.input)
+	}
+	if response.EmployeeUID != "emp_1" || response.Month != "2026-04" || response.TotalWorkedHours != 26.25 || response.MissingCheckOutCount != 1 {
+		t.Fatalf("unexpected response metadata: %+v", response)
+	}
+	if response.AverageCheckInTime == nil || *response.AverageCheckInTime != "08:26:15" {
+		t.Fatalf("AverageCheckInTime = %v, want 08:26:15", response.AverageCheckInTime)
+	}
+	if len(response.WorkingHoursByDay) != 2 || response.WorkingHoursByDay[0].Date != "2026-04-01" || response.WorkingHoursByDay[0].WorkedHours != 18 {
+		t.Fatalf("unexpected WorkingHoursByDay: %+v", response.WorkingHoursByDay)
 	}
 }

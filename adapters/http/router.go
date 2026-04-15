@@ -109,7 +109,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/admin/attendance-devices/{uid}/check-connection", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.CheckConnection)))
 	protectedMux.Handle("DELETE /api/v1/admin/attendance-devices/{uid}", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Delete)))
 	protectedMux.Handle("PATCH /api/v1/admin/attendance-devices/{uid}/activate", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Activate)))
-
+	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs/stats/monthly", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetMonthlyStats)))
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)
 	mux.Handle("/api/v1/", authMiddleware(protectedMux))
 

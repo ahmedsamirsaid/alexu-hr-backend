@@ -25,6 +25,4 @@ ENV BANU_MUSA_PORT=8080 \
     BANU_MUSA_FONT_PATH=/app/assets/fonts/Noto_Sans_Arabic/static/NotoSansArabic-Regular.ttf \
     BANU_MUSA_FCM_ENABLED=false
 
-VOLUME ["/app/data"]
-
 ENTRYPOINT ["/app/hr-backend"]

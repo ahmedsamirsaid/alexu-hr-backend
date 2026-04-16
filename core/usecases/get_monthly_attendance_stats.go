@@ -16,6 +16,9 @@ type WorkingHoursByDay struct {
 
 type GetMonthlyAttendanceStatsInput struct {
 	EmployeeUID string
+	StartDate   *time.Time
+	EndDate     *time.Time
+	PeriodLabel *string
 }
 
 type GetMonthlyAttendanceStatsOutput struct {
@@ -48,8 +51,31 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 	monthStart := time.Date(current.Year(), current.Month(), 1, 0, 0, 0, 0, current.Location())
 	monthEnd := time.Date(current.Year(), current.Month(), current.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), current.Location())
 
+	rangeStart := monthStart
+	rangeEnd := monthEnd
+
+	if input.StartDate != nil || input.EndDate != nil {
+		if input.StartDate != nil {
+			rangeStart = time.Date(input.StartDate.Year(), input.StartDate.Month(), input.StartDate.Day(), 0, 0, 0, 0, input.StartDate.Location())
+		}
+		if input.EndDate != nil {
+			rangeEnd = time.Date(input.EndDate.Year(), input.EndDate.Month(), input.EndDate.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), input.EndDate.Location())
+		}
+		if input.StartDate == nil {
+			rangeStart = time.Date(rangeEnd.Year(), rangeEnd.Month(), rangeEnd.Day(), 0, 0, 0, 0, rangeEnd.Location())
+		}
+		if input.EndDate == nil {
+			rangeEnd = time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), rangeStart.Location())
+		}
+		if rangeEnd.Before(rangeStart) {
+			rangeStart, rangeEnd = rangeEnd, rangeStart
+			rangeStart = time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), 0, 0, 0, 0, rangeStart.Location())
+			rangeEnd = time.Date(rangeEnd.Year(), rangeEnd.Month(), rangeEnd.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), rangeEnd.Location())
+		}
+	}
+
 	employeeUID := input.EmployeeUID
-	records, err := uc.recordRepo.ListByDateRange(ctx, uc.db, monthStart, monthEnd, &employeeUID)
+	records, err := uc.recordRepo.ListByDateRange(ctx, uc.db, rangeStart, rangeEnd, &employeeUID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,12 +148,17 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 	var averageCheckInTime *time.Time
 	if checkInCount > 0 {
 		avgSeconds := totalCheckInSeconds / checkInCount
-		t := time.Date(monthStart.Year(), monthStart.Month(), monthStart.Day(), avgSeconds/3600, (avgSeconds%3600)/60, avgSeconds%60, 0, monthStart.Location())
+		t := time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), avgSeconds/3600, (avgSeconds%3600)/60, avgSeconds%60, 0, rangeStart.Location())
 		averageCheckInTime = &t
 	}
 
-	daily := make([]WorkingHoursByDay, 0, current.Day())
-	for d := monthStart; !d.After(current); d = d.AddDate(0, 0, 1) {
+	daysInRange := int(rangeEnd.Sub(time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), 0, 0, 0, 0, rangeStart.Location())).Hours()/24) + 1
+	if daysInRange < 0 {
+		daysInRange = 0
+	}
+
+	daily := make([]WorkingHoursByDay, 0, daysInRange)
+	for d := time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), 0, 0, 0, 0, rangeStart.Location()); !d.After(rangeEnd); d = d.AddDate(0, 0, 1) {
 		day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, d.Location())
 		daily = append(daily, WorkingHoursByDay{
 			Date:        day,
@@ -139,8 +170,13 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 		return daily[i].Date.Before(daily[j].Date)
 	})
 
+	period := rangeStart.Format("2006-01")
+	if input.PeriodLabel != nil && *input.PeriodLabel != "" {
+		period = *input.PeriodLabel
+	}
+
 	return &GetMonthlyAttendanceStatsOutput{
-		Month:                monthStart.Format("2006-01"),
+		Month:                period,
 		TotalWorkedHours:     totalWorkedHours,
 		AverageCheckInTime:   averageCheckInTime,
 		MissingCheckOutCount: missingCheckOutCount,

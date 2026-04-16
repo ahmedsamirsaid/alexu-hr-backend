@@ -25,6 +25,8 @@ type GetMonthlyAttendanceStatsOutput struct {
 	Month                string
 	TotalWorkedHours     float64
 	AverageCheckInTime   *time.Time
+	AverageCheckOutTime  *time.Time
+	MissingCheckInCount  int
 	MissingCheckOutCount int
 	WorkingHoursByDay    []WorkingHoursByDay
 }
@@ -125,18 +127,28 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 	}
 
 	totalWorkedHours := 0.0
+	missingCheckInCount := 0
 	missingCheckOutCount := 0
 	totalCheckInSeconds := 0
+	totalCheckOutSeconds := 0
 	checkInCount := 0
+	checkOutCount := 0
 	workedHoursByDay := make(map[string]float64)
 
 	for _, item := range byEmployeeDay {
+		if item.checkIn == nil {
+			missingCheckInCount++
+		}
 		if item.checkIn != nil {
 			totalCheckInSeconds += (item.checkIn.Hour() * 3600) + (item.checkIn.Minute() * 60) + item.checkIn.Second()
 			checkInCount++
 		}
 		if item.checkOut == nil {
 			missingCheckOutCount++
+		}
+		if item.checkOut != nil {
+			totalCheckOutSeconds += (item.checkOut.Hour() * 3600) + (item.checkOut.Minute() * 60) + item.checkOut.Second()
+			checkOutCount++
 		}
 		if item.checkIn != nil && item.checkOut != nil && item.checkOut.After(*item.checkIn) {
 			worked := item.checkOut.Sub(*item.checkIn).Hours()
@@ -150,6 +162,13 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 		avgSeconds := totalCheckInSeconds / checkInCount
 		t := time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), avgSeconds/3600, (avgSeconds%3600)/60, avgSeconds%60, 0, rangeStart.Location())
 		averageCheckInTime = &t
+	}
+
+	var averageCheckOutTime *time.Time
+	if checkOutCount > 0 {
+		avgSeconds := totalCheckOutSeconds / checkOutCount
+		t := time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), avgSeconds/3600, (avgSeconds%3600)/60, avgSeconds%60, 0, rangeStart.Location())
+		averageCheckOutTime = &t
 	}
 
 	daysInRange := int(rangeEnd.Sub(time.Date(rangeStart.Year(), rangeStart.Month(), rangeStart.Day(), 0, 0, 0, 0, rangeStart.Location())).Hours()/24) + 1
@@ -179,6 +198,8 @@ func (uc *GetMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input G
 		Month:                period,
 		TotalWorkedHours:     totalWorkedHours,
 		AverageCheckInTime:   averageCheckInTime,
+		AverageCheckOutTime:  averageCheckOutTime,
+		MissingCheckInCount:  missingCheckInCount,
 		MissingCheckOutCount: missingCheckOutCount,
 		WorkingHoursByDay:    daily,
 	}, nil

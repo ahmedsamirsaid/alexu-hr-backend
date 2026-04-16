@@ -316,3 +316,20 @@ func (r *LeaveRecordRepository) CountOnLeaveToday(ctx context.Context, q ports.Q
 	}
 	return count, nil
 }
+
+func (r *LeaveRecordRepository) HasLeaveOnDate(ctx context.Context, q ports.Querier, employeeID int64, date time.Time) (bool, error) {
+	query := `
+		SELECT COUNT(*)
+		FROM leave_records
+		WHERE employee_id = ?
+			AND date(?) BETWEEN date(start_date) AND date(end_date)`
+
+	var count int
+	err := q.QueryRowContext(ctx, query, employeeID, date).Scan(&count)
+	if err != nil {
+		slog.Error("leave_record_repository.HasLeaveOnDate.scan", "error", err, "employee_id", employeeID)
+		return false, err
+	}
+
+	return count > 0, nil
+}

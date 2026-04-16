@@ -98,6 +98,10 @@ func (m *mockLeaveRecordRepoForAll) CountOnLeaveToday(ctx context.Context, q por
 	return 0, nil
 }
 
+func (m *mockLeaveRecordRepoForAll) HasLeaveOnDate(ctx context.Context, q ports.Querier, employeeID int64, date time.Time) (bool, error) {
+	return false, nil
+}
+
 func TestListAllLeaveRecordsUseCase_Execute(t *testing.T) {
 	ctx := context.Background()
 

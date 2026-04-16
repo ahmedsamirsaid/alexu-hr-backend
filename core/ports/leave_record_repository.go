@@ -14,10 +14,10 @@ type LeaveRecordWithEmployee struct {
 }
 
 type ListAllLeaveRecordsFilter struct {
-	Search       string
-	LeaveTypeID  *int64
-	StartDate    *time.Time
-	EndDate      *time.Time
+	Search      string
+	LeaveTypeID *int64
+	StartDate   *time.Time
+	EndDate     *time.Time
 }
 
 type LeaveRecordRepository interface {
@@ -34,4 +34,6 @@ type LeaveRecordRepository interface {
 
 	// CountOnLeaveToday returns the number of employees on leave for the given date.
 	CountOnLeaveToday(ctx context.Context, q Querier, date time.Time) (int, error)
+	// HasLeaveOnDate returns whether the employee has any leave covering the given date.
+	HasLeaveOnDate(ctx context.Context, q Querier, employeeID int64, date time.Time) (bool, error)
 }

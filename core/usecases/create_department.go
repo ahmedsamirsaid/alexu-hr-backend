@@ -11,9 +11,10 @@ import (
 var ErrDepartmentCodeExists = errors.New("department_code_exists")
 
 type CreateDepartmentInput struct {
-	Code   string
-	NameEN string
-	NameAR *string
+	Code            string
+	NameEN          string
+	NameAR          *string
+	DefaultShiftUID *string
 }
 
 type CreateDepartmentOutput struct {
@@ -46,6 +47,7 @@ func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, input CreateDepa
 	}
 
 	department := domain.NewDepartment(input.Code, input.NameEN, input.NameAR)
+	department.DefaultShiftUID = input.DefaultShiftUID
 
 	if err := uc.deptRepo.Create(ctx, uc.db, department); err != nil {
 		return nil, err

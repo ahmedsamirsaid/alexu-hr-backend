@@ -15,14 +15,16 @@ type GetEmployeeInput struct {
 
 // GetEmployeeOutput contains the employee details.
 type GetEmployeeOutput struct {
-	UID          string
-	Name         string
-	Mobile       string
-	GovernmentID string
-	UniversityID string
-	Email        *string
-	HireDate     time.Time
-	Status       domain.EmployeeStatus
+	UID           string
+	Name          string
+	Mobile        string
+	GovernmentID  string
+	UniversityID  string
+	Email         *string
+	HireDate      time.Time
+	Status        domain.EmployeeStatus
+	DepartmentUID *string
+	ShiftUID      *string
 }
 
 // GetEmployeeUseCase handles retrieving a single employee by UID.
@@ -53,13 +55,15 @@ func (uc *GetEmployeeUseCase) Execute(ctx context.Context, input GetEmployeeInpu
 	}
 
 	return &GetEmployeeOutput{
-		UID:          employee.UID,
-		Name:         employee.Name,
-		Mobile:       employee.Mobile,
-		GovernmentID: employee.GovernmentID,
-		UniversityID: employee.UniversityID,
-		Email:        employee.Email,
-		HireDate:     employee.HireDate,
-		Status:       employee.Status,
+		UID:           employee.UID,
+		Name:          employee.Name,
+		Mobile:        employee.Mobile,
+		GovernmentID:  employee.GovernmentID,
+		UniversityID:  employee.UniversityID,
+		Email:         employee.Email,
+		HireDate:      employee.HireDate,
+		Status:        employee.Status,
+		DepartmentUID: employee.DepartmentUID,
+		ShiftUID:      employee.ShiftUID,
 	}, nil
 }

@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -24,8 +23,6 @@ type AttendanceHandler struct {
 	listDailyEmployeeLogsUC   *usecases.ListDailyEmployeeAttendanceLogsUseCase
 	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
-	getWorkHoursUC            *usecases.GetWorkHoursConfigUseCase
-	setWorkHoursUC            *usecases.SetWorkHoursConfigUseCase
 }
 
 func NewAttendanceHandler(
@@ -35,8 +32,6 @@ func NewAttendanceHandler(
 	listDailyEmployeeLogsUC *usecases.ListDailyEmployeeAttendanceLogsUseCase,
 	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
-	getWorkHoursUC *usecases.GetWorkHoursConfigUseCase,
-	setWorkHoursUC *usecases.SetWorkHoursConfigUseCase,
 ) *AttendanceHandler {
 	return &AttendanceHandler{
 		listDepartmentLogsUC:      listDepartmentLogsUC,
@@ -45,23 +40,7 @@ func NewAttendanceHandler(
 		listDailyEmployeeLogsUC:   listDailyEmployeeLogsUC,
 		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
-		getWorkHoursUC:            getWorkHoursUC,
-		setWorkHoursUC:            setWorkHoursUC,
 	}
-}
-
-type workHoursRequest struct {
-	WorkDayStart      string `json:"workDayStart"`
-	WorkDayEnd        string `json:"workDayEnd"`
-	LateGraceMinutes  int    `json:"lateGraceMinutes"`
-	EarlyGraceMinutes int    `json:"earlyGraceMinutes"`
-}
-
-type workHoursResponse struct {
-	WorkDayStart      string `json:"workDayStart"`
-	WorkDayEnd        string `json:"workDayEnd"`
-	LateGraceMinutes  int    `json:"lateGraceMinutes"`
-	EarlyGraceMinutes int    `json:"earlyGraceMinutes"`
 }
 
 type dailySummaryItemResponse struct {
@@ -436,48 +415,6 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		AverageCheckInTime:   averageCheckInTime,
 		MissingCheckOutCount: output.MissingCheckOutCount,
 		WorkingHoursByDay:    workingHoursByDay,
-	})
-}
-
-func (h *AttendanceHandler) GetWorkHours(w http.ResponseWriter, r *http.Request) {
-	output, err := h.getWorkHoursUC.Execute(r.Context())
-	if err != nil {
-		slog.Error("attendance_handler.GetWorkHours.execute_usecase", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to get work hours config")
-		return
-	}
-
-	writeJSON(w, http.StatusOK, workHoursResponse{
-		WorkDayStart:      output.Config.WorkDayStart,
-		WorkDayEnd:        output.Config.WorkDayEnd,
-		LateGraceMinutes:  output.Config.LateGraceMinutes,
-		EarlyGraceMinutes: output.Config.EarlyGraceMinutes,
-	})
-}
-
-func (h *AttendanceHandler) SetWorkHours(w http.ResponseWriter, r *http.Request) {
-	var req workHoursRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	cfg, err := h.setWorkHoursUC.Execute(r.Context(), usecases.SetWorkHoursConfigInput{
-		WorkDayStart:      req.WorkDayStart,
-		WorkDayEnd:        req.WorkDayEnd,
-		LateGraceMinutes:  req.LateGraceMinutes,
-		EarlyGraceMinutes: req.EarlyGraceMinutes,
-	})
-	if err != nil {
-		h.writeUseCaseError(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, workHoursResponse{
-		WorkDayStart:      cfg.WorkDayStart,
-		WorkDayEnd:        cfg.WorkDayEnd,
-		LateGraceMinutes:  cfg.LateGraceMinutes,
-		EarlyGraceMinutes: cfg.EarlyGraceMinutes,
 	})
 }
 

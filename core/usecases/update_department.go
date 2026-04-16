@@ -8,11 +8,12 @@ import (
 )
 
 type UpdateDepartmentInput struct {
-	UID      string
-	Code     *string
-	NameEN   *string
-	NameAR   *string
-	IsActive *bool
+	UID             string
+	Code            *string
+	NameEN          *string
+	NameAR          *string
+	IsActive        *bool
+	DefaultShiftUID *string
 }
 
 type UpdateDepartmentOutput struct {
@@ -65,6 +66,10 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 
 	if input.IsActive != nil {
 		department.IsActive = *input.IsActive
+	}
+
+	if input.DefaultShiftUID != nil {
+		department.DefaultShiftUID = input.DefaultShiftUID
 	}
 
 	if err := uc.deptRepo.Update(ctx, uc.db, department); err != nil {

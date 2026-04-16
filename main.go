@@ -64,7 +64,7 @@ func main() {
 	deviceTokenRepo := db.NewDeviceTokenRepository()
 
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
-	workHoursRepo := db.NewWorkHoursConfigRepository()
+	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
 
 	var notificationService ports.NotificationService
@@ -105,6 +105,10 @@ func main() {
 	generateTemplateUC := usecases.NewGenerateImportTemplateUseCase()
 	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(sqliteDB, employeeRepo, departmentRepo)
 	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(sqliteDB, employeeRepo)
+	listShiftsUC := usecases.NewListShiftsUseCase(sqliteDB, shiftRepo)
+	getShiftUC := usecases.NewGetShiftUseCase(sqliteDB, shiftRepo)
+	createShiftUC := usecases.NewCreateShiftUseCase(sqliteDB, shiftRepo)
+	updateShiftUC := usecases.NewUpdateShiftUseCase(sqliteDB, shiftRepo)
 
 	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret)
 
@@ -186,11 +190,9 @@ func main() {
 
 	listDepartmentAttendanceLogsUC := usecases.NewListDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo)
 	listEmployeeAttendanceLogsUC := usecases.NewListEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo)
-	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, workHoursRepo)
-	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, workHoursRepo)
-	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, workHoursRepo)
-	getWorkHoursConfigUC := usecases.NewGetWorkHoursConfigUseCase(sqliteDB, workHoursRepo)
-	setWorkHoursConfigUC := usecases.NewSetWorkHoursConfigUseCase(sqliteDB, workHoursRepo)
+	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo)
+	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo)
+	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
 
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
@@ -238,6 +240,7 @@ func main() {
 		checkAllAttendanceDevicesConnectionUC,
 	)
 	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(
 		listDepartmentAttendanceLogsUC,
 		listEmployeeAttendanceLogsUC,
@@ -245,8 +248,6 @@ func main() {
 		listDailyEmployeeAttendanceLogsUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
-		getWorkHoursConfigUC,
-		setWorkHoursConfigUC,
 	)
 
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
@@ -262,6 +263,7 @@ func main() {
 		DeviceTokenHandler:      deviceTokenHandler,
 		AttendanceDeviceHandler: attendanceDeviceHandler,
 		LeaveTypeHandler:        leaveTypeHandler,
+		ShiftHandler:            shiftHandler,
 		AttendanceHandler:       attendanceHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,

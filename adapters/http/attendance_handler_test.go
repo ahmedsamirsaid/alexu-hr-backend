@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,22 +57,43 @@ func (m *mockDepartmentRepoForAttendance) List(ctx context.Context, q ports.Quer
 }
 
 type mockAttendanceRecordRepo struct {
-	countReturn     int
-	listReturn      []*ports.AttendanceRecordWithEmployee
-	dailyListReturn []*ports.DailyAttendanceGroup
-	dateRangeReturn []*domain.AttendanceRecord
-	gotDeptUID      string
-	gotEmployeeUID  string
-	gotFilter       ports.DepartmentAttendanceLogsFilter
-	gotListParams   ports.ListParams
+	countReturn      int
+	listReturn       []*ports.AttendanceRecordWithEmployee
+	dailyListReturn  []*ports.DailyAttendanceGroup
+	listByDateReturn []*domain.AttendanceRecord
+	dateRangeReturn  []*domain.AttendanceRecord
+	recordByUID      *domain.AttendanceRecord
+	createdRecord    *domain.AttendanceRecord
+	updatedRecord    *domain.AttendanceRecord
+	createOK         bool
+	gotDeptUID       string
+	gotEmployeeUID   string
+	gotFilter        ports.DepartmentAttendanceLogsFilter
+	gotListParams    ports.ListParams
 }
 
 func (m *mockAttendanceRecordRepo) Create(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) (bool, error) {
+	m.createdRecord = record
+	if m.createOK {
+		return true, nil
+	}
 	return false, nil
 }
 
-func (m *mockAttendanceRecordRepo) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
+func (m *mockAttendanceRecordRepo) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceRecord, error) {
+	if m.recordByUID != nil && m.recordByUID.UID == uid {
+		return m.recordByUID, nil
+	}
 	return nil, nil
+}
+
+func (m *mockAttendanceRecordRepo) Update(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) error {
+	m.updatedRecord = record
+	return nil
+}
+
+func (m *mockAttendanceRecordRepo) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
+	return m.listByDateReturn, nil
 }
 
 func (m *mockAttendanceRecordRepo) ListByDateRange(ctx context.Context, q ports.Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
@@ -177,6 +199,61 @@ func (m *mockEmployeeRepoForAttendance) Count(ctx context.Context, q ports.Queri
 	return 0, nil
 }
 
+type mockAttendanceDeviceRepoForAttendance struct {
+	device *domain.AttendanceDevice
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) Create(ctx context.Context, q ports.Querier, device *domain.AttendanceDevice) error {
+	return nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceDevice, error) {
+	if m.device != nil && m.device.UID == uid {
+		return m.device, nil
+	}
+	return nil, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) GetBySerialNumber(ctx context.Context, q ports.Querier, serialNumber string) (*domain.AttendanceDevice, error) {
+	return nil, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) GetByAddress(ctx context.Context, q ports.Querier, ip string, port int) (*domain.AttendanceDevice, error) {
+	return nil, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) Update(ctx context.Context, q ports.Querier, device *domain.AttendanceDevice) error {
+	return nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) List(ctx context.Context, q ports.Querier, filter ports.AttendanceDeviceListFilter, limit, offset int) ([]*domain.AttendanceDevice, error) {
+	return nil, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) ListAll(ctx context.Context, q ports.Querier) ([]*domain.AttendanceDevice, error) {
+	return nil, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) Count(ctx context.Context, q ports.Querier) (int, error) {
+	return 0, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) CountFiltered(ctx context.Context, q ports.Querier, filter ports.AttendanceDeviceListFilter) (int, error) {
+	return 0, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) CountByStatus(ctx context.Context, q ports.Querier, status domain.AttendanceDeviceStatus) (int, error) {
+	return 0, nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) UpdateStatus(ctx context.Context, q ports.Querier, uid string, status domain.AttendanceDeviceStatus) error {
+	return nil
+}
+
+func (m *mockAttendanceDeviceRepoForAttendance) Delete(ctx context.Context, q ports.Querier, uid string) error {
+	return nil
+}
+
 type mockShiftRepoForAttendance struct {
 	shift *domain.Shift
 }
@@ -228,7 +305,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -308,7 +385,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -328,7 +405,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -342,7 +419,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -384,7 +461,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("employeeUid", "emp_1")
@@ -476,8 +553,16 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 					v := "Front Gate"
 					return &v
 				}(),
+				CheckInDeviceUID: func() *string {
+					v := "dev_1"
+					return &v
+				}(),
 				CheckOutDevice: func() *string {
 					v := "Back Gate"
+					return &v
+				}(),
+				CheckOutDeviceUID: func() *string {
+					v := "dev_2"
 					return &v
 				}(),
 			},
@@ -493,7 +578,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -512,12 +597,14 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		PageSize      int    `json:"pageSize"`
 		TotalPages    int    `json:"totalPages"`
 		Records       []struct {
-			Date           string  `json:"date"`
-			EmployeeUID    string  `json:"employeeUid"`
-			CheckIn        *string `json:"checkIn"`
-			CheckOut       *string `json:"checkOut"`
-			CheckInDevice  *string `json:"checkInDevice"`
-			CheckOutDevice *string `json:"checkOutDevice"`
+			Date              string  `json:"date"`
+			EmployeeUID       string  `json:"employeeUid"`
+			CheckIn           *string `json:"checkIn"`
+			CheckOut          *string `json:"checkOut"`
+			CheckInDevice     *string `json:"checkInDevice"`
+			CheckInDeviceUID  *string `json:"checkInDeviceUid"`
+			CheckOutDevice    *string `json:"checkOutDevice"`
+			CheckOutDeviceUID *string `json:"checkOutDeviceUid"`
 		} `json:"records"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
@@ -539,8 +626,75 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 	if response.Records[0].CheckInDevice == nil || *response.Records[0].CheckInDevice != "Front Gate" {
 		t.Fatalf("checkInDevice = %v, want Front Gate", response.Records[0].CheckInDevice)
 	}
+	if response.Records[0].CheckInDeviceUID == nil || *response.Records[0].CheckInDeviceUID != "dev_1" {
+		t.Fatalf("checkInDeviceUid = %v, want dev_1", response.Records[0].CheckInDeviceUID)
+	}
 	if response.Records[0].CheckOutDevice == nil || *response.Records[0].CheckOutDevice != "Back Gate" {
 		t.Fatalf("checkOutDevice = %v, want Back Gate", response.Records[0].CheckOutDevice)
+	}
+	if response.Records[0].CheckOutDeviceUID == nil || *response.Records[0].CheckOutDeviceUID != "dev_2" {
+		t.Fatalf("checkOutDeviceUid = %v, want dev_2", response.Records[0].CheckOutDeviceUID)
+	}
+}
+
+func TestAttendanceHandlerListDailyDepartmentLogs_IncludesCheckoutOnlyRecord(t *testing.T) {
+	recordRepo := &mockAttendanceRecordRepo{
+		countReturn: 1,
+		dailyListReturn: []*ports.DailyAttendanceGroup{
+			{
+				Date:          time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC),
+				EmployeeUID:   "emp_1",
+				EmployeeName:  "Alice",
+				DepartmentUID: func() *string { v := "dept_1"; return &v }(),
+				CheckOut:      func() *time.Time { v := time.Date(2026, 4, 10, 17, 0, 0, 0, time.UTC); return &v }(),
+				CheckOutDevice: func() *string {
+					v := "Front Gate"
+					return &v
+				}(),
+				CheckOutDeviceUID: func() *string {
+					v := "dev_1"
+					return &v
+				}(),
+			},
+		},
+	}
+	deptRepo := &mockDepartmentRepoForAttendance{department: &domain.Department{UID: "dept_1"}}
+	employeeRepo := &mockEmployeeRepoForAttendance{employee: &domain.Employee{UID: "emp_1", Name: "Alice"}}
+	shiftRepo := &mockShiftRepoForAttendance{shift: domain.NewDefaultShift()}
+	listUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(
+		&mockDB{},
+		deptRepo,
+		recordRepo,
+		employeeRepo,
+		shiftRepo,
+		nil,
+	)
+
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
+	req.SetPathValue("departmentUid", "dept_1")
+	rr := httptest.NewRecorder()
+
+	handler.ListDailyDepartmentLogs(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+
+	var response listDailyDepartmentLogsResponse
+	if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if len(response.Records) != 1 {
+		t.Fatalf("len(response.Records) = %d, want 1", len(response.Records))
+	}
+	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00" {
+		t.Fatalf("checkOut = %v, want 17:00:00", response.Records[0].CheckOut)
+	}
+	if !response.Records[0].MissingCheckIn {
+		t.Fatal("expected MissingCheckIn to be true")
 	}
 }
 
@@ -568,8 +722,16 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 					v := "Front Gate"
 					return &v
 				}(),
+				CheckInDeviceUID: func() *string {
+					v := "dev_1"
+					return &v
+				}(),
 				CheckOutDevice: func() *string {
 					v := "Back Gate"
+					return &v
+				}(),
+				CheckOutDeviceUID: func() *string {
+					v := "dev_2"
 					return &v
 				}(),
 			},
@@ -585,7 +747,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("employeeUid", "emp_1")
@@ -601,12 +763,14 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		EmployeeUID string `json:"employeeUid"`
 		Total       int    `json:"total"`
 		Records     []struct {
-			Date           string  `json:"date"`
-			EmployeeUID    string  `json:"employeeUid"`
-			CheckIn        *string `json:"checkIn"`
-			CheckOut       *string `json:"checkOut"`
-			CheckInDevice  *string `json:"checkInDevice"`
-			CheckOutDevice *string `json:"checkOutDevice"`
+			Date              string  `json:"date"`
+			EmployeeUID       string  `json:"employeeUid"`
+			CheckIn           *string `json:"checkIn"`
+			CheckOut          *string `json:"checkOut"`
+			CheckInDevice     *string `json:"checkInDevice"`
+			CheckInDeviceUID  *string `json:"checkInDeviceUid"`
+			CheckOutDevice    *string `json:"checkOutDevice"`
+			CheckOutDeviceUID *string `json:"checkOutDeviceUid"`
 		} `json:"records"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
@@ -628,8 +792,183 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 	if response.Records[0].CheckInDevice == nil || *response.Records[0].CheckInDevice != "Front Gate" {
 		t.Fatalf("checkInDevice = %v, want Front Gate", response.Records[0].CheckInDevice)
 	}
+	if response.Records[0].CheckInDeviceUID == nil || *response.Records[0].CheckInDeviceUID != "dev_1" {
+		t.Fatalf("checkInDeviceUid = %v, want dev_1", response.Records[0].CheckInDeviceUID)
+	}
 	if response.Records[0].CheckOutDevice == nil || *response.Records[0].CheckOutDevice != "Back Gate" {
 		t.Fatalf("checkOutDevice = %v, want Back Gate", response.Records[0].CheckOutDevice)
+	}
+	if response.Records[0].CheckOutDeviceUID == nil || *response.Records[0].CheckOutDeviceUID != "dev_2" {
+		t.Fatalf("checkOutDeviceUid = %v, want dev_2", response.Records[0].CheckOutDeviceUID)
+	}
+}
+
+func TestAttendanceHandlerCreateLog(t *testing.T) {
+	recordRepo := &mockAttendanceRecordRepo{createOK: true}
+	employeeRepo := &mockEmployeeRepoForAttendance{
+		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
+	}
+	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
+		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
+	}
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
+
+	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.CreateLog(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	if recordRepo.createdRecord == nil {
+		t.Fatal("expected attendance record to be created")
+	}
+	if recordRepo.createdRecord.EmployeeUID != "emp_1" {
+		t.Fatalf("expected employee UID emp_1, got %s", recordRepo.createdRecord.EmployeeUID)
+	}
+	if recordRepo.createdRecord.DeviceUserID == "" {
+		t.Fatal("expected generated device user id")
+	}
+	if recordRepo.createdRecord.RawPayload != nil {
+		t.Fatalf("expected raw payload nil, got %v", *recordRepo.createdRecord.RawPayload)
+	}
+
+	var resp usecases.AttendanceLogOutput
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.EmployeeUID != "emp_1" || resp.DeviceUID != "dev_1" || resp.PunchType != "check_in" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDate(t *testing.T) {
+	recordRepo := &mockAttendanceRecordRepo{
+		listByDateReturn: []*domain.AttendanceRecord{
+			{
+				UID:         "atr_existing",
+				EmployeeUID: "emp_1",
+				PunchedAt:   time.Date(2026, 4, 10, 8, 0, 0, 0, time.UTC),
+				PunchType:   domain.AttendancePunchTypeCheckIn,
+			},
+		},
+	}
+	employeeRepo := &mockEmployeeRepoForAttendance{
+		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
+	}
+	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
+		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
+	}
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
+
+	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.CreateLog(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Code)
+	}
+	if recordRepo.createdRecord != nil {
+		t.Fatal("expected no attendance record to be created")
+	}
+}
+
+func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeCheckin(t *testing.T) {
+	recordRepo := &mockAttendanceRecordRepo{
+		listByDateReturn: []*domain.AttendanceRecord{
+			{
+				UID:         "atr_existing",
+				EmployeeUID: "emp_1",
+				PunchedAt:   time.Date(2026, 4, 10, 9, 0, 0, 0, time.UTC),
+				PunchType:   domain.AttendancePunchTypeCheckIn,
+			},
+		},
+	}
+	employeeRepo := &mockEmployeeRepoForAttendance{
+		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
+	}
+	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
+		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
+	}
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
+
+	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_out"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.CreateLog(rec, req)
+
+	if rec.Code != http.StatusPreconditionFailed {
+		t.Fatalf("expected status 412, got %d", rec.Code)
+	}
+	if recordRepo.createdRecord != nil {
+		t.Fatal("expected no attendance record to be created")
+	}
+
+	var resp ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Error == "" {
+		t.Fatal("expected error message in response")
+	}
+}
+
+func TestAttendanceHandlerUpdateLog(t *testing.T) {
+	recordRepo := &mockAttendanceRecordRepo{
+		recordByUID: &domain.AttendanceRecord{
+			UID:          "atr_1",
+			EmployeeUID:  "emp_old",
+			DeviceUID:    "dev_old",
+			DeviceUserID: "999",
+			PunchedAt:    time.Date(2026, 4, 9, 8, 0, 0, 0, time.UTC),
+			PunchType:    domain.AttendancePunchTypeCheckIn,
+			CreatedAt:    time.Date(2026, 4, 9, 8, 0, 0, 0, time.UTC),
+			UpdatedAt:    time.Date(2026, 4, 9, 8, 0, 0, 0, time.UTC),
+		},
+	}
+	employeeRepo := &mockEmployeeRepoForAttendance{
+		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
+	}
+	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
+		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
+	}
+	updateUC := usecases.NewUpdateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil)
+
+	body := `{"deviceUid":"dev_1","punchedAt":"2026-04-10T17:30:00Z","punchType":"check_out"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/attendance/logs/atr_1", strings.NewReader(body))
+	req.SetPathValue("uid", "atr_1")
+	rec := httptest.NewRecorder()
+
+	handler.UpdateLog(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	if recordRepo.updatedRecord == nil {
+		t.Fatal("expected attendance record to be updated")
+	}
+	if recordRepo.updatedRecord.DeviceUserID != "999" {
+		t.Fatalf("expected device user id 999, got %s", recordRepo.updatedRecord.DeviceUserID)
+	}
+	if recordRepo.updatedRecord.EmployeeUID != "emp_old" {
+		t.Fatalf("expected employee uid emp_old, got %s", recordRepo.updatedRecord.EmployeeUID)
+	}
+
+	var resp usecases.AttendanceLogOutput
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.UID != "atr_1" || resp.PunchType != "check_out" {
+		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
 

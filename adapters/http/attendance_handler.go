@@ -87,19 +87,25 @@ type listEmployeeLogsResponse struct {
 }
 
 type dailyAttendanceLogItemResponse struct {
-	Date            string  `json:"date"`
-	EmployeeUID     string  `json:"employeeUid"`
-	EmployeeName    string  `json:"employeeName"`
-	DepartmentUID   *string `json:"departmentUid,omitempty"`
-	CheckIn         *string `json:"checkIn,omitempty"`
-	CheckOut        *string `json:"checkOut,omitempty"`
-	CheckInDevice   *string `json:"checkInDevice,omitempty"`
-	CheckOutDevice  *string `json:"checkOutDevice,omitempty"`
-	WorkedHours     float64 `json:"workedHours"`
-	LateArrival     bool    `json:"lateArrival"`
-	EarlyDeparture  bool    `json:"earlyDeparture"`
-	MissingCheckIn  bool    `json:"missingCheckIn"`
-	MissingCheckOut bool    `json:"missingCheckOut"`
+	Date            string                        `json:"date"`
+	EmployeeUID     string                        `json:"employeeUid"`
+	EmployeeName    string                        `json:"employeeName"`
+	DepartmentUID   *string                       `json:"departmentUid,omitempty"`
+	CheckIn         *string                       `json:"checkIn,omitempty"`
+	CheckOut        *string                       `json:"checkOut,omitempty"`
+	CheckInDevice   *string                       `json:"checkInDevice,omitempty"`
+	CheckOutDevice  *string                       `json:"checkOutDevice,omitempty"`
+	WorkedHours     float64                       `json:"workedHours"`
+	LateArrival     bool                          `json:"lateArrival"`
+	EarlyDeparture  bool                          `json:"earlyDeparture"`
+	MissingCheckIn  bool                          `json:"missingCheckIn"`
+	MissingCheckOut bool                          `json:"missingCheckOut"`
+	Exceptions      []attendanceExceptionResponse `json:"exceptions"`
+}
+
+type attendanceExceptionResponse struct {
+	Type         string `json:"type"`
+	MinutesDelta *int   `json:"minutesDelta,omitempty"`
 }
 
 type listDailyDepartmentLogsResponse struct {
@@ -540,6 +546,11 @@ func applyAttendanceLogsFilters(filters map[string]string, employeeUID, employee
 		}
 		*endDate = &value
 	}
+	if startDate != nil && endDate != nil && *startDate != nil && *endDate != nil {
+		if (*startDate).After(**endDate) {
+			return errors.New("startDate must be before or equal to endDate")
+		}
+	}
 	return nil
 }
 
@@ -571,7 +582,28 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 			EarlyDeparture:  item.EarlyDeparture,
 			MissingCheckIn:  item.MissingCheckIn,
 			MissingCheckOut: item.MissingCheckOut,
+			Exceptions:      buildAttendanceExceptionResponses(item),
 		})
 	}
 	return records
+}
+
+func buildAttendanceExceptionResponses(item usecases.DailyAttendanceLogItem) []attendanceExceptionResponse {
+	if len(item.Exceptions) == 0 {
+		return []attendanceExceptionResponse{}
+	}
+
+	result := make([]attendanceExceptionResponse, 0, len(item.Exceptions))
+	for _, value := range item.Exceptions {
+		exception := attendanceExceptionResponse{Type: string(value)}
+		switch value {
+		case domain.AttendanceExceptionTypeLateArrival:
+			exception.MinutesDelta = item.LateMinutes
+		case domain.AttendanceExceptionTypeEarlyDeparture:
+			exception.MinutesDelta = item.EarlyMinutes
+		}
+		result = append(result, exception)
+	}
+
+	return result
 }

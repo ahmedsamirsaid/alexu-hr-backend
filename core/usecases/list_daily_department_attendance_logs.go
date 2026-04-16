@@ -22,6 +22,11 @@ type DailyAttendanceLogItem struct {
 	EarlyDeparture  bool
 	MissingCheckIn  bool
 	MissingCheckOut bool
+	IsAbsent        bool
+	GraceMinutes    int
+	LateMinutes     *int
+	EarlyMinutes    *int
+	Exceptions      []domain.AttendanceExceptionType
 }
 
 type ListDailyDepartmentAttendanceLogsOutput struct {
@@ -51,6 +56,7 @@ type ListDailyDepartmentAttendanceLogsUseCase struct {
 	recordRepo   ports.AttendanceRecordRepository
 	employeeRepo ports.EmployeeRepository
 	shiftRepo    ports.ShiftRepository
+	leaveRepo    ports.LeaveRecordRepository
 }
 
 func NewListDailyDepartmentAttendanceLogsUseCase(
@@ -59,6 +65,7 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 	recordRepo ports.AttendanceRecordRepository,
 	employeeRepo ports.EmployeeRepository,
 	shiftRepo ports.ShiftRepository,
+	leaveRepo ports.LeaveRecordRepository,
 ) *ListDailyDepartmentAttendanceLogsUseCase {
 	return &ListDailyDepartmentAttendanceLogsUseCase{
 		db:           db,
@@ -66,6 +73,7 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 		recordRepo:   recordRepo,
 		employeeRepo: employeeRepo,
 		shiftRepo:    shiftRepo,
+		leaveRepo:    leaveRepo,
 	}
 }
 
@@ -89,12 +97,24 @@ func (uc *ListDailyDepartmentAttendanceLogsUseCase) Execute(ctx context.Context,
 		EndDate:          input.EndDate,
 	}
 
-	total, err := uc.recordRepo.CountDailyByDepartmentUID(ctx, uc.db, input.DepartmentUID, filter)
-	if err != nil {
-		return nil, err
+	rangeStart, rangeEnd, hasRange := expandDateRange(filter.StartDate, filter.EndDate)
+	if !hasRange {
+		rangeEnd = time.Now()
+		rangeStart = normalizeDateOnly(rangeEnd.AddDate(0, 0, -6))
+		rangeEnd = normalizeDateOnly(rangeEnd).Add(24*time.Hour - time.Nanosecond)
 	}
 
-	groups, err := uc.recordRepo.ListDailyByDepartmentUID(ctx, uc.db, input.DepartmentUID, filter, params)
+	filter.StartDate = &rangeStart
+	filter.EndDate = &rangeEnd
+
+	allParams := ports.ListParams{
+		Page:      1,
+		PageSize:  100000,
+		SortBy:    "date",
+		SortOrder: ports.SortOrderAsc,
+	}
+
+	groups, err := uc.recordRepo.ListDailyByDepartmentUID(ctx, uc.db, input.DepartmentUID, filter, allParams)
 	if err != nil {
 		return nil, err
 	}
@@ -104,12 +124,26 @@ func (uc *ListDailyDepartmentAttendanceLogsUseCase) Execute(ctx context.Context,
 		return nil, err
 	}
 
+	employees, err := listDepartmentEmployeesForAttendance(ctx, uc.db, input.DepartmentUID, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	records, err = appendDepartmentAbsenceItems(ctx, uc.db, uc.leaveRepo, records, employees, input.DepartmentUID, filter, rangeStart, rangeEnd)
+	if err != nil {
+		return nil, err
+	}
+	sortDailyAttendanceItems(records, params)
+
+	total := len(records)
+	pagedRecords := paginateDailyAttendanceItems(records, params)
+
 	return &ListDailyDepartmentAttendanceLogsOutput{
 		DepartmentUID: input.DepartmentUID,
 		Total:         total,
 		Page:          params.Page,
 		PageSize:      params.PageSize,
 		TotalPages:    ports.TotalPages(total, params.PageSize),
-		Records:       records,
+		Records:       pagedRecords,
 	}, nil
 }

@@ -34,6 +34,7 @@ type ListDailyEmployeeAttendanceLogsUseCase struct {
 	deptRepo     ports.DepartmentRepository
 	recordRepo   ports.AttendanceRecordRepository
 	shiftRepo    ports.ShiftRepository
+	leaveRepo    ports.LeaveRecordRepository
 }
 
 func NewListDailyEmployeeAttendanceLogsUseCase(
@@ -42,6 +43,7 @@ func NewListDailyEmployeeAttendanceLogsUseCase(
 	recordRepo ports.AttendanceRecordRepository,
 	deptRepo ports.DepartmentRepository,
 	shiftRepo ports.ShiftRepository,
+	leaveRepo ports.LeaveRecordRepository,
 ) *ListDailyEmployeeAttendanceLogsUseCase {
 	return &ListDailyEmployeeAttendanceLogsUseCase{
 		db:           db,
@@ -49,6 +51,7 @@ func NewListDailyEmployeeAttendanceLogsUseCase(
 		deptRepo:     deptRepo,
 		recordRepo:   recordRepo,
 		shiftRepo:    shiftRepo,
+		leaveRepo:    leaveRepo,
 	}
 }
 
@@ -71,12 +74,24 @@ func (uc *ListDailyEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, i
 		EndDate:          input.EndDate,
 	}
 
-	total, err := uc.recordRepo.CountDailyByEmployeeUID(ctx, uc.db, input.EmployeeUID, filter)
-	if err != nil {
-		return nil, err
+	rangeStart, rangeEnd, hasRange := expandDateRange(filter.StartDate, filter.EndDate)
+	if !hasRange {
+		rangeEnd = time.Now()
+		rangeStart = normalizeDateOnly(rangeEnd.AddDate(0, 0, -6))
+		rangeEnd = normalizeDateOnly(rangeEnd).Add(24*time.Hour - time.Nanosecond)
 	}
 
-	groups, err := uc.recordRepo.ListDailyByEmployeeUID(ctx, uc.db, input.EmployeeUID, filter, params)
+	filter.StartDate = &rangeStart
+	filter.EndDate = &rangeEnd
+
+	allParams := ports.ListParams{
+		Page:      1,
+		PageSize:  100000,
+		SortBy:    "date",
+		SortOrder: ports.SortOrderAsc,
+	}
+
+	groups, err := uc.recordRepo.ListDailyByEmployeeUID(ctx, uc.db, input.EmployeeUID, filter, allParams)
 	if err != nil {
 		return nil, err
 	}
@@ -86,12 +101,21 @@ func (uc *ListDailyEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, i
 		return nil, err
 	}
 
+	records, err = appendEmployeeAbsenceItems(ctx, uc.db, uc.leaveRepo, records, employee, rangeStart, rangeEnd)
+	if err != nil {
+		return nil, err
+	}
+	sortDailyAttendanceItems(records, params)
+
+	total := len(records)
+	pagedRecords := paginateDailyAttendanceItems(records, params)
+
 	return &ListDailyEmployeeAttendanceLogsOutput{
 		EmployeeUID: input.EmployeeUID,
 		Total:       total,
 		Page:        params.Page,
 		PageSize:    params.PageSize,
 		TotalPages:  ports.TotalPages(total, params.PageSize),
-		Records:     records,
+		Records:     pagedRecords,
 	}, nil
 }

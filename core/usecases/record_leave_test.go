@@ -237,6 +237,10 @@ func (m *mockLeaveRecordRepo) CountOnLeaveToday(ctx context.Context, q ports.Que
 	return 0, nil
 }
 
+func (m *mockLeaveRecordRepo) HasLeaveOnDate(ctx context.Context, q ports.Querier, employeeID int64, date time.Time) (bool, error) {
+	return false, nil
+}
+
 type mockBalanceTxRepo struct {
 	transactions []*domain.LeaveBalanceTransaction
 }

@@ -108,7 +108,8 @@ func (r *AttendanceRecordRepository) ListByDateRange(ctx context.Context, q port
 		WHERE datetime(punched_at) >= datetime(?)
 			AND datetime(punched_at) <= datetime(?)`
 
-	args := []any{startDate.Format(time.RFC3339), endDate.Format(time.RFC3339)}
+	inclusiveEndDate := makeInclusiveEndDate(endDate)
+	args := []any{startDate.Format(time.RFC3339), inclusiveEndDate.Format(time.RFC3339)}
 	if employeeUID != nil {
 		query += ` AND employee_uid = ?`
 		args = append(args, *employeeUID)
@@ -579,8 +580,9 @@ func buildDepartmentAttendanceLogsWhere(departmentUID string, filter ports.Depar
 		args = append(args, filter.StartDate.Format(time.RFC3339))
 	}
 	if filter.EndDate != nil {
+		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
 		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
-		args = append(args, filter.EndDate.Format(time.RFC3339))
+		args = append(args, inclusiveEndDate.Format(time.RFC3339))
 	}
 
 	if len(clauses) == 0 {
@@ -622,8 +624,9 @@ func buildEmployeeAttendanceLogsWhere(employeeUID string, filter ports.Departmen
 		args = append(args, filter.StartDate.Format(time.RFC3339))
 	}
 	if filter.EndDate != nil {
+		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
 		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
-		args = append(args, filter.EndDate.Format(time.RFC3339))
+		args = append(args, inclusiveEndDate.Format(time.RFC3339))
 	}
 
 	if len(clauses) == 0 {
@@ -670,4 +673,12 @@ func buildDailyAttendanceLogsOrderBy(params ports.ListParams) (string, error) {
 	}
 
 	return fmt.Sprintf(" ORDER BY %s %s, e.name ASC, ar.employee_uid ASC", column, order), nil
+}
+
+func makeInclusiveEndDate(value time.Time) time.Time {
+	if value.Hour() == 0 && value.Minute() == 0 && value.Second() == 0 && value.Nanosecond() == 0 {
+		return value.Add(24*time.Hour - time.Nanosecond)
+	}
+
+	return value
 }

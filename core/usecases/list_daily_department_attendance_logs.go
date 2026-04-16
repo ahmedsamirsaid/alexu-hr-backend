@@ -9,24 +9,28 @@ import (
 )
 
 type DailyAttendanceLogItem struct {
-	Date            time.Time
-	EmployeeUID     string
-	EmployeeName    string
-	DepartmentUID   *string
-	CheckIn         *time.Time
-	CheckOut        *time.Time
-	CheckInDevice   *string
-	CheckOutDevice  *string
-	WorkedHours     float64
-	LateArrival     bool
-	EarlyDeparture  bool
-	MissingCheckIn  bool
-	MissingCheckOut bool
-	IsAbsent        bool
-	GraceMinutes    int
-	LateMinutes     *int
-	EarlyMinutes    *int
-	Exceptions      []domain.AttendanceExceptionType
+	Date              time.Time
+	EmployeeUID       string
+	EmployeeName      string
+	DepartmentUID     *string
+	CheckIn           *time.Time
+	ChechInLogUID      *string
+	CheckOut          *time.Time
+	CheckOutLogUID     *string
+	CheckInDevice     *string
+	CheckInDeviceUID  *string
+	CheckOutDevice    *string
+	CheckOutDeviceUID *string
+	WorkedHours       float64
+	LateArrival       bool
+	EarlyDeparture    bool
+	MissingCheckIn    bool
+	MissingCheckOut   bool
+	IsAbsent          bool
+	GraceMinutes      int
+	LateMinutes       *int
+	EarlyMinutes      *int
+	Exceptions        []domain.AttendanceExceptionType
 }
 
 type ListDailyDepartmentAttendanceLogsOutput struct {

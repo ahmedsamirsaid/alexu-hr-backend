@@ -127,6 +127,12 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute(t *testing.T) {
 	if output.AverageCheckInTime == nil || output.AverageCheckInTime.Format("15:04:05") != "08:15:00" {
 		t.Fatalf("AverageCheckInTime = %v, want 08:15:00", output.AverageCheckInTime)
 	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "16:45:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 16:45:00", output.AverageCheckOutTime)
+	}
+	if output.MissingCheckInCount != 0 {
+		t.Fatalf("MissingCheckInCount = %d, want 0", output.MissingCheckInCount)
+	}
 	if output.MissingCheckOutCount != 1 {
 		t.Fatalf("MissingCheckOutCount = %d, want 1", output.MissingCheckOutCount)
 	}
@@ -189,5 +195,46 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute_WithCustomRange(t *testing.T) {
 	}
 	if output.MissingCheckOutCount != 1 {
 		t.Fatalf("MissingCheckOutCount = %d, want 1", output.MissingCheckOutCount)
+	}
+	if output.MissingCheckInCount != 0 {
+		t.Fatalf("MissingCheckInCount = %d, want 0", output.MissingCheckInCount)
+	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "17:00:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 17:00:00", output.AverageCheckOutTime)
+	}
+}
+
+func TestGetMonthlyAttendanceStatsUseCaseExecute_WithMissingCheckIn(t *testing.T) {
+	repo := &mockAttendanceRecordRepoForMonthlyStats{
+		records: []*domain.AttendanceRecord{
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 20, 17, 30, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckOut},
+		},
+	}
+
+	uc := NewGetMonthlyAttendanceStatsUseCase(&mockMonthlyStatsDB{}, repo)
+
+	start := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 20, 23, 59, 59, 0, time.UTC)
+
+	output, err := uc.Execute(context.Background(), GetMonthlyAttendanceStatsInput{
+		EmployeeUID: "emp_1",
+		StartDate:   &start,
+		EndDate:     &end,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if output.MissingCheckInCount != 1 {
+		t.Fatalf("MissingCheckInCount = %d, want 1", output.MissingCheckInCount)
+	}
+	if output.MissingCheckOutCount != 0 {
+		t.Fatalf("MissingCheckOutCount = %d, want 0", output.MissingCheckOutCount)
+	}
+	if output.AverageCheckInTime != nil {
+		t.Fatalf("AverageCheckInTime = %v, want nil", output.AverageCheckInTime)
+	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "17:30:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 17:30:00", output.AverageCheckOutTime)
 	}
 }

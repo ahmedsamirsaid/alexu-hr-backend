@@ -638,9 +638,14 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 		output: &usecases.GetMonthlyAttendanceStatsOutput{
 			Month:                "2026-04",
 			TotalWorkedHours:     26.25,
+			MissingCheckInCount:  2,
 			MissingCheckOutCount: 1,
 			AverageCheckInTime: func() *time.Time {
 				v := time.Date(2026, 4, 1, 8, 26, 15, 0, time.UTC)
+				return &v
+			}(),
+			AverageCheckOutTime: func() *time.Time {
+				v := time.Date(2026, 4, 1, 16, 55, 45, 0, time.UTC)
 				return &v
 			}(),
 			WorkingHoursByDay: []usecases.WorkingHoursByDay{
@@ -666,6 +671,8 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 		Month                string  `json:"month"`
 		TotalWorkedHours     float64 `json:"totalWorkedHours"`
 		AverageCheckInTime   *string `json:"averageCheckInTime"`
+		AverageCheckOutTime  *string `json:"averageCheckOutTime"`
+		MissingCheckInCount  int     `json:"missingCheckInCount"`
 		MissingCheckOutCount int     `json:"missingCheckOutCount"`
 		WorkingHoursByDay    []struct {
 			Date        string  `json:"date"`
@@ -682,11 +689,14 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 	if statsUC.input.StartDate != nil || statsUC.input.EndDate != nil || statsUC.input.PeriodLabel != nil {
 		t.Fatalf("expected default period input, got %+v", statsUC.input)
 	}
-	if response.EmployeeUID != "emp_1" || response.Month != "2026-04" || response.TotalWorkedHours != 26.25 || response.MissingCheckOutCount != 1 {
+	if response.EmployeeUID != "emp_1" || response.Month != "2026-04" || response.TotalWorkedHours != 26.25 || response.MissingCheckInCount != 2 || response.MissingCheckOutCount != 1 {
 		t.Fatalf("unexpected response metadata: %+v", response)
 	}
 	if response.AverageCheckInTime == nil || *response.AverageCheckInTime != "08:26:15" {
 		t.Fatalf("AverageCheckInTime = %v, want 08:26:15", response.AverageCheckInTime)
+	}
+	if response.AverageCheckOutTime == nil || *response.AverageCheckOutTime != "16:55:45" {
+		t.Fatalf("AverageCheckOutTime = %v, want 16:55:45", response.AverageCheckOutTime)
 	}
 	if len(response.WorkingHoursByDay) != 2 || response.WorkingHoursByDay[0].Date != "2026-04-01" || response.WorkingHoursByDay[0].WorkedHours != 18 {
 		t.Fatalf("unexpected WorkingHoursByDay: %+v", response.WorkingHoursByDay)

@@ -139,6 +139,8 @@ type monthlyAttendanceStatsResponse struct {
 	Month                string                      `json:"month"`
 	TotalWorkedHours     float64                     `json:"totalWorkedHours"`
 	AverageCheckInTime   *string                     `json:"averageCheckInTime,omitempty"`
+	AverageCheckOutTime  *string                     `json:"averageCheckOutTime,omitempty"`
+	MissingCheckInCount  int                         `json:"missingCheckInCount"`
 	MissingCheckOutCount int                         `json:"missingCheckOutCount"`
 	WorkingHoursByDay    []workingHoursByDayResponse `json:"workingHoursByDay"`
 }
@@ -495,6 +497,12 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		averageCheckInTime = &v
 	}
 
+	var averageCheckOutTime *string
+	if output.AverageCheckOutTime != nil {
+		v := output.AverageCheckOutTime.Format("15:04:05")
+		averageCheckOutTime = &v
+	}
+
 	workingHoursByDay := make([]workingHoursByDayResponse, 0, len(output.WorkingHoursByDay))
 	for _, item := range output.WorkingHoursByDay {
 		workingHoursByDay = append(workingHoursByDay, workingHoursByDayResponse{
@@ -508,6 +516,8 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		Month:                output.Month,
 		TotalWorkedHours:     output.TotalWorkedHours,
 		AverageCheckInTime:   averageCheckInTime,
+		AverageCheckOutTime:  averageCheckOutTime,
+		MissingCheckInCount:  output.MissingCheckInCount,
 		MissingCheckOutCount: output.MissingCheckOutCount,
 		WorkingHoursByDay:    workingHoursByDay,
 	})

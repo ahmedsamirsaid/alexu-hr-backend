@@ -834,6 +834,13 @@ components:
           type: string
           nullable: true
           example: "08:07:14"
+        averageCheckOutTime:
+          type: string
+          nullable: true
+          example: "17:03:22"
+        missingCheckInCount:
+          type: integer
+          example: 2
         missingCheckOutCount:
           type: integer
           example: 1

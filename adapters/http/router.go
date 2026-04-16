@@ -7,6 +7,7 @@ import (
 type RouterConfig struct {
 	LeaveHandler            *LeaveHandler
 	EmployeeHandler         *EmployeeHandler
+	ShiftHandler            *ShiftHandler
 	AuthHandler             *AuthHandler
 	UserHandler             *UserHandler
 	RoleHandler             *RoleHandler
@@ -69,6 +70,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("PATCH /api/v1/admin/approval-flows/{uid}/steps/{stepUid}", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.UpdateApprovalFlowStep)))
 	protectedMux.Handle("DELETE /api/v1/admin/approval-flows/{uid}/steps/{stepUid}", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.DeleteApprovalFlowStep)))
 
+	protectedMux.Handle("GET /api/v1/admin/shifts", RequirePermission("attendance:read")(http.HandlerFunc(cfg.ShiftHandler.List)))
+	protectedMux.Handle("GET /api/v1/admin/shifts/{uid}", RequirePermission("attendance:read")(http.HandlerFunc(cfg.ShiftHandler.Get)))
+	protectedMux.Handle("POST /api/v1/admin/shifts", RequirePermission("attendance:write")(http.HandlerFunc(cfg.ShiftHandler.Create)))
+	protectedMux.Handle("PATCH /api/v1/admin/shifts/{uid}", RequirePermission("attendance:write")(http.HandlerFunc(cfg.ShiftHandler.Update)))
+
 	protectedMux.Handle("GET /api/v1/admin/departments", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.ListDepartments)))
 	protectedMux.Handle("GET /api/v1/admin/departments/{uid}", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.GetDepartment)))
 	protectedMux.Handle("POST /api/v1/admin/departments", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.CreateDepartment)))
@@ -97,8 +103,6 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListEmployeeLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyEmployeeLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/summary/daily", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetDailySummary)))
-	protectedMux.Handle("GET /api/v1/attendance/work-hours", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetWorkHours)))
-	protectedMux.Handle("PUT /api/v1/attendance/work-hours", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.SetWorkHours)))
 
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices/stats", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Stats)))
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.List)))

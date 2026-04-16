@@ -177,15 +177,25 @@ func (m *mockEmployeeRepoForAttendance) Count(ctx context.Context, q ports.Queri
 	return 0, nil
 }
 
-type mockWorkHoursRepoForAttendance struct {
-	cfg *domain.WorkHoursConfig
+type mockShiftRepoForAttendance struct {
+	shift *domain.Shift
 }
 
-func (m *mockWorkHoursRepoForAttendance) Get(ctx context.Context, q ports.Querier) (*domain.WorkHoursConfig, error) {
-	return m.cfg, nil
+func (m *mockShiftRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Shift, error) {
+	if m.shift != nil && m.shift.UID == uid {
+		return m.shift, nil
+	}
+	return nil, nil
 }
 
-func (m *mockWorkHoursRepoForAttendance) Upsert(ctx context.Context, q ports.Querier, cfg *domain.WorkHoursConfig) error {
+func (m *mockShiftRepoForAttendance) List(ctx context.Context, q ports.Querier) ([]*domain.Shift, error) {
+	if m.shift == nil {
+		return nil, nil
+	}
+	return []*domain.Shift{m.shift}, nil
+}
+
+func (m *mockShiftRepoForAttendance) Upsert(ctx context.Context, q ports.Querier, shift *domain.Shift) error {
 	return nil
 }
 
@@ -218,7 +228,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -298,7 +308,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -318,7 +328,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -332,7 +342,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -374,7 +384,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req.SetPathValue("employeeUid", "emp_1")
@@ -476,12 +486,13 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 
 	listUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(
 		&mockDB{},
-		&mockDepartmentRepoForAttendance{department: &domain.Department{UID: "dept_1"}},
+		&mockDepartmentRepoForAttendance{department: &domain.Department{UID: "dept_1", DefaultShiftUID: func() *string { v := "shf_general"; return &v }()}},
 		recordRepo,
-		&mockWorkHoursRepoForAttendance{cfg: domain.NewDefaultWorkHoursConfig()},
+		&mockEmployeeRepoForAttendance{employee: &domain.Employee{UID: "emp_1", Name: "Alice", DepartmentUID: func() *string { v := "dept_1"; return &v }()}},
+		&mockShiftRepoForAttendance{shift: &domain.Shift{UID: "shf_general", StartTime: "09:00", EndTime: "17:00", GraceMinutes: 15}},
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("departmentUid", "dept_1")
@@ -566,12 +577,13 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 
 	listUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(
 		&mockDB{},
-		&mockEmployeeRepoForAttendance{employee: &domain.Employee{UID: "emp_1", Name: "Alice"}},
+		&mockEmployeeRepoForAttendance{employee: &domain.Employee{UID: "emp_1", Name: "Alice", DepartmentUID: func() *string { v := "dept_1"; return &v }()}},
 		recordRepo,
-		&mockWorkHoursRepoForAttendance{cfg: domain.NewDefaultWorkHoursConfig()},
+		&mockDepartmentRepoForAttendance{department: &domain.Department{UID: "dept_1", DefaultShiftUID: func() *string { v := "shf_general"; return &v }()}},
+		&mockShiftRepoForAttendance{shift: &domain.Shift{UID: "shf_general", StartTime: "09:00", EndTime: "17:00", GraceMinutes: 15}},
 	)
 
-	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req.SetPathValue("employeeUid", "emp_1")

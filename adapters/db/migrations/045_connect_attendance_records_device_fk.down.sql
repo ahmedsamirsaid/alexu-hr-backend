@@ -1,0 +1,1 @@
+-- Irreversible migration. No-op on downgrade.

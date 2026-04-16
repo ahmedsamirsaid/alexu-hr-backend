@@ -11,7 +11,6 @@ type AttendanceDeviceListFilter struct {
 	Search      string
 	SearchField string
 }
-
 type AttendanceDeviceRepository interface {
 	Create(ctx context.Context, q Querier, device *domain.AttendanceDevice) error
 	GetByUID(ctx context.Context, q Querier, uid string) (*domain.AttendanceDevice, error)

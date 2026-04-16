@@ -63,11 +63,13 @@ func (s *Scheduler) Stop() {
 func (s *Scheduler) runJobs(ctx context.Context) {
 	slog.Debug("scheduler.runJobs.start")
 
-	output, err := s.autoRejectUC.Execute(ctx)
-	if err != nil {
-		slog.Error("scheduler.runJobs.auto_reject", "error", err)
-	} else if output.RejectedCount > 0 {
-		slog.Info("scheduler.runJobs.auto_reject.completed", "rejected_count", output.RejectedCount)
+	if s.autoRejectUC != nil {
+		output, err := s.autoRejectUC.Execute(ctx)
+		if err != nil {
+			slog.Error("scheduler.runJobs.auto_reject", "error", err)
+		} else if output.RejectedCount > 0 {
+			slog.Info("scheduler.runJobs.auto_reject.completed", "rejected_count", output.RejectedCount)
+		}
 	}
 
 	slog.Debug("scheduler.runJobs.complete")

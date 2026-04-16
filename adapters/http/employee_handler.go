@@ -15,14 +15,14 @@ const maxUploadSize = 20 * 1024 * 1024 // 20MB
 
 // EmployeeHandler handles employee HTTP requests.
 type EmployeeHandler struct {
-	getUC            *usecases.GetEmployeeUseCase
-	listUC           *usecases.ListEmployeesUseCase
-	importUC         *usecases.ImportEmployeesUseCase
-	exportUC         *usecases.ExportEmployeesUseCase
-	exportPDFUC      *usecases.ExportEmployeesPDFUseCase
-	templateUC       *usecases.GenerateImportTemplateUseCase
-	assignDeptUC     *usecases.AssignEmployeeDepartmentUseCase
-	removeDeptUC     *usecases.RemoveEmployeeDepartmentUseCase
+	getUC        *usecases.GetEmployeeUseCase
+	listUC       *usecases.ListEmployeesUseCase
+	importUC     *usecases.ImportEmployeesUseCase
+	exportUC     *usecases.ExportEmployeesUseCase
+	exportPDFUC  *usecases.ExportEmployeesPDFUseCase
+	templateUC   *usecases.GenerateImportTemplateUseCase
+	assignDeptUC *usecases.AssignEmployeeDepartmentUseCase
+	removeDeptUC *usecases.RemoveEmployeeDepartmentUseCase
 }
 
 // NewEmployeeHandler creates a new employee handler.
@@ -37,27 +37,29 @@ func NewEmployeeHandler(
 	removeDeptUC *usecases.RemoveEmployeeDepartmentUseCase,
 ) *EmployeeHandler {
 	return &EmployeeHandler{
-		getUC:            getUC,
-		listUC:           listUC,
-		importUC:         importUC,
-		exportUC:         exportUC,
-		exportPDFUC:      exportPDFUC,
-		templateUC:       templateUC,
-		assignDeptUC:     assignDeptUC,
-		removeDeptUC:     removeDeptUC,
+		getUC:        getUC,
+		listUC:       listUC,
+		importUC:     importUC,
+		exportUC:     exportUC,
+		exportPDFUC:  exportPDFUC,
+		templateUC:   templateUC,
+		assignDeptUC: assignDeptUC,
+		removeDeptUC: removeDeptUC,
 	}
 }
 
 // GetEmployeeResponse represents the get employee API response.
 type GetEmployeeResponse struct {
-	UID          string  `json:"uid"`
-	Name         string  `json:"name"`
-	Mobile       string  `json:"mobile"`
-	GovernmentID string  `json:"governmentId"`
-	UniversityID string  `json:"universityId"`
-	Email        *string `json:"email,omitempty"`
-	HireDate     string  `json:"hireDate"`
-	Status       string  `json:"status"`
+	UID           string  `json:"uid"`
+	Name          string  `json:"name"`
+	Mobile        string  `json:"mobile"`
+	GovernmentID  string  `json:"governmentId"`
+	UniversityID  string  `json:"universityId"`
+	Email         *string `json:"email,omitempty"`
+	HireDate      string  `json:"hireDate"`
+	Status        string  `json:"status"`
+	DepartmentUID *string `json:"departmentUid,omitempty"`
+	ShiftUID      *string `json:"shiftUid,omitempty"`
 }
 
 // EmployeeListResponse represents the list employees API response.
@@ -84,6 +86,7 @@ type EmployeeListItemResponse struct {
 	HireDate      string                    `json:"hireDate"`
 	Status        string                    `json:"status"`
 	DepartmentUID *string                   `json:"departmentUid,omitempty"`
+	ShiftUID      *string                   `json:"shiftUid,omitempty"`
 	User          *EmployeeUserInfoResponse `json:"user,omitempty"`
 }
 
@@ -109,14 +112,16 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, GetEmployeeResponse{
-		UID:          output.UID,
-		Name:         output.Name,
-		Mobile:       output.Mobile,
-		GovernmentID: output.GovernmentID,
-		UniversityID: output.UniversityID,
-		Email:        output.Email,
-		HireDate:     output.HireDate.Format("2006-01-02"),
-		Status:       string(output.Status),
+		UID:           output.UID,
+		Name:          output.Name,
+		Mobile:        output.Mobile,
+		GovernmentID:  output.GovernmentID,
+		UniversityID:  output.UniversityID,
+		Email:         output.Email,
+		HireDate:      output.HireDate.Format("2006-01-02"),
+		Status:        string(output.Status),
+		DepartmentUID: output.DepartmentUID,
+		ShiftUID:      output.ShiftUID,
 	})
 }
 
@@ -147,6 +152,7 @@ func (h *EmployeeHandler) ListEmployees(w http.ResponseWriter, r *http.Request) 
 			HireDate:      emp.HireDate.Format("2006-01-02"),
 			Status:        string(emp.Status),
 			DepartmentUID: emp.DepartmentUID,
+			ShiftUID:      emp.ShiftUID,
 		}
 		if emp.User != nil {
 			item.User = &EmployeeUserInfoResponse{
@@ -272,7 +278,8 @@ func (h *EmployeeHandler) DownloadImportTemplate(w http.ResponseWriter, r *http.
 
 // AssignDepartmentRequest represents the request body for assigning a department.
 type AssignDepartmentRequest struct {
-	DepartmentUID string `json:"departmentUid"`
+	DepartmentUID string  `json:"departmentUid"`
+	ShiftUID      *string `json:"shiftUid,omitempty"`
 }
 
 // AssignDepartment handles PUT /api/v1/employees/{uid}/department
@@ -298,6 +305,7 @@ func (h *EmployeeHandler) AssignDepartment(w http.ResponseWriter, r *http.Reques
 	input := usecases.AssignEmployeeDepartmentInput{
 		EmployeeUID:   uid,
 		DepartmentUID: req.DepartmentUID,
+		ShiftUID:      req.ShiftUID,
 	}
 	err := h.assignDeptUC.Execute(r.Context(), input)
 	if err != nil {

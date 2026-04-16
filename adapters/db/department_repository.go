@@ -19,7 +19,7 @@ func NewDepartmentRepository() *DepartmentRepository {
 
 func (r *DepartmentRepository) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Department, error) {
 	query := `
-		SELECT id, uid, code, name_en, name_ar, is_active, created_at, updated_at
+		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at
 		FROM departments
 		WHERE id = ?`
 
@@ -28,7 +28,7 @@ func (r *DepartmentRepository) GetByID(ctx context.Context, q ports.Querier, id 
 
 func (r *DepartmentRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Department, error) {
 	query := `
-		SELECT id, uid, code, name_en, name_ar, is_active, created_at, updated_at
+		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at
 		FROM departments
 		WHERE uid = ?`
 
@@ -37,7 +37,7 @@ func (r *DepartmentRepository) GetByUID(ctx context.Context, q ports.Querier, ui
 
 func (r *DepartmentRepository) GetByCode(ctx context.Context, q ports.Querier, code string) (*domain.Department, error) {
 	query := `
-		SELECT id, uid, code, name_en, name_ar, is_active, created_at, updated_at
+		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at
 		FROM departments
 		WHERE code = ?`
 
@@ -46,8 +46,8 @@ func (r *DepartmentRepository) GetByCode(ctx context.Context, q ports.Querier, c
 
 func (r *DepartmentRepository) Create(ctx context.Context, q ports.Querier, department *domain.Department) error {
 	query := `
-		INSERT INTO departments (uid, code, name_en, name_ar, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO departments (uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
 	department.CreatedAt = now
@@ -55,7 +55,7 @@ func (r *DepartmentRepository) Create(ctx context.Context, q ports.Querier, depa
 
 	result, err := q.ExecContext(ctx, query,
 		department.UID, department.Code, department.NameEN, department.NameAR,
-		department.IsActive, department.CreatedAt, department.UpdatedAt)
+		department.IsActive, department.DefaultShiftUID, department.CreatedAt, department.UpdatedAt)
 	if err != nil {
 		slog.Error("department_repository.Create.exec_query", "error", err, "uid", department.UID, "code", department.Code)
 		return err
@@ -74,14 +74,14 @@ func (r *DepartmentRepository) Create(ctx context.Context, q ports.Querier, depa
 func (r *DepartmentRepository) Update(ctx context.Context, q ports.Querier, department *domain.Department) error {
 	query := `
 		UPDATE departments
-		SET code = ?, name_en = ?, name_ar = ?, is_active = ?, updated_at = ?
+		SET code = ?, name_en = ?, name_ar = ?, is_active = ?, default_shift_uid = ?, updated_at = ?
 		WHERE id = ?`
 
 	department.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
 		department.Code, department.NameEN, department.NameAR,
-		department.IsActive, department.UpdatedAt, department.ID)
+		department.IsActive, department.DefaultShiftUID, department.UpdatedAt, department.ID)
 	if err != nil {
 		slog.Error("department_repository.Update.exec_query", "error", err, "id", department.ID, "uid", department.UID)
 	}
@@ -90,7 +90,7 @@ func (r *DepartmentRepository) Update(ctx context.Context, q ports.Querier, depa
 
 func (r *DepartmentRepository) List(ctx context.Context, q ports.Querier, activeOnly bool) ([]*domain.Department, error) {
 	query := `
-		SELECT id, uid, code, name_en, name_ar, is_active, created_at, updated_at
+		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at
 		FROM departments`
 
 	if activeOnly {
@@ -129,7 +129,7 @@ func (r *DepartmentRepository) scanDepartment(row *sql.Row) (*domain.Department,
 	var isActive int
 	err := row.Scan(
 		&d.ID, &d.UID, &d.Code, &d.NameEN, &d.NameAR,
-		&isActive, &createdAt, &updatedAt)
+		&isActive, &d.DefaultShiftUID, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -149,7 +149,7 @@ func (r *DepartmentRepository) scanDepartmentRow(rows *sql.Rows) (*domain.Depart
 	var isActive int
 	err := rows.Scan(
 		&d.ID, &d.UID, &d.Code, &d.NameEN, &d.NameAR,
-		&isActive, &createdAt, &updatedAt)
+		&isActive, &d.DefaultShiftUID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}

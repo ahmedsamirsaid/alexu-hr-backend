@@ -4,21 +4,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
 
-func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, workHoursRepo ports.WorkHoursConfigRepository, groups []*ports.DailyAttendanceGroup) ([]DailyAttendanceLogItem, error) {
-	cfg, err := workHoursRepo.Get(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil {
-		cfg = domain.NewDefaultWorkHoursConfig()
-	}
-
+func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, employeeRepo ports.EmployeeRepository, deptRepo ports.DepartmentRepository, shiftRepo ports.ShiftRepository, groups []*ports.DailyAttendanceGroup) ([]DailyAttendanceLogItem, error) {
 	records := make([]DailyAttendanceLogItem, 0, len(groups))
 	for _, group := range groups {
+		shift, err := resolveEffectiveShift(ctx, db, employeeRepo, deptRepo, shiftRepo, group.EmployeeUID, group.DepartmentUID)
+		if err != nil {
+			return nil, err
+		}
+
 		item := DailyAttendanceLogItem{
 			Date:            group.Date,
 			EmployeeUID:     group.EmployeeUID,
@@ -32,11 +28,11 @@ func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, workHoursRep
 			MissingCheckOut: group.CheckOut == nil,
 		}
 
-		workStart, err := buildTimeOnDate(group.Date, cfg.WorkDayStart)
+		workStart, err := buildTimeOnDate(group.Date, shift.StartTime)
 		if err != nil {
 			return nil, ErrInvalidWorkDayStart
 		}
-		workEnd, err := buildTimeOnDate(group.Date, cfg.WorkDayEnd)
+		workEnd, err := buildTimeOnDate(group.Date, shift.EndTime)
 		if err != nil {
 			return nil, ErrInvalidWorkDayEnd
 		}
@@ -45,11 +41,11 @@ func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, workHoursRep
 			item.WorkedHours = group.CheckOut.Sub(*group.CheckIn).Hours()
 		}
 		if group.CheckIn != nil {
-			lateThreshold := workStart.Add(time.Duration(cfg.LateGraceMinutes) * time.Minute)
+			lateThreshold := workStart.Add(time.Duration(shift.GraceMinutes) * time.Minute)
 			item.LateArrival = group.CheckIn.After(lateThreshold)
 		}
 		if group.CheckOut != nil {
-			earlyThreshold := workEnd.Add(-time.Duration(cfg.EarlyGraceMinutes) * time.Minute)
+			earlyThreshold := workEnd.Add(-time.Duration(shift.GraceMinutes) * time.Minute)
 			item.EarlyDeparture = group.CheckOut.Before(earlyThreshold)
 		}
 

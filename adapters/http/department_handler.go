@@ -11,12 +11,12 @@ import (
 
 // DepartmentHandler handles department HTTP requests (admin).
 type DepartmentHandler struct {
-	listDeptUC    *usecases.ListDepartmentsUseCase
-	getDeptUC     *usecases.GetDepartmentUseCase
-	createDeptUC  *usecases.CreateDepartmentUseCase
-	updateDeptUC  *usecases.UpdateDepartmentUseCase
-	assignMgrUC   *usecases.AssignDepartmentManagerUseCase
-	removeMgrUC   *usecases.RemoveDepartmentManagerUseCase
+	listDeptUC   *usecases.ListDepartmentsUseCase
+	getDeptUC    *usecases.GetDepartmentUseCase
+	createDeptUC *usecases.CreateDepartmentUseCase
+	updateDeptUC *usecases.UpdateDepartmentUseCase
+	assignMgrUC  *usecases.AssignDepartmentManagerUseCase
+	removeMgrUC  *usecases.RemoveDepartmentManagerUseCase
 }
 
 func NewDepartmentHandler(
@@ -40,13 +40,14 @@ func NewDepartmentHandler(
 // Response types
 
 type DepartmentResponse struct {
-	UID       string  `json:"uid"`
-	Code      string  `json:"code"`
-	NameEN    string  `json:"nameEn"`
-	NameAR    *string `json:"nameAr,omitempty"`
-	IsActive  bool    `json:"isActive"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt string  `json:"updatedAt"`
+	UID             string  `json:"uid"`
+	Code            string  `json:"code"`
+	NameEN          string  `json:"nameEn"`
+	NameAR          *string `json:"nameAr,omitempty"`
+	IsActive        bool    `json:"isActive"`
+	DefaultShiftUID *string `json:"defaultShiftUid,omitempty"`
+	CreatedAt       string  `json:"createdAt"`
+	UpdatedAt       string  `json:"updatedAt"`
 }
 
 type DepartmentManagerResponse struct {
@@ -56,14 +57,15 @@ type DepartmentManagerResponse struct {
 }
 
 type DepartmentDetailResponse struct {
-	UID       string                     `json:"uid"`
-	Code      string                     `json:"code"`
-	NameEN    string                     `json:"nameEn"`
-	NameAR    *string                    `json:"nameAr,omitempty"`
-	IsActive  bool                       `json:"isActive"`
-	Manager   *DepartmentManagerResponse `json:"manager"`
-	CreatedAt string                     `json:"createdAt"`
-	UpdatedAt string                     `json:"updatedAt"`
+	UID             string                     `json:"uid"`
+	Code            string                     `json:"code"`
+	NameEN          string                     `json:"nameEn"`
+	NameAR          *string                    `json:"nameAr,omitempty"`
+	IsActive        bool                       `json:"isActive"`
+	DefaultShiftUID *string                    `json:"defaultShiftUid,omitempty"`
+	Manager         *DepartmentManagerResponse `json:"manager"`
+	CreatedAt       string                     `json:"createdAt"`
+	UpdatedAt       string                     `json:"updatedAt"`
 }
 
 type ListDepartmentsResponse struct {
@@ -73,16 +75,18 @@ type ListDepartmentsResponse struct {
 // Request types
 
 type CreateDepartmentRequest struct {
-	Code   string  `json:"code"`
-	NameEN string  `json:"nameEn"`
-	NameAR *string `json:"nameAr,omitempty"`
+	Code            string  `json:"code"`
+	NameEN          string  `json:"nameEn"`
+	NameAR          *string `json:"nameAr,omitempty"`
+	DefaultShiftUID *string `json:"defaultShiftUid,omitempty"`
 }
 
 type UpdateDepartmentRequest struct {
-	Code     *string `json:"code,omitempty"`
-	NameEN   *string `json:"nameEn,omitempty"`
-	NameAR   *string `json:"nameAr,omitempty"`
-	IsActive *bool   `json:"isActive,omitempty"`
+	Code            *string `json:"code,omitempty"`
+	NameEN          *string `json:"nameEn,omitempty"`
+	NameAR          *string `json:"nameAr,omitempty"`
+	IsActive        *bool   `json:"isActive,omitempty"`
+	DefaultShiftUID *string `json:"defaultShiftUid,omitempty"`
 }
 
 type AssignManagerRequest struct {
@@ -103,13 +107,14 @@ func (h *DepartmentHandler) ListDepartments(w http.ResponseWriter, r *http.Reque
 	departments := make([]DepartmentResponse, 0, len(output.Departments))
 	for _, d := range output.Departments {
 		departments = append(departments, DepartmentResponse{
-			UID:       d.UID,
-			Code:      d.Code,
-			NameEN:    d.NameEN,
-			NameAR:    d.NameAR,
-			IsActive:  d.IsActive,
-			CreatedAt: d.CreatedAt.Format("2006-01-02T15:04:05Z"),
-			UpdatedAt: d.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+			UID:             d.UID,
+			Code:            d.Code,
+			NameEN:          d.NameEN,
+			NameAR:          d.NameAR,
+			IsActive:        d.IsActive,
+			DefaultShiftUID: d.DefaultShiftUID,
+			CreatedAt:       d.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt:       d.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		})
 	}
 
@@ -148,14 +153,15 @@ func (h *DepartmentHandler) GetDepartment(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, DepartmentDetailResponse{
-		UID:       output.Department.UID,
-		Code:      output.Department.Code,
-		NameEN:    output.Department.NameEN,
-		NameAR:    output.Department.NameAR,
-		IsActive:  output.Department.IsActive,
-		Manager:   manager,
-		CreatedAt: output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		UID:             output.Department.UID,
+		Code:            output.Department.Code,
+		NameEN:          output.Department.NameEN,
+		NameAR:          output.Department.NameAR,
+		IsActive:        output.Department.IsActive,
+		DefaultShiftUID: output.Department.DefaultShiftUID,
+		Manager:         manager,
+		CreatedAt:       output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:       output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
 
@@ -178,9 +184,10 @@ func (h *DepartmentHandler) CreateDepartment(w http.ResponseWriter, r *http.Requ
 	}
 
 	input := usecases.CreateDepartmentInput{
-		Code:   req.Code,
-		NameEN: req.NameEN,
-		NameAR: req.NameAR,
+		Code:            req.Code,
+		NameEN:          req.NameEN,
+		NameAR:          req.NameAR,
+		DefaultShiftUID: req.DefaultShiftUID,
 	}
 	output, err := h.createDeptUC.Execute(r.Context(), input)
 	if err != nil {
@@ -195,13 +202,14 @@ func (h *DepartmentHandler) CreateDepartment(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusCreated, DepartmentResponse{
-		UID:       output.Department.UID,
-		Code:      output.Department.Code,
-		NameEN:    output.Department.NameEN,
-		NameAR:    output.Department.NameAR,
-		IsActive:  output.Department.IsActive,
-		CreatedAt: output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		UID:             output.Department.UID,
+		Code:            output.Department.Code,
+		NameEN:          output.Department.NameEN,
+		NameAR:          output.Department.NameAR,
+		IsActive:        output.Department.IsActive,
+		DefaultShiftUID: output.Department.DefaultShiftUID,
+		CreatedAt:       output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:       output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
 
@@ -221,11 +229,12 @@ func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Requ
 	}
 
 	input := usecases.UpdateDepartmentInput{
-		UID:      uid,
-		Code:     req.Code,
-		NameEN:   req.NameEN,
-		NameAR:   req.NameAR,
-		IsActive: req.IsActive,
+		UID:             uid,
+		Code:            req.Code,
+		NameEN:          req.NameEN,
+		NameAR:          req.NameAR,
+		IsActive:        req.IsActive,
+		DefaultShiftUID: req.DefaultShiftUID,
 	}
 	output, err := h.updateDeptUC.Execute(r.Context(), input)
 	if err != nil {
@@ -243,13 +252,14 @@ func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, DepartmentResponse{
-		UID:       output.Department.UID,
-		Code:      output.Department.Code,
-		NameEN:    output.Department.NameEN,
-		NameAR:    output.Department.NameAR,
-		IsActive:  output.Department.IsActive,
-		CreatedAt: output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		UID:             output.Department.UID,
+		Code:            output.Department.Code,
+		NameEN:          output.Department.NameEN,
+		NameAR:          output.Department.NameAR,
+		IsActive:        output.Department.IsActive,
+		DefaultShiftUID: output.Department.DefaultShiftUID,
+		CreatedAt:       output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:       output.Department.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	})
 }
 

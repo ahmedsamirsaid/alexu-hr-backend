@@ -114,11 +114,10 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 		}
 
 		summary := EmployeeDailyAttendanceSummary{
-			EmployeeUID:     employeeUID,
-			CheckIn:         item.checkIn,
-			CheckOut:        item.checkOut,
-			MissingCheckIn:  item.checkIn == nil,
-			MissingCheckOut: item.checkOut == nil,
+			EmployeeUID:    employeeUID,
+			CheckIn:        item.checkIn,
+			CheckOut:       item.checkOut,
+			MissingCheckIn: item.checkIn == nil,
 		}
 
 		if item.checkIn != nil && item.checkOut != nil && item.checkOut.After(*item.checkIn) {
@@ -134,6 +133,8 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 			earlyThreshold := workEnd.Add(-time.Duration(shift.GraceMinutes) * time.Minute)
 			summary.EarlyDeparture = item.checkOut.Before(earlyThreshold)
 		}
+
+		summary.MissingCheckOut = item.checkOut == nil && item.checkIn != nil && shouldFlagMissingPunchOut(input.Date, workEnd)
 
 		employee, err := uc.employeeRepo.GetByUID(ctx, uc.db, employeeUID)
 		if err != nil {

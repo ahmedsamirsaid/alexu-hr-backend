@@ -102,6 +102,10 @@ func (m *mockLeaveRecordRepoForDashboard) CountOnLeaveToday(ctx context.Context,
 	return m.leavesToday, m.err
 }
 
+func (m *mockLeaveRecordRepoForDashboard) HasLeaveOnDate(ctx context.Context, q ports.Querier, employeeID int64, date time.Time) (bool, error) {
+	return false, nil
+}
+
 func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 	tests := []struct {
 		name                    string

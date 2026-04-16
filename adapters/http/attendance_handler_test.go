@@ -490,6 +490,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		recordRepo,
 		&mockEmployeeRepoForAttendance{employee: &domain.Employee{UID: "emp_1", Name: "Alice", DepartmentUID: func() *string { v := "dept_1"; return &v }()}},
 		&mockShiftRepoForAttendance{shift: &domain.Shift{UID: "shf_general", StartTime: "09:00", EndTime: "17:00", GraceMinutes: 15}},
+		nil,
 	)
 
 	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil)
@@ -581,6 +582,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		recordRepo,
 		&mockDepartmentRepoForAttendance{department: &domain.Department{UID: "dept_1", DefaultShiftUID: func() *string { v := "shf_general"; return &v }()}},
 		&mockShiftRepoForAttendance{shift: &domain.Shift{UID: "shf_general", StartTime: "09:00", EndTime: "17:00", GraceMinutes: 15}},
+		nil,
 	)
 
 	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil)

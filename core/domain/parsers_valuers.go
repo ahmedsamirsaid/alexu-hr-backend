@@ -18,7 +18,9 @@ type Time struct {
 
 // Supported time formats for parsing SQLite datetime strings
 var timeFormats = []string{
+	"2006-01-02 15:04:05 -0700 MST",           // Go's time.Time.String() format without fractional seconds
 	"2006-01-02 15:04:05.999999999 -0700 MST", // Go's time.Time.String() format
+	"2006-01-02 15:04:05 +0000 UTC",           // Go's time.Time.String() format (UTC) without fractional seconds
 	"2006-01-02 15:04:05.999999999 +0000 UTC", // Go's time.Time.String() format (UTC)
 	"2006-01-02 15:04:05.999999999-07:00",     // SQLite format with timezone
 	"2006-01-02T15:04:05.999999999-07:00",     // RFC3339 with nanoseconds

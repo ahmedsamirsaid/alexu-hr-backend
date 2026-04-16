@@ -1,0 +1,88 @@
+{
+  "devices": {
+    "ZK-SERIAL-001": [
+      {
+        "deviceUserId": "UNI001",
+        "timestamp": "2026-04-12T08:55:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI001",
+        "timestamp": "2026-04-12T17:04:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI002",
+        "timestamp": "2026-04-12T09:05:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI002",
+        "timestamp": "2026-04-12T17:00:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI003",
+        "timestamp": "2026-04-12T08:58:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI003",
+        "timestamp": "2026-04-12T16:49:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI004",
+        "timestamp": "2026-04-12T09:17:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI004",
+        "timestamp": "2026-04-12T17:12:00+03:00",
+        "punchType": "check_out"
+      }
+    ],
+    "ZK-SEED-005": [
+      {
+        "deviceUserId": "UNI005",
+        "timestamp": "2026-04-12T08:50:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI005",
+        "timestamp": "2026-04-12T16:58:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI006",
+        "timestamp": "2026-04-12T09:10:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI006",
+        "timestamp": "2026-04-12T17:20:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI007",
+        "timestamp": "2026-04-12T09:00:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI007",
+        "timestamp": "2026-04-12T17:03:00+03:00",
+        "punchType": "check_out"
+      },
+      {
+        "deviceUserId": "UNI008",
+        "timestamp": "2026-04-12T08:45:00+03:00",
+        "punchType": "check_in"
+      },
+      {
+        "deviceUserId": "UNI008",
+        "timestamp": "2026-04-12T16:40:00+03:00",
+        "punchType": "check_out"
+      }
+    ]
+  }
+}

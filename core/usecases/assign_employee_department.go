@@ -9,6 +9,7 @@ import (
 type AssignEmployeeDepartmentInput struct {
 	EmployeeUID   string
 	DepartmentUID string
+	ShiftUID      *string
 }
 
 type AssignEmployeeDepartmentUseCase struct {
@@ -53,6 +54,11 @@ func (uc *AssignEmployeeDepartmentUseCase) Execute(ctx context.Context, input As
 
 	// Update employee's department
 	employee.DepartmentUID = &input.DepartmentUID
+	if input.ShiftUID != nil {
+		employee.ShiftUID = input.ShiftUID
+	} else if employee.ShiftUID == nil && department.DefaultShiftUID != nil {
+		employee.ShiftUID = department.DefaultShiftUID
+	}
 	if err := uc.empRepo.Update(ctx, uc.db, employee); err != nil {
 		return err
 	}

@@ -21,6 +21,7 @@ type Employee struct {
 	HireDate      time.Time
 	Status        EmployeeStatus
 	DepartmentUID *string
+	ShiftUID      *string
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }

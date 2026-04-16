@@ -46,23 +46,26 @@ type ListDailyDepartmentAttendanceLogsInput struct {
 }
 
 type ListDailyDepartmentAttendanceLogsUseCase struct {
-	db            ports.DB
-	deptRepo      ports.DepartmentRepository
-	recordRepo    ports.AttendanceRecordRepository
-	workHoursRepo ports.WorkHoursConfigRepository
+	db           ports.DB
+	deptRepo     ports.DepartmentRepository
+	recordRepo   ports.AttendanceRecordRepository
+	employeeRepo ports.EmployeeRepository
+	shiftRepo    ports.ShiftRepository
 }
 
 func NewListDailyDepartmentAttendanceLogsUseCase(
 	db ports.DB,
 	deptRepo ports.DepartmentRepository,
 	recordRepo ports.AttendanceRecordRepository,
-	workHoursRepo ports.WorkHoursConfigRepository,
+	employeeRepo ports.EmployeeRepository,
+	shiftRepo ports.ShiftRepository,
 ) *ListDailyDepartmentAttendanceLogsUseCase {
 	return &ListDailyDepartmentAttendanceLogsUseCase{
-		db:            db,
-		deptRepo:      deptRepo,
-		recordRepo:    recordRepo,
-		workHoursRepo: workHoursRepo,
+		db:           db,
+		deptRepo:     deptRepo,
+		recordRepo:   recordRepo,
+		employeeRepo: employeeRepo,
+		shiftRepo:    shiftRepo,
 	}
 }
 
@@ -96,7 +99,7 @@ func (uc *ListDailyDepartmentAttendanceLogsUseCase) Execute(ctx context.Context,
 		return nil, err
 	}
 
-	records, err := buildDailyAttendanceLogItems(ctx, uc.db, uc.workHoursRepo, groups)
+	records, err := buildDailyAttendanceLogItems(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, groups)
 	if err != nil {
 		return nil, err
 	}

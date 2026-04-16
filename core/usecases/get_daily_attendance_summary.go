@@ -32,23 +32,26 @@ type GetDailyAttendanceSummaryOutput struct {
 }
 
 type GetDailyAttendanceSummaryUseCase struct {
-	db            ports.DB
-	recordRepo    ports.AttendanceRecordRepository
-	employeeRepo  ports.EmployeeRepository
-	workHoursRepo ports.WorkHoursConfigRepository
+	db           ports.DB
+	recordRepo   ports.AttendanceRecordRepository
+	employeeRepo ports.EmployeeRepository
+	deptRepo     ports.DepartmentRepository
+	shiftRepo    ports.ShiftRepository
 }
 
 func NewGetDailyAttendanceSummaryUseCase(
 	db ports.DB,
 	recordRepo ports.AttendanceRecordRepository,
 	employeeRepo ports.EmployeeRepository,
-	workHoursRepo ports.WorkHoursConfigRepository,
+	deptRepo ports.DepartmentRepository,
+	shiftRepo ports.ShiftRepository,
 ) *GetDailyAttendanceSummaryUseCase {
 	return &GetDailyAttendanceSummaryUseCase{
-		db:            db,
-		recordRepo:    recordRepo,
-		employeeRepo:  employeeRepo,
-		workHoursRepo: workHoursRepo,
+		db:           db,
+		recordRepo:   recordRepo,
+		employeeRepo: employeeRepo,
+		deptRepo:     deptRepo,
+		shiftRepo:    shiftRepo,
 	}
 }
 
@@ -56,23 +59,6 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 	records, err := uc.recordRepo.ListByDate(ctx, uc.db, input.Date, input.EmployeeUID)
 	if err != nil {
 		return nil, err
-	}
-
-	cfg, err := uc.workHoursRepo.Get(ctx, uc.db)
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil {
-		cfg = domain.NewDefaultWorkHoursConfig()
-	}
-
-	workStart, err := buildTimeOnDate(input.Date, cfg.WorkDayStart)
-	if err != nil {
-		return nil, ErrInvalidWorkDayStart
-	}
-	workEnd, err := buildTimeOnDate(input.Date, cfg.WorkDayEnd)
-	if err != nil {
-		return nil, ErrInvalidWorkDayEnd
 	}
 
 	type accumulator struct {
@@ -113,6 +99,20 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 
 	result := make([]EmployeeDailyAttendanceSummary, 0, len(byEmployee))
 	for employeeUID, item := range byEmployee {
+		shift, err := resolveEffectiveShift(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, employeeUID, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		workStart, err := buildTimeOnDate(input.Date, shift.StartTime)
+		if err != nil {
+			return nil, ErrInvalidWorkDayStart
+		}
+		workEnd, err := buildTimeOnDate(input.Date, shift.EndTime)
+		if err != nil {
+			return nil, ErrInvalidWorkDayEnd
+		}
+
 		summary := EmployeeDailyAttendanceSummary{
 			EmployeeUID:     employeeUID,
 			CheckIn:         item.checkIn,
@@ -126,12 +126,12 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 		}
 
 		if item.checkIn != nil {
-			lateThreshold := workStart.Add(time.Duration(cfg.LateGraceMinutes) * time.Minute)
+			lateThreshold := workStart.Add(time.Duration(shift.GraceMinutes) * time.Minute)
 			summary.LateArrival = item.checkIn.After(lateThreshold)
 		}
 
 		if item.checkOut != nil {
-			earlyThreshold := workEnd.Add(-time.Duration(cfg.EarlyGraceMinutes) * time.Minute)
+			earlyThreshold := workEnd.Add(-time.Duration(shift.GraceMinutes) * time.Minute)
 			summary.EarlyDeparture = item.checkOut.Before(earlyThreshold)
 		}
 

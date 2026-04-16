@@ -34,7 +34,8 @@ type EmployeeListItem struct {
 	Email         *string
 	HireDate      time.Time
 	Status        domain.EmployeeStatus
-	DepartmentUID *string           // Department UID (nil if not assigned)
+	DepartmentUID *string // Department UID (nil if not assigned)
+	ShiftUID      *string
 	User          *EmployeeUserInfo // Linked user account info (nil if no user linked)
 }
 
@@ -91,6 +92,7 @@ func (uc *ListEmployeesUseCase) Execute(ctx context.Context, input ListEmployees
 			HireDate:      emp.HireDate,
 			Status:        emp.Status,
 			DepartmentUID: emp.DepartmentUID,
+			ShiftUID:      emp.ShiftUID,
 		}
 
 		// Fetch linked user details

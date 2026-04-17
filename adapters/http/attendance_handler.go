@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -21,6 +22,8 @@ type AttendanceHandler struct {
 	listEmployeeLogsUC        *usecases.ListEmployeeAttendanceLogsUseCase
 	listDailyDepartmentLogsUC *usecases.ListDailyDepartmentAttendanceLogsUseCase
 	listDailyEmployeeLogsUC   *usecases.ListDailyEmployeeAttendanceLogsUseCase
+	createLogUC               *usecases.CreateAttendanceLogUseCase
+	updateLogUC               *usecases.UpdateAttendanceLogUseCase
 	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
 }
@@ -30,6 +33,8 @@ func NewAttendanceHandler(
 	listEmployeeLogsUC *usecases.ListEmployeeAttendanceLogsUseCase,
 	listDailyDepartmentLogsUC *usecases.ListDailyDepartmentAttendanceLogsUseCase,
 	listDailyEmployeeLogsUC *usecases.ListDailyEmployeeAttendanceLogsUseCase,
+	createLogUC *usecases.CreateAttendanceLogUseCase,
+	updateLogUC *usecases.UpdateAttendanceLogUseCase,
 	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
 ) *AttendanceHandler {
@@ -38,9 +43,24 @@ func NewAttendanceHandler(
 		listEmployeeLogsUC:        listEmployeeLogsUC,
 		listDailyDepartmentLogsUC: listDailyDepartmentLogsUC,
 		listDailyEmployeeLogsUC:   listDailyEmployeeLogsUC,
+		createLogUC:               createLogUC,
+		updateLogUC:               updateLogUC,
 		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
 	}
+}
+
+type createAttendanceLogRequest struct {
+	EmployeeUID string `json:"employeeUid"`
+	DeviceUID   string `json:"deviceUid"`
+	PunchedAt   string `json:"punchedAt"`
+	PunchType   string `json:"punchType"`
+}
+
+type updateAttendanceLogRequest struct {
+	DeviceUID string `json:"deviceUid"`
+	PunchedAt string `json:"punchedAt"`
+	PunchType string `json:"punchType"`
 }
 
 type dailySummaryItemResponse struct {
@@ -87,20 +107,24 @@ type listEmployeeLogsResponse struct {
 }
 
 type dailyAttendanceLogItemResponse struct {
-	Date            string                        `json:"date"`
-	EmployeeUID     string                        `json:"employeeUid"`
-	EmployeeName    string                        `json:"employeeName"`
-	DepartmentUID   *string                       `json:"departmentUid,omitempty"`
-	CheckIn         *string                       `json:"checkIn,omitempty"`
-	CheckOut        *string                       `json:"checkOut,omitempty"`
-	CheckInDevice   *string                       `json:"checkInDevice,omitempty"`
-	CheckOutDevice  *string                       `json:"checkOutDevice,omitempty"`
-	WorkedHours     float64                       `json:"workedHours"`
-	LateArrival     bool                          `json:"lateArrival"`
-	EarlyDeparture  bool                          `json:"earlyDeparture"`
-	MissingCheckIn  bool                          `json:"missingCheckIn"`
-	MissingCheckOut bool                          `json:"missingCheckOut"`
-	Exceptions      []attendanceExceptionResponse `json:"exceptions"`
+	Date              string                        `json:"date"`
+	EmployeeUID       string                        `json:"employeeUid"`
+	EmployeeName      string                        `json:"employeeName"`
+	DepartmentUID     *string                       `json:"departmentUid,omitempty"`
+	CheckIn           *string                       `json:"checkIn,omitempty"`
+	ChecInLogUID      *string                       `json:"checkInLogUid,omitempty"`
+	CheckOut          *string                       `json:"checkOut,omitempty"`
+	CheckOutLogUID    *string                       `json:"checkOutLogUid,omitempty"`
+	CheckInDevice     *string                       `json:"checkInDevice,omitempty"`
+	CheckInDeviceUID  *string                       `json:"checkInDeviceUid,omitempty"`
+	CheckOutDevice    *string                       `json:"checkOutDevice,omitempty"`
+	CheckOutDeviceUID *string                       `json:"checkOutDeviceUid,omitempty"`
+	WorkedHours       float64                       `json:"workedHours"`
+	LateArrival       bool                          `json:"lateArrival"`
+	EarlyDeparture    bool                          `json:"earlyDeparture"`
+	MissingCheckIn    bool                          `json:"missingCheckIn"`
+	MissingCheckOut   bool                          `json:"missingCheckOut"`
+	Exceptions        []attendanceExceptionResponse `json:"exceptions"`
 }
 
 type attendanceExceptionResponse struct {
@@ -385,6 +409,52 @@ func (h *AttendanceHandler) GetDailySummary(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (h *AttendanceHandler) CreateLog(w http.ResponseWriter, r *http.Request) {
+	req, ok := decodeCreateAttendanceLogRequest(w, r)
+	if !ok {
+		return
+	}
+
+	output, err := h.createLogUC.Execute(r.Context(), usecases.CreateAttendanceLogInput{
+		EmployeeUID: req.EmployeeUID,
+		DeviceUID:   req.DeviceUID,
+		PunchedAt:   req.PunchedAt,
+		PunchType:   req.PunchType,
+	})
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, output)
+}
+
+func (h *AttendanceHandler) UpdateLog(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	req, ok := decodeUpdateAttendanceLogRequest(w, r)
+	if !ok {
+		return
+	}
+
+	output, err := h.updateLogUC.Execute(r.Context(), usecases.UpdateAttendanceLogInput{
+		UID:       uid,
+		DeviceUID: req.DeviceUID,
+		PunchedAt: req.PunchedAt,
+		PunchType: req.PunchType,
+	})
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, output)
+}
+
 func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	employeeUID := r.PathValue("employeeUid")
 	if employeeUID == "" {
@@ -430,15 +500,82 @@ func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) 
 		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, usecases.ErrEmployeeNotFound):
 		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, usecases.ErrAttendanceDeviceNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, usecases.ErrAttendanceLogNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, usecases.ErrInvalidWorkDayStart),
 		errors.Is(err, usecases.ErrInvalidWorkDayEnd),
 		errors.Is(err, usecases.ErrInvalidWorkHoursRange),
-		errors.Is(err, usecases.ErrInvalidGraceMinutes):
+		errors.Is(err, usecases.ErrInvalidGraceMinutes),
+		errors.Is(err, usecases.ErrAttendanceLogEmployeeRequired),
+		errors.Is(err, usecases.ErrAttendanceLogDeviceRequired),
+		errors.Is(err, usecases.ErrAttendanceLogDeviceUserIDReq),
+		errors.Is(err, usecases.ErrAttendanceLogPunchedAtReq),
+		errors.Is(err, usecases.ErrAttendanceLogPunchTypeInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, usecases.ErrAttendanceLogConflict):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, usecases.ErrAttendanceLogCheckoutBeforeCheckin):
+		writeError(w, http.StatusPreconditionFailed, err.Error())
 	default:
 		slog.Error("attendance_handler.writeUseCaseError", "error", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 	}
+}
+
+func decodeCreateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*parsedCreateAttendanceLogRequest, bool) {
+	var req createAttendanceLogRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+
+	punchedAt, err := time.Parse(time.RFC3339, req.PunchedAt)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid punchedAt format, expected RFC3339")
+		return nil, false
+	}
+
+	return &parsedCreateAttendanceLogRequest{
+		EmployeeUID: req.EmployeeUID,
+		DeviceUID:   req.DeviceUID,
+		PunchedAt:   punchedAt,
+		PunchType:   req.PunchType,
+	}, true
+}
+
+func decodeUpdateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*parsedUpdateAttendanceLogRequest, bool) {
+	var req updateAttendanceLogRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return nil, false
+	}
+
+	punchedAt, err := time.Parse(time.RFC3339, req.PunchedAt)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid punchedAt format, expected RFC3339")
+		return nil, false
+	}
+
+	return &parsedUpdateAttendanceLogRequest{
+		DeviceUID: req.DeviceUID,
+		PunchedAt: punchedAt,
+		PunchType: req.PunchType,
+	}, true
+}
+
+type parsedCreateAttendanceLogRequest struct {
+	EmployeeUID string
+	DeviceUID   string
+	PunchedAt   time.Time
+	PunchType   string
+}
+
+type parsedUpdateAttendanceLogRequest struct {
+	DeviceUID string
+	PunchedAt time.Time
+	PunchType string
 }
 
 func parseAttendanceListDateTime(value string, endOfDay bool) (time.Time, error) {
@@ -560,29 +697,33 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 		var checkIn *string
 		var checkOut *string
 		if item.CheckIn != nil {
-			v := item.CheckIn.Format("15:04:05")
+			v := item.CheckIn.Format("15:04:05Z07:00")
 			checkIn = &v
 		}
 		if item.CheckOut != nil {
-			v := item.CheckOut.Format("15:04:05")
+			v := item.CheckOut.Format("15:04:05Z07:00")
 			checkOut = &v
 		}
 
-		records = append(records, dailyAttendanceLogItemResponse{
-			Date:            item.Date.Format("2006-01-02"),
-			EmployeeUID:     item.EmployeeUID,
-			EmployeeName:    item.EmployeeName,
-			DepartmentUID:   item.DepartmentUID,
-			CheckIn:         checkIn,
-			CheckOut:        checkOut,
-			CheckInDevice:   item.CheckInDevice,
-			CheckOutDevice:  item.CheckOutDevice,
-			WorkedHours:     item.WorkedHours,
-			LateArrival:     item.LateArrival,
-			EarlyDeparture:  item.EarlyDeparture,
-			MissingCheckIn:  item.MissingCheckIn,
-			MissingCheckOut: item.MissingCheckOut,
-			Exceptions:      buildAttendanceExceptionResponses(item),
+		records = append(records, dailyAttendanceLogItemResponse{	
+			Date:              item.Date.Format("2006-01-02"),
+			EmployeeUID:       item.EmployeeUID,
+			EmployeeName:      item.EmployeeName,
+			DepartmentUID:     item.DepartmentUID,
+			CheckIn:           checkIn,
+			ChecInLogUID: item.ChechInLogUID,
+			CheckOut:          checkOut,
+			CheckOutLogUID: item.CheckOutLogUID,
+			CheckInDevice:     item.CheckInDevice,
+			CheckInDeviceUID:  item.CheckInDeviceUID,
+			CheckOutDevice:    item.CheckOutDevice,
+			CheckOutDeviceUID: item.CheckOutDeviceUID,
+			WorkedHours:       item.WorkedHours,
+			LateArrival:       item.LateArrival,
+			EarlyDeparture:    item.EarlyDeparture,
+			MissingCheckIn:    item.MissingCheckIn,
+			MissingCheckOut:   item.MissingCheckOut,
+			Exceptions:        buildAttendanceExceptionResponses(item),
 		})
 	}
 	return records

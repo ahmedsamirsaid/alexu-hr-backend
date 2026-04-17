@@ -15,3 +15,10 @@ SELECT
     id
 FROM permissions
 WHERE code IN ('attendance:read', 'attendance:write');
+
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT
+    (SELECT id FROM roles WHERE name = 'Department Manager'),
+    id
+FROM permissions
+WHERE code IN ('attendance:read', 'attendance:write');

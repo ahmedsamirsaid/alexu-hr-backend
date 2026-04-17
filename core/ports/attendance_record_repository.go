@@ -15,14 +15,18 @@ type AttendanceRecordWithEmployee struct {
 }
 
 type DailyAttendanceGroup struct {
-	Date           time.Time
-	EmployeeUID    string
-	EmployeeName   string
-	DepartmentUID  *string
-	CheckIn        *time.Time
-	CheckOut       *time.Time
-	CheckInDevice  *string
-	CheckOutDevice *string
+	Date              time.Time
+	EmployeeUID       string
+	EmployeeName      string
+	DepartmentUID     *string
+	CheckIn           *time.Time
+	ChechInLogUID      *string
+	CheckOut          *time.Time
+	CheckOutLogUID     *string
+	CheckInDevice     *string
+	CheckInDeviceUID  *string
+	CheckOutDevice    *string
+	CheckOutDeviceUID *string
 }
 
 type DepartmentAttendanceLogsFilter struct {
@@ -37,6 +41,8 @@ type DepartmentAttendanceLogsFilter struct {
 
 type AttendanceRecordRepository interface {
 	Create(ctx context.Context, q Querier, record *domain.AttendanceRecord) (bool, error)
+	GetByUID(ctx context.Context, q Querier, uid string) (*domain.AttendanceRecord, error)
+	Update(ctx context.Context, q Querier, record *domain.AttendanceRecord) error
 	ListByDate(ctx context.Context, q Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error)
 	ListByDateRange(ctx context.Context, q Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error)
 	ListByDepartmentUID(ctx context.Context, q Querier, departmentUID string, filter DepartmentAttendanceLogsFilter, params ListParams) ([]*AttendanceRecordWithEmployee, error)

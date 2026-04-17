@@ -17,15 +17,19 @@ func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, employeeRepo
 		}
 
 		item := DailyAttendanceLogItem{
-			Date:           group.Date,
-			EmployeeUID:    group.EmployeeUID,
-			EmployeeName:   group.EmployeeName,
-			DepartmentUID:  group.DepartmentUID,
-			CheckIn:        group.CheckIn,
-			CheckOut:       group.CheckOut,
-			CheckInDevice:  group.CheckInDevice,
-			CheckOutDevice: group.CheckOutDevice,
-			GraceMinutes:   shift.GraceMinutes,
+			Date:              group.Date,
+			EmployeeUID:       group.EmployeeUID,
+			EmployeeName:      group.EmployeeName,
+			DepartmentUID:     group.DepartmentUID,
+			CheckIn:           group.CheckIn,
+			ChechInLogUID: group.ChechInLogUID,
+			CheckOut:          group.CheckOut,
+			CheckOutLogUID: group.CheckOutLogUID,
+			CheckInDevice:     group.CheckInDevice,
+			CheckInDeviceUID:  group.CheckInDeviceUID,
+			CheckOutDevice:    group.CheckOutDevice,
+			CheckOutDeviceUID: group.CheckOutDeviceUID,
+			GraceMinutes:      shift.GraceMinutes,
 		}
 
 		item.IsAbsent = group.CheckIn == nil && group.CheckOut == nil

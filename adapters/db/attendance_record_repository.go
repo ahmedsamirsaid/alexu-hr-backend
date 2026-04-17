@@ -64,6 +64,41 @@ func (r *AttendanceRecordRepository) Create(ctx context.Context, q ports.Querier
 	return true, nil
 }
 
+func (r *AttendanceRecordRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceRecord, error) {
+	query := `
+		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
+		FROM attendance_records
+		WHERE uid = ?
+		LIMIT 1`
+
+	return r.scanRecord(q.QueryRowContext(ctx, query, uid))
+}
+
+func (r *AttendanceRecordRepository) Update(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) error {
+	query := `
+		UPDATE attendance_records
+		SET device_uid = ?, punched_at = ?, punch_type = ?, updated_at = ?
+		WHERE uid = ?`
+
+	record.UpdatedAt = time.Now()
+
+	_, err := q.ExecContext(
+		ctx,
+		query,
+		record.DeviceUID,
+		record.PunchedAt.Format(time.RFC3339Nano),
+		record.PunchType,
+		record.UpdatedAt,
+		record.UID,
+	)
+	if err != nil {
+		slog.Error("attendance_record_repository.Update.exec_query", "error", err, "uid", record.UID)
+		return err
+	}
+
+	return nil
+}
+
 func (r *AttendanceRecordRepository) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
 	query := `
 		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
@@ -230,7 +265,25 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 			e.name,
 			e.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
+			(
+			SELECT ar1.uid
+			FROM attendance_records ar1
+			WHERE ar1.employee_uid = ar.employee_uid
+				AND date(ar1.punched_at) = date(ar.punched_at)
+				AND ar1.punch_type IN ('check_in', 'unknown')
+			ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+			LIMIT 1
+			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
+						 		(
+			SELECT ar2.uid
+			FROM attendance_records ar2
+			WHERE ar2.employee_uid = ar.employee_uid
+				AND date(ar2.punched_at) = date(ar.punched_at)
+				AND ar2.punch_type IN ('check_out', 'unknown')
+			ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+			LIMIT 1
+			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1
@@ -242,6 +295,16 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 				LIMIT 1
 			) AS check_in_device,
 			(
+				SELECT ad1.uid
+				FROM attendance_records ar1
+				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_device_uid,
+			(
 				SELECT ad2.name
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
@@ -250,7 +313,17 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 					AND ar2.punch_type IN ('check_out', 'unknown')
 				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
 				LIMIT 1
-			) AS check_out_device
+			) AS check_out_device,
+			(
+				SELECT ad2.uid
+				FROM attendance_records ar2
+				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_device_uid
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		WHERE e.department_uid = ?`
@@ -261,7 +334,8 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 		return nil, err
 	}
 
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid` + orderBy + ` LIMIT ? OFFSET ?`
+	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
+		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDailyByDepartmentUID", "department_uid", departmentUID)
@@ -309,6 +383,16 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 				LIMIT 1
 			) AS check_in_device,
 			(
+				SELECT ad1.uid
+				FROM attendance_records ar1
+				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_device_uid,
+			(
 				SELECT ad2.name
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
@@ -317,7 +401,17 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 					AND ar2.punch_type IN ('check_out', 'unknown')
 				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
 				LIMIT 1
-			) AS check_out_device
+			) AS check_out_device,
+			(
+				SELECT ad2.uid
+				FROM attendance_records ar2
+				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_device_uid
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		WHERE ar.employee_uid = ?`
@@ -328,7 +422,8 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 		return nil, err
 	}
 
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid` + orderBy + ` LIMIT ? OFFSET ?`
+	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
+		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDailyByEmployeeUID", "employee_uid", employeeUID)
@@ -394,6 +489,36 @@ func (r *AttendanceRecordRepository) scanRecordRow(rows *sql.Rows) (*domain.Atte
 	)
 	if err != nil {
 		slog.Error("attendance_record_repository.scanRecordRow.scan", "error", err)
+		return nil, err
+	}
+
+	record.PunchedAt = punchedAt.Time
+	record.CreatedAt = createdAt.Time
+	record.UpdatedAt = updatedAt.Time
+	return &record, nil
+}
+
+func (r *AttendanceRecordRepository) scanRecord(row *sql.Row) (*domain.AttendanceRecord, error) {
+	var record domain.AttendanceRecord
+	var punchedAt, createdAt, updatedAt domain.Time
+
+	err := row.Scan(
+		&record.ID,
+		&record.UID,
+		&record.EmployeeUID,
+		&record.DeviceUID,
+		&record.DeviceUserID,
+		&punchedAt,
+		&record.PunchType,
+		&record.RawPayload,
+		&createdAt,
+		&updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		slog.Error("attendance_record_repository.scanRecord.scan_row", "error", err)
 		return nil, err
 	}
 
@@ -479,11 +604,15 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		var employeeName string
 		var departmentUID sql.NullString
 		var checkIn sql.NullString
+		var CheckInLogUID sql.NullString
 		var checkOut sql.NullString
+		var checkOutLogUID sql.NullString
 		var checkInDevice sql.NullString
+		var checkInDeviceUID sql.NullString
 		var checkOutDevice sql.NullString
+		var checkOutDeviceUID sql.NullString
 
-		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn, &checkOut, &checkInDevice, &checkOutDevice); err != nil {
+		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn,&CheckInLogUID, &checkOut,&checkOutLogUID, &checkInDevice, &checkInDeviceUID, &checkOutDevice, &checkOutDeviceUID); err != nil {
 			slog.Error(logKey+".scan_row", "error", err, idKey, idValue)
 			return nil, err
 		}
@@ -528,8 +657,24 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		if checkInDevice.Valid {
 			group.CheckInDevice = &checkInDevice.String
 		}
+		if checkInDeviceUID.Valid {
+			group.CheckInDeviceUID = &checkInDeviceUID.String
+		}
 		if checkOutDevice.Valid {
 			group.CheckOutDevice = &checkOutDevice.String
+		}
+		if checkOutDeviceUID.Valid {
+			group.CheckOutDeviceUID = &checkOutDeviceUID.String
+		}
+
+		// populate the log UID fields returned by the query
+		if CheckInLogUID.Valid {
+			v := CheckInLogUID.String
+			group.ChechInLogUID = &v
+		}
+		if checkOutLogUID.Valid {
+			v := checkOutLogUID.String
+			group.CheckOutLogUID = &v
 		}
 
 		groups = append(groups, group)

@@ -37,6 +37,14 @@ func (m *mockAttendanceRecordRepoForMonthlyStats) Create(ctx context.Context, q 
 	return false, nil
 }
 
+func (m *mockAttendanceRecordRepoForMonthlyStats) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceRecord, error) {
+	return nil, nil
+}
+
+func (m *mockAttendanceRecordRepoForMonthlyStats) Update(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) error {
+	return nil
+}
+
 func (m *mockAttendanceRecordRepoForMonthlyStats) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
 	return nil, nil
 }

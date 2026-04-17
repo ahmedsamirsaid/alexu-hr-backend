@@ -45,7 +45,7 @@ func main() {
 	leaveRecordRepo := db.NewLeaveRecordRepository()
 	balanceTxRepo := db.NewLeaveBalanceTransactionRepository()
 	weekendRepo := db.NewWeekendConfigRepository()
-	holidayInstanceRepo := db.NewHolidayInstanceRepository()
+	holidayDefinitionRepo := db.NewHolidayDefinitionRepository()
 
 	userRepo := db.NewUserRepository()
 	roleRepo := db.NewRoleRepository()
@@ -86,7 +86,7 @@ func main() {
 	}
 
 	leaveSync := legacy.NewNoopLeaveSyncAdapter()
-	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayInstanceRepo)
+	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayDefinitionRepo)
 
 	recordLeaveUC := usecases.NewRecordLeaveUseCase(
 		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo, workingDaysCalc, leaveSync,
@@ -155,6 +155,9 @@ func main() {
 
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
+	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
+	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
+	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
 		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
@@ -190,8 +193,8 @@ func main() {
 
 	listDepartmentAttendanceLogsUC := usecases.NewListDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo)
 	listEmployeeAttendanceLogsUC := usecases.NewListEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo)
-	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo)
-	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo)
+	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
+	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
 
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
@@ -209,6 +212,12 @@ func main() {
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
+	)
+	holidaySyncUC := usecases.NewSyncEgyptPublicHolidaysUseCase(
+		sqliteDB,
+		holidayDefinitionRepo,
+		cfg.HolidaySyncEndpoint,
+		cfg.HolidaySyncTimezone,
 	)
 
 	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC)
@@ -242,6 +251,8 @@ func main() {
 		checkAllAttendanceDevicesConnectionUC,
 	)
 	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
+	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(
 		listDepartmentAttendanceLogsUC,
@@ -267,6 +278,8 @@ func main() {
 		DeviceTokenHandler:      deviceTokenHandler,
 		AttendanceDeviceHandler: attendanceDeviceHandler,
 		LeaveTypeHandler:        leaveTypeHandler,
+		WeekendHandler:          weekendHandler,
+		HolidayHandler:          holidayHandler,
 		ShiftHandler:            shiftHandler,
 		AttendanceHandler:       attendanceHandler,
 		JWTService:              jwtService,
@@ -275,7 +288,7 @@ func main() {
 
 	var sched *scheduler.Scheduler
 	if cfg.SchedulerEnabled {
-		sched = scheduler.New(autoRejectExpiredUC, cfg.SchedulerIntervalHours)
+		sched = scheduler.New(autoRejectExpiredUC, holidaySyncUC, cfg.SchedulerIntervalHours)
 		sched.Start(context.Background())
 		slog.Info("main.main.scheduler_enabled", "interval_hours", cfg.SchedulerIntervalHours, "grace_days", cfg.ExpiredLeaveGraceDays)
 	} else {

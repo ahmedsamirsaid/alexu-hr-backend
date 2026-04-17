@@ -22,37 +22,37 @@ func (m *mockWeekendConfigRepo) GetWeekendDays(ctx context.Context, q ports.Quer
 	return m.weekendDays, nil
 }
 
-type mockHolidayInstanceRepo struct {
-	holidays []*domain.HolidayInstance
+type mockHolidayDefinitionRepo struct {
+	holidays []*domain.HolidayDefinition
 }
 
-func (m *mockHolidayInstanceRepo) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.HolidayInstance, error) {
+func (m *mockHolidayDefinitionRepo) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.HolidayDefinition, error) {
 	return nil, nil
 }
 
-func (m *mockHolidayInstanceRepo) GetByDefinitionAndYear(ctx context.Context, q ports.Querier, definitionID int64, year int) (*domain.HolidayInstance, error) {
+func (m *mockHolidayDefinitionRepo) GetByCode(ctx context.Context, q ports.Querier, code string) (*domain.HolidayDefinition, error) {
 	return nil, nil
 }
 
-func (m *mockHolidayInstanceRepo) ListByYear(ctx context.Context, q ports.Querier, year int) ([]*domain.HolidayInstance, error) {
+func (m *mockHolidayDefinitionRepo) GetByDate(ctx context.Context, q ports.Querier, date time.Time) ([]*domain.HolidayDefinition, error) {
 	return m.holidays, nil
 }
 
-func (m *mockHolidayInstanceRepo) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayInstance, error) {
-	var result []*domain.HolidayInstance
+func (m *mockHolidayDefinitionRepo) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
+	var result []*domain.HolidayDefinition
 	for _, h := range m.holidays {
-		if !h.ObservedDate.Before(start) && !h.ObservedDate.After(end) {
+		if !h.Date.Before(start) && !h.Date.After(end) {
 			result = append(result, h)
 		}
 	}
 	return result, nil
 }
 
-func (m *mockHolidayInstanceRepo) Create(ctx context.Context, q ports.Querier, instance *domain.HolidayInstance) error {
-	return nil
+func (m *mockHolidayDefinitionRepo) List(ctx context.Context, q ports.Querier) ([]*domain.HolidayDefinition, error) {
+	return m.holidays, nil
 }
 
-func (m *mockHolidayInstanceRepo) Update(ctx context.Context, q ports.Querier, instance *domain.HolidayInstance) error {
+func (m *mockHolidayDefinitionRepo) Create(ctx context.Context, q ports.Querier, def *domain.HolidayDefinition) error {
 	return nil
 }
 
@@ -62,7 +62,7 @@ func TestWorkingDaysCalculator_CalculateWorkingDays(t *testing.T) {
 		start       time.Time
 		end         time.Time
 		weekendDays []int
-		holidays    []*domain.HolidayInstance
+		holidays    []*domain.HolidayDefinition
 		expected    int
 	}{
 		{
@@ -94,8 +94,8 @@ func TestWorkingDaysCalculator_CalculateWorkingDays(t *testing.T) {
 			start:       time.Date(2025, 1, 5, 0, 0, 0, 0, time.UTC), // Sunday
 			end:         time.Date(2025, 1, 9, 0, 0, 0, 0, time.UTC), // Thursday
 			weekendDays: []int{5, 6},
-			holidays: []*domain.HolidayInstance{
-				{ObservedDate: time.Date(2025, 1, 7, 0, 0, 0, 0, time.UTC)}, // Tuesday holiday
+			holidays: []*domain.HolidayDefinition{
+				{Date: time.Date(2025, 1, 7, 0, 0, 0, 0, time.UTC)}, // Tuesday holiday
 			},
 			expected: 4,
 		},
@@ -120,7 +120,7 @@ func TestWorkingDaysCalculator_CalculateWorkingDays(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			weekendRepo := &mockWeekendConfigRepo{weekendDays: tt.weekendDays}
-			holidayRepo := &mockHolidayInstanceRepo{holidays: tt.holidays}
+			holidayRepo := &mockHolidayDefinitionRepo{holidays: tt.holidays}
 
 			calc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayRepo)
 

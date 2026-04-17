@@ -61,6 +61,8 @@ type ListDailyDepartmentAttendanceLogsUseCase struct {
 	employeeRepo ports.EmployeeRepository
 	shiftRepo    ports.ShiftRepository
 	leaveRepo    ports.LeaveRecordRepository
+	weekendRepo  ports.WeekendConfigRepository
+	holidayRepo  ports.HolidayDefinitionRepository
 }
 
 func NewListDailyDepartmentAttendanceLogsUseCase(
@@ -70,6 +72,8 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 	employeeRepo ports.EmployeeRepository,
 	shiftRepo ports.ShiftRepository,
 	leaveRepo ports.LeaveRecordRepository,
+	weekendRepo ports.WeekendConfigRepository,
+	holidayRepo ports.HolidayDefinitionRepository,
 ) *ListDailyDepartmentAttendanceLogsUseCase {
 	return &ListDailyDepartmentAttendanceLogsUseCase{
 		db:           db,
@@ -78,6 +82,8 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 		employeeRepo: employeeRepo,
 		shiftRepo:    shiftRepo,
 		leaveRepo:    leaveRepo,
+		weekendRepo:  weekendRepo,
+		holidayRepo:  holidayRepo,
 	}
 }
 
@@ -133,7 +139,7 @@ func (uc *ListDailyDepartmentAttendanceLogsUseCase) Execute(ctx context.Context,
 		return nil, err
 	}
 
-	records, err = appendDepartmentAbsenceItems(ctx, uc.db, uc.leaveRepo, records, employees, input.DepartmentUID, filter, rangeStart, rangeEnd)
+	records, err = appendDepartmentAbsenceItems(ctx, uc.db, uc.leaveRepo, uc.weekendRepo, uc.holidayRepo, records, employees, input.DepartmentUID, filter, rangeStart, rangeEnd)
 	if err != nil {
 		return nil, err
 	}

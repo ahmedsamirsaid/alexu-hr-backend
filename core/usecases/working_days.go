@@ -8,14 +8,14 @@ import (
 )
 
 type WorkingDaysCalculator struct {
-	weekendRepo  ports.WeekendConfigRepository
-	holidayRepo  ports.HolidayInstanceRepository
+	weekendRepo ports.WeekendConfigRepository
+	holidayRepo ports.HolidayDefinitionRepository
 }
 
-func NewWorkingDaysCalculator(weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayInstanceRepository) *WorkingDaysCalculator {
+func NewWorkingDaysCalculator(weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository) *WorkingDaysCalculator {
 	return &WorkingDaysCalculator{
-		weekendRepo:  weekendRepo,
-		holidayRepo:  holidayRepo,
+		weekendRepo: weekendRepo,
+		holidayRepo: holidayRepo,
 	}
 }
 
@@ -37,7 +37,7 @@ func (c *WorkingDaysCalculator) CalculateWorkingDays(ctx context.Context, q port
 
 	holidaySet := make(map[string]bool)
 	for _, h := range holidays {
-		holidaySet[h.ObservedDate.Format("2006-01-02")] = true
+		holidaySet[h.Date.Format("2006-01-02")] = true
 	}
 
 	workingDays := 0

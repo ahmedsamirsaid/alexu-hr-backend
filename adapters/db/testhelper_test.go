@@ -86,7 +86,6 @@ func (tdb *TestDB) clearSeedData() {
 		"leave_records",
 		"leave_balances",
 		"leave_types",
-		"holiday_instances",
 		"holiday_definitions",
 		"weekend_config",
 		"employees",
@@ -259,13 +258,19 @@ func (tdb *TestDB) SeedWeekendConfig(days ...int) {
 func (tdb *TestDB) SeedHolidayDefinition(code, nameEN, nameAR string, month, day *int) *domain.HolidayDefinition {
 	tdb.t.Helper()
 
+	now := time.Now()
+	holidayDate := time.Date(now.Year(), time.January, 1, 0, 0, 0, 0, time.UTC)
+	if month != nil && day != nil {
+		holidayDate = time.Date(now.Year(), time.Month(*month), *day, 0, 0, 0, 0, time.UTC)
+	}
+
 	def := &domain.HolidayDefinition{
-		UID:          domain.GenerateUID("hdef"),
-		Code:         code,
-		NameEN:       nameEN,
-		NameAR:       nameAR,
-		DefaultMonth: month,
-		DefaultDay:   day,
+		UID:      domain.GenerateUID("hdef"),
+		Code:     code,
+		NameEN:   nameEN,
+		NameAR:   nameAR,
+		Date:     holidayDate,
+		IsManual: month == nil || day == nil,
 	}
 
 	repo := NewHolidayDefinitionRepository()
@@ -275,28 +280,6 @@ func (tdb *TestDB) SeedHolidayDefinition(code, nameEN, nameAR string, month, day
 	}
 
 	return def
-}
-
-// SeedHolidayInstance creates a test holiday instance and returns it
-func (tdb *TestDB) SeedHolidayInstance(definitionID int64, year int, actualDate, observedDate time.Time, isConfirmed bool) *domain.HolidayInstance {
-	tdb.t.Helper()
-
-	instance := &domain.HolidayInstance{
-		UID:          domain.GenerateUID("hinst"),
-		DefinitionID: definitionID,
-		Year:         year,
-		ActualDate:   actualDate,
-		ObservedDate: observedDate,
-		IsConfirmed:  isConfirmed,
-	}
-
-	repo := NewHolidayInstanceRepository()
-	ctx := context.Background()
-	if err := repo.Create(ctx, tdb.SQLiteDB, instance); err != nil {
-		tdb.t.Fatalf("failed to seed holiday instance: %v", err)
-	}
-
-	return instance
 }
 
 // MustExec executes a query and fails the test if it errors

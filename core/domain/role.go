@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Role struct {
 	ID          int64
@@ -20,4 +23,13 @@ func NewRole(name, description string) *Role {
 		Description: description,
 		IsSystem:    false,
 	}
+}
+
+// HasAllPermissions returns true only for privileged system roles.
+// Not every system role should bypass RBAC checks.
+func (r Role) HasAllPermissions() bool {
+	if !r.IsSystem {
+		return false
+	}
+	return r.UID == "role_admin" || strings.EqualFold(r.Name, "Admin")
 }

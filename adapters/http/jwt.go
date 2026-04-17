@@ -8,28 +8,33 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const AccessTokenExpiry = 15 * time.Minute
-
 var (
 	ErrInvalidToken = errors.New("invalid token")
 	ErrTokenExpired = errors.New("token expired")
 )
 
 type JWTClaims struct {
-	UserID      int64    `json:"userId"`
-	UserUID     string   `json:"userUid"`
-	Roles       []string `json:"roles"`
-	Permissions []string `json:"permissions"`
+	UserID                int64    `json:"userId"`
+	UserUID               string   `json:"userUid"`
+	Roles                 []string `json:"roles"`
+	Permissions           []string `json:"permissions"`
+	ManagedDepartmentUIDs []string `json:"managedDepartmentUids"`
 	jwt.RegisteredClaims
 }
 
 type JWTService struct {
-	secretKey []byte
+	secretKey      []byte
+	accessTokenTTL time.Duration
 }
 
-func NewJWTService(secretKey string) *JWTService {
+func NewJWTService(secretKey string, accessTokenMinutes int) *JWTService {
+	if accessTokenMinutes <= 0 {
+		accessTokenMinutes = 60
+	}
+
 	return &JWTService{
-		secretKey: []byte(secretKey),
+		secretKey:      []byte(secretKey),
+		accessTokenTTL: time.Duration(accessTokenMinutes) * time.Minute,
 	}
 }
 
@@ -39,7 +44,7 @@ func (s *JWTService) GenerateAccessToken(user *domain.User) (string, error) {
 
 	for i, role := range user.Roles {
 		roles[i] = role.Name
-		if role.IsSystem {
+		if role.HasAllPermissions() {
 			permSet["*"] = true
 		} else {
 			for _, perm := range role.Permissions {
@@ -52,14 +57,16 @@ func (s *JWTService) GenerateAccessToken(user *domain.User) (string, error) {
 	for p := range permSet {
 		permissions = append(permissions, p)
 	}
+	managedDepts := append([]string(nil), user.ManagedDepartmentUIDs...)
 
 	claims := JWTClaims{
-		UserID:      user.ID,
-		UserUID:     user.UID,
-		Roles:       roles,
-		Permissions: permissions,
+		UserID:                user.ID,
+		UserUID:               user.UID,
+		Roles:                 roles,
+		Permissions:           permissions,
+		ManagedDepartmentUIDs: managedDepts,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(AccessTokenExpiry)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.accessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
@@ -94,6 +101,15 @@ func (s *JWTService) ValidateAccessToken(tokenString string) (*JWTClaims, error)
 func (c *JWTClaims) HasPermission(code string) bool {
 	for _, p := range c.Permissions {
 		if p == "*" || p == code {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *JWTClaims) HasDepartmentAccess(departmentUID string) bool {
+	for _, managedUID := range c.ManagedDepartmentUIDs {
+		if managedUID == departmentUID {
 			return true
 		}
 	}

@@ -12,13 +12,13 @@ type GetCurrentUserInput struct {
 }
 
 type GetCurrentUserOutput struct {
-	UID         string           `json:"uid"`
-	Phone       string           `json:"phone"`
-	EmployeeUID *string          `json:"employeeUid"`
-	IsActive    bool             `json:"isActive"`
-	Roles       []RoleOutput     `json:"roles"`
-	Permissions []string         `json:"permissions"`
-	Employee    *EmployeeBasic   `json:"employee,omitempty"`
+	UID         string         `json:"uid"`
+	Phone       string         `json:"phone"`
+	EmployeeUID *string        `json:"employeeUid"`
+	IsActive    bool           `json:"isActive"`
+	Roles       []RoleOutput   `json:"roles"`
+	Permissions []string       `json:"permissions"`
+	Employee    *EmployeeBasic `json:"employee,omitempty"`
 }
 
 type RoleOutput struct {
@@ -128,7 +128,7 @@ func (uc *GetCurrentUserUseCase) collectPermissions(user *domain.User) []string 
 	permSet := make(map[string]bool)
 
 	for _, role := range user.Roles {
-		if role.IsSystem {
+		if role.HasAllPermissions() {
 			return []string{"*"}
 		}
 		for _, perm := range role.Permissions {

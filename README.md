@@ -38,6 +38,7 @@ All variables are optional with sensible defaults for local development.
 | `BANU_MUSA_DEV_OTP_BYPASS` | `true` | Allow fixed OTP code in dev |
 | `BANU_MUSA_DEV_BYPASS_OTP` | `112233` | The OTP code to use when bypass is on |
 | `BANU_MUSA_JWT_SECRET` | `dev-secret-change-in-production` | JWT signing secret |
+| `BANU_MUSA_ACCESS_TOKEN_MINUTES` | `60` | JWT access token lifetime in minutes |
 | `BANU_MUSA_REFRESH_TOKEN_DAYS` | `90` | JWT refresh token lifetime |
 | `BANU_MUSA_FCM_ENABLED` | `true` | Enable Firebase push notifications |
 | `BANU_MUSA_FCM_SERVICE_ACCOUNT_PATH` | `./firebase/staging-banumusa-firebase-adminsdk-*.json` | Path to Firebase service account JSON |

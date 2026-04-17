@@ -20,12 +20,13 @@ type VerifyOTPOutput struct {
 }
 
 type UserOutput struct {
-	UID          string   `json:"uid"`
-	Phone        string   `json:"phone"`
-	EmployeeUID  *string  `json:"employeeUid"`
-	EmployeeName *string  `json:"employeeName,omitempty"`
-	Roles        []string `json:"roles"`
-	Permissions  []string `json:"permissions"`
+	UID                   string   `json:"uid"`
+	Phone                 string   `json:"phone"`
+	EmployeeUID           *string  `json:"employeeUid"`
+	EmployeeName          *string  `json:"employeeName,omitempty"`
+	Roles                 []string `json:"roles"`
+	Permissions           []string `json:"permissions"`
+	ManagedDepartmentUIDs []string `json:"managedDepartmentUids"`
 }
 
 type VerifyOTPUseCase struct {
@@ -148,6 +149,12 @@ func (uc *VerifyOTPUseCase) handleSuccessfulAuth(ctx context.Context, phone stri
 		user.Roles[i] = *r
 	}
 
+	managedDepartmentUIDs, err := uc.roleRepo.GetManagedDepartmentUIDs(ctx, uc.db, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.ManagedDepartmentUIDs = managedDepartmentUIDs
+
 	// Generate tokens
 	accessToken, err := uc.jwtService.GenerateAccessToken(user)
 	if err != nil {
@@ -172,7 +179,7 @@ func (uc *VerifyOTPUseCase) toUserOutput(ctx context.Context, user *domain.User)
 
 	for i, role := range user.Roles {
 		roleNames[i] = role.Name
-		if role.IsSystem {
+		if role.HasAllPermissions() {
 			// Admin has all permissions - we'll populate this on the frontend
 			permSet["*"] = true
 		} else {
@@ -188,11 +195,12 @@ func (uc *VerifyOTPUseCase) toUserOutput(ctx context.Context, user *domain.User)
 	}
 
 	output := &UserOutput{
-		UID:         user.UID,
-		Phone:       user.Phone,
-		EmployeeUID: user.EmployeeUID,
-		Roles:       roleNames,
-		Permissions: permissions,
+		UID:                   user.UID,
+		Phone:                 user.Phone,
+		EmployeeUID:           user.EmployeeUID,
+		Roles:                 roleNames,
+		Permissions:           permissions,
+		ManagedDepartmentUIDs: append([]string(nil), user.ManagedDepartmentUIDs...),
 	}
 
 	// Fetch employee name if linked

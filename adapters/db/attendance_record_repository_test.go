@@ -104,6 +104,82 @@ func TestAttendanceRecordRepository_ListDailyByDepartmentUID_IncludesCheckoutOnl
 	}
 }
 
+func TestAttendanceRecordRepository_ListDailyByEmployeeUID_IncludesCheckoutOnlyDay(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	ctx := context.Background()
+	repo := NewAttendanceRecordRepository()
+
+	departmentUID := "dep_test"
+	_, err := tdb.ExecContext(ctx, `
+		INSERT INTO departments (uid, code, name_en, name_ar, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		departmentUID, "D001", "Operations", "Operations", true, time.Now(), time.Now(),
+	)
+	if err != nil {
+		t.Fatalf("seed department: %v", err)
+	}
+
+	employee := tdb.SeedEmployee("Bob")
+	employee.DepartmentUID = &departmentUID
+	if err := NewEmployeeRepository().Update(ctx, tdb.SQLiteDB, employee); err != nil {
+		t.Fatalf("assign employee department: %v", err)
+	}
+
+	device := domain.NewAttendanceDevice("192.168.1.11", 4370, "Back Gate", "HQ", "SN-2")
+	if err := NewAttendanceDeviceRepository().Create(ctx, tdb.SQLiteDB, device); err != nil {
+		t.Fatalf("seed attendance device: %v", err)
+	}
+
+	record := domain.NewAttendanceRecord(
+		employee.UID,
+		device.UID,
+		"device_user_checkout_only_2",
+		time.Date(2026, 4, 11, 17, 45, 0, 0, time.UTC),
+		domain.AttendancePunchTypeCheckOut,
+		nil,
+	)
+	created, err := repo.Create(ctx, tdb.SQLiteDB, record)
+	if err != nil {
+		t.Fatalf("seed attendance record: %v", err)
+	}
+	if !created {
+		t.Fatal("expected attendance record to be inserted")
+	}
+
+	filter := ports.DepartmentAttendanceLogsFilter{
+		StartDate: ptrTime(time.Date(2026, 4, 11, 0, 0, 0, 0, time.UTC)),
+		EndDate:   ptrTime(time.Date(2026, 4, 11, 23, 59, 59, 0, time.UTC)),
+	}
+	params := ports.ListParams{
+		Page:      1,
+		PageSize:  20,
+		SortBy:    "date",
+		SortOrder: ports.SortOrderDesc,
+	}
+
+	groups, err := repo.ListDailyByEmployeeUID(ctx, tdb.SQLiteDB, employee.UID, filter, params)
+	if err != nil {
+		t.Fatalf("ListDailyByEmployeeUID() error = %v", err)
+	}
+	if len(groups) != 1 {
+		t.Fatalf("len(groups) = %d, want 1", len(groups))
+	}
+	if groups[0].CheckIn != nil {
+		t.Fatalf("CheckIn = %v, want nil", groups[0].CheckIn)
+	}
+	if groups[0].CheckOut == nil || !groups[0].CheckOut.Equal(record.PunchedAt) {
+		t.Fatalf("CheckOut = %v, want %v", groups[0].CheckOut, record.PunchedAt)
+	}
+	if groups[0].CheckOutDevice == nil || *groups[0].CheckOutDevice != device.Name {
+		t.Fatalf("CheckOutDevice = %v, want %q", groups[0].CheckOutDevice, device.Name)
+	}
+	if groups[0].CheckOutDeviceUID == nil || *groups[0].CheckOutDeviceUID != device.UID {
+		t.Fatalf("CheckOutDeviceUID = %v, want %q", groups[0].CheckOutDeviceUID, device.UID)
+	}
+}
+
 func ptrTime(value time.Time) *time.Time {
 	return &value
 }

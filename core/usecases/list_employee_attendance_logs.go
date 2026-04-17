@@ -22,12 +22,13 @@ type EmployeeAttendanceLogItem struct {
 }
 
 type ListEmployeeAttendanceLogsOutput struct {
-	EmployeeUID string
-	Total       int
-	Page        int
-	PageSize    int
-	TotalPages  int
-	Logs        []EmployeeAttendanceLogItem
+	EmployeeUID   string
+	DepartmentUID *string
+	Total         int
+	Page          int
+	PageSize      int
+	TotalPages    int
+	Logs          []EmployeeAttendanceLogItem
 }
 
 type ListEmployeeAttendanceLogsInput struct {
@@ -105,11 +106,12 @@ func (uc *ListEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, input 
 	}
 
 	return &ListEmployeeAttendanceLogsOutput{
-		EmployeeUID: input.EmployeeUID,
-		Total:       total,
-		Page:        params.Page,
-		PageSize:    params.PageSize,
-		TotalPages:  ports.TotalPages(total, params.PageSize),
-		Logs:        logs,
+		EmployeeUID:   input.EmployeeUID,
+		DepartmentUID: employee.DepartmentUID,
+		Total:         total,
+		Page:          params.Page,
+		PageSize:      params.PageSize,
+		TotalPages:    ports.TotalPages(total, params.PageSize),
+		Logs:          logs,
 	}, nil
 }

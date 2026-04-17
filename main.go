@@ -217,6 +217,8 @@ func main() {
 		sqliteDB,
 		holidayDefinitionRepo,
 		cfg.HolidaySyncEndpoint,
+		cfg.HolidaySyncAPIKey,
+		cfg.HolidaySyncCountry,
 		cfg.HolidaySyncTimezone,
 	)
 

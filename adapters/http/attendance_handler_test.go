@@ -617,11 +617,11 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 	if len(response.Records) != 1 || response.Records[0].Date != "2026-04-10" || response.Records[0].EmployeeUID != "emp_1" {
 		t.Fatalf("unexpected records: %+v", response.Records)
 	}
-	if response.Records[0].CheckIn == nil || *response.Records[0].CheckIn != "08:30:00" {
-		t.Fatalf("checkIn = %v, want 08:30:00", response.Records[0].CheckIn)
+	if response.Records[0].CheckIn == nil || *response.Records[0].CheckIn != "08:30:00Z" {
+		t.Fatalf("checkIn = %v, want 08:30:00Z", response.Records[0].CheckIn)
 	}
-	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00" {
-		t.Fatalf("checkOut = %v, want 17:00:00", response.Records[0].CheckOut)
+	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00Z" {
+		t.Fatalf("checkOut = %v, want 17:00:00Z", response.Records[0].CheckOut)
 	}
 	if response.Records[0].CheckInDevice == nil || *response.Records[0].CheckInDevice != "Front Gate" {
 		t.Fatalf("checkInDevice = %v, want Front Gate", response.Records[0].CheckInDevice)
@@ -690,8 +690,8 @@ func TestAttendanceHandlerListDailyDepartmentLogs_IncludesCheckoutOnlyRecord(t *
 	if len(response.Records) != 1 {
 		t.Fatalf("len(response.Records) = %d, want 1", len(response.Records))
 	}
-	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00" {
-		t.Fatalf("checkOut = %v, want 17:00:00", response.Records[0].CheckOut)
+	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00Z" {
+		t.Fatalf("checkOut = %v, want 17:00:00Z", response.Records[0].CheckOut)
 	}
 	if !response.Records[0].MissingCheckIn {
 		t.Fatal("expected MissingCheckIn to be true")
@@ -783,11 +783,11 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 	if len(response.Records) != 1 || response.Records[0].Date != "2026-04-10" || response.Records[0].EmployeeUID != "emp_1" {
 		t.Fatalf("unexpected records: %+v", response.Records)
 	}
-	if response.Records[0].CheckIn == nil || *response.Records[0].CheckIn != "08:30:00" {
-		t.Fatalf("checkIn = %v, want 08:30:00", response.Records[0].CheckIn)
+	if response.Records[0].CheckIn == nil || *response.Records[0].CheckIn != "08:30:00Z" {
+		t.Fatalf("checkIn = %v, want 08:30:00Z", response.Records[0].CheckIn)
 	}
-	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00" {
-		t.Fatalf("checkOut = %v, want 17:00:00", response.Records[0].CheckOut)
+	if response.Records[0].CheckOut == nil || *response.Records[0].CheckOut != "17:00:00Z" {
+		t.Fatalf("checkOut = %v, want 17:00:00Z", response.Records[0].CheckOut)
 	}
 	if response.Records[0].CheckInDevice == nil || *response.Records[0].CheckInDevice != "Front Gate" {
 		t.Fatalf("checkInDevice = %v, want Front Gate", response.Records[0].CheckInDevice)

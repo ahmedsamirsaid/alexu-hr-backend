@@ -372,7 +372,25 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 			e.name,
 			e.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
+			(
+				SELECT ar1.uid
+				FROM attendance_records ar1
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
+			(
+				SELECT ar2.uid
+				FROM attendance_records ar2
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1
@@ -605,7 +623,7 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		var employeeName string
 		var departmentUID sql.NullString
 		var checkIn sql.NullString
-		var CheckInLogUID sql.NullString
+		var checkInLogUID sql.NullString
 		var checkOut sql.NullString
 		var checkOutLogUID sql.NullString
 		var checkInDevice sql.NullString
@@ -613,7 +631,7 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		var checkOutDevice sql.NullString
 		var checkOutDeviceUID sql.NullString
 
-		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn,&CheckInLogUID, &checkOut,&checkOutLogUID, &checkInDevice, &checkInDeviceUID, &checkOutDevice, &checkOutDeviceUID); err != nil {
+		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn, &checkInLogUID, &checkOut, &checkOutLogUID, &checkInDevice, &checkInDeviceUID, &checkOutDevice, &checkOutDeviceUID); err != nil {
 			slog.Error(logKey+".scan_row", "error", err, idKey, idValue)
 			return nil, err
 		}
@@ -669,9 +687,9 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		}
 
 		// populate the log UID fields returned by the query
-		if CheckInLogUID.Valid {
-			v := CheckInLogUID.String
-			group.ChechInLogUID = &v
+		if checkInLogUID.Valid {
+			v := checkInLogUID.String
+			group.CheckInLogUID = &v
 		}
 		if checkOutLogUID.Valid {
 			v := checkOutLogUID.String

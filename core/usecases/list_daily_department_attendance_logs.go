@@ -14,9 +14,9 @@ type DailyAttendanceLogItem struct {
 	EmployeeName      string
 	DepartmentUID     *string
 	CheckIn           *time.Time
-	ChechInLogUID      *string
+	CheckInLogUID     *string
 	CheckOut          *time.Time
-	CheckOutLogUID     *string
+	CheckOutLogUID    *string
 	CheckInDevice     *string
 	CheckInDeviceUID  *string
 	CheckOutDevice    *string

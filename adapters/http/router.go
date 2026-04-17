@@ -102,6 +102,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyDepartmentLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListEmployeeLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyEmployeeLogs)))
+	protectedMux.Handle("POST /api/v1/attendance/logs", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.CreateLog)))
+	protectedMux.Handle("PATCH /api/v1/attendance/logs/{uid}", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.UpdateLog)))
 	protectedMux.Handle("GET /api/v1/attendance/summary/daily", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetDailySummary)))
 
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices/stats", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Stats)))

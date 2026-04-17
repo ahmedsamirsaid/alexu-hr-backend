@@ -110,7 +110,7 @@ func main() {
 	createShiftUC := usecases.NewCreateShiftUseCase(sqliteDB, shiftRepo)
 	updateShiftUC := usecases.NewUpdateShiftUseCase(sqliteDB, shiftRepo)
 
-	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret)
+	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret, cfg.AccessTokenMinutes)
 
 	requestOTPUC := usecases.NewRequestOTPUseCase(sqliteDB, otpRepo, userRepo)
 	verifyOTPUC := usecases.NewVerifyOTPUseCase(

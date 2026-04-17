@@ -10,10 +10,11 @@ import (
 
 // ListEmployeesInput defines the filters for listing employees.
 type ListEmployeesInput struct {
-	Status       *domain.EmployeeStatus
-	HireDateFrom *time.Time
-	HireDateTo   *time.Time
-	Role         *string // Filter by role name
+	Status                *domain.EmployeeStatus
+	HireDateFrom          *time.Time
+	HireDateTo            *time.Time
+	Role                  *string // Filter by role name
+	ManagedDepartmentUIDs []string
 }
 
 // EmployeeUserInfo contains the linked user account information.
@@ -80,8 +81,23 @@ func (uc *ListEmployeesUseCase) Execute(ctx context.Context, input ListEmployees
 		return nil, err
 	}
 
+	allowedDepartments := make(map[string]struct{}, len(input.ManagedDepartmentUIDs))
+	for _, departmentUID := range input.ManagedDepartmentUIDs {
+		allowedDepartments[departmentUID] = struct{}{}
+	}
+	limitByDepartment := len(allowedDepartments) > 0
+
 	items := make([]EmployeeListItem, 0, len(employees))
 	for _, emp := range employees {
+		if limitByDepartment {
+			if emp.DepartmentUID == nil {
+				continue
+			}
+			if _, ok := allowedDepartments[*emp.DepartmentUID]; !ok {
+				continue
+			}
+		}
+
 		item := EmployeeListItem{
 			UID:           emp.UID,
 			Name:          emp.Name,

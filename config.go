@@ -17,11 +17,12 @@ type AppConfig struct {
 	LegacyDBUser      string
 	LegacyDBPassword  string
 	// Auth config
-	AuthEnabled      bool
-	DevOTPBypass     bool
-	DevBypassOTP     string
-	JWTSecret        string
-	RefreshTokenDays int
+	AuthEnabled        bool
+	DevOTPBypass       bool
+	DevBypassOTP       string
+	JWTSecret          string
+	AccessTokenMinutes int
+	RefreshTokenDays   int
 	// FCM config
 	FCMEnabled            bool
 	FCMServiceAccountPath string
@@ -44,11 +45,12 @@ func LoadConfig() *AppConfig {
 		LegacyDBUser:      getEnv("BANU_MUSA_LEGACY_DB_USER", ""),
 		LegacyDBPassword:  getEnv("BANU_MUSA_LEGACY_DB_PASSWORD", ""),
 		// Auth config
-		AuthEnabled:      getEnvBool("BANU_MUSA_AUTH_ENABLED", true),
-		DevOTPBypass:     getEnvBool("BANU_MUSA_DEV_OTP_BYPASS", true),
-		DevBypassOTP:     getEnv("BANU_MUSA_DEV_BYPASS_OTP", "112233"),
-		JWTSecret:        getEnv("BANU_MUSA_JWT_SECRET", "dev-secret-change-in-production"),
-		RefreshTokenDays: getEnvInt("BANU_MUSA_REFRESH_TOKEN_DAYS", 90),
+		AuthEnabled:        getEnvBool("BANU_MUSA_AUTH_ENABLED", true),
+		DevOTPBypass:       getEnvBool("BANU_MUSA_DEV_OTP_BYPASS", true),
+		DevBypassOTP:       getEnv("BANU_MUSA_DEV_BYPASS_OTP", "112233"),
+		JWTSecret:          getEnv("BANU_MUSA_JWT_SECRET", "dev-secret-change-in-production"),
+		AccessTokenMinutes: getEnvInt("BANU_MUSA_ACCESS_TOKEN_MINUTES", 60),
+		RefreshTokenDays:   getEnvInt("BANU_MUSA_REFRESH_TOKEN_DAYS", 90),
 		// FCM config
 		FCMEnabled:            getEnvBool("BANU_MUSA_FCM_ENABLED", true),
 		FCMServiceAccountPath: getEnv("BANU_MUSA_FCM_SERVICE_ACCOUNT_PATH", "./firebase/staging-banumusa-firebase-adminsdk-fbsvc-9f7f698d1d.json"),

@@ -54,6 +54,9 @@ type RoleRepository interface {
 
 	// GetDepartmentManager returns the user who has the Department Manager role scoped to the given department
 	GetDepartmentManager(ctx context.Context, q Querier, departmentUID string) (*domain.User, error)
+
+	// GetManagedDepartmentUIDs returns department UIDs explicitly managed by the user via Department Manager scoped roles
+	GetManagedDepartmentUIDs(ctx context.Context, q Querier, userID int64) ([]string, error)
 }
 
 type PermissionRepository interface {

@@ -3,15 +3,16 @@ package domain
 import "time"
 
 type User struct {
-	ID           int64
-	UID          string
-	Phone        string
-	PasswordHash *string
-	EmployeeUID  *string
-	IsActive     bool
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
-	Roles        []Role
+	ID                    int64
+	UID                   string
+	Phone                 string
+	PasswordHash          *string
+	EmployeeUID           *string
+	ManagedDepartmentUIDs []string
+	IsActive              bool
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	Roles                 []Role
 }
 
 func NewUser(phone string) *User {
@@ -24,7 +25,7 @@ func NewUser(phone string) *User {
 
 func (u *User) HasPermission(code string) bool {
 	for _, role := range u.Roles {
-		if role.IsSystem {
+		if role.HasAllPermissions() {
 			return true // Admin has all permissions
 		}
 		for _, perm := range role.Permissions {

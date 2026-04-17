@@ -977,9 +977,14 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 		output: &usecases.GetMonthlyAttendanceStatsOutput{
 			Month:                "2026-04",
 			TotalWorkedHours:     26.25,
+			MissingCheckInCount:  2,
 			MissingCheckOutCount: 1,
 			AverageCheckInTime: func() *time.Time {
 				v := time.Date(2026, 4, 1, 8, 26, 15, 0, time.UTC)
+				return &v
+			}(),
+			AverageCheckOutTime: func() *time.Time {
+				v := time.Date(2026, 4, 1, 16, 55, 45, 0, time.UTC)
 				return &v
 			}(),
 			WorkingHoursByDay: []usecases.WorkingHoursByDay{
@@ -1005,6 +1010,8 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 		Month                string  `json:"month"`
 		TotalWorkedHours     float64 `json:"totalWorkedHours"`
 		AverageCheckInTime   *string `json:"averageCheckInTime"`
+		AverageCheckOutTime  *string `json:"averageCheckOutTime"`
+		MissingCheckInCount  int     `json:"missingCheckInCount"`
 		MissingCheckOutCount int     `json:"missingCheckOutCount"`
 		WorkingHoursByDay    []struct {
 			Date        string  `json:"date"`
@@ -1018,13 +1025,116 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 	if statsUC.input == nil || statsUC.input.EmployeeUID != "emp_1" {
 		t.Fatalf("employeeUid input = %+v, want emp_1", statsUC.input)
 	}
-	if response.EmployeeUID != "emp_1" || response.Month != "2026-04" || response.TotalWorkedHours != 26.25 || response.MissingCheckOutCount != 1 {
+	if statsUC.input.StartDate != nil || statsUC.input.EndDate != nil || statsUC.input.PeriodLabel != nil {
+		t.Fatalf("expected default period input, got %+v", statsUC.input)
+	}
+	if response.EmployeeUID != "emp_1" || response.Month != "2026-04" || response.TotalWorkedHours != 26.25 || response.MissingCheckInCount != 2 || response.MissingCheckOutCount != 1 {
 		t.Fatalf("unexpected response metadata: %+v", response)
 	}
 	if response.AverageCheckInTime == nil || *response.AverageCheckInTime != "08:26:15" {
 		t.Fatalf("AverageCheckInTime = %v, want 08:26:15", response.AverageCheckInTime)
 	}
+	if response.AverageCheckOutTime == nil || *response.AverageCheckOutTime != "16:55:45" {
+		t.Fatalf("AverageCheckOutTime = %v, want 16:55:45", response.AverageCheckOutTime)
+	}
 	if len(response.WorkingHoursByDay) != 2 || response.WorkingHoursByDay[0].Date != "2026-04-01" || response.WorkingHoursByDay[0].WorkedHours != 18 {
 		t.Fatalf("unexpected WorkingHoursByDay: %+v", response.WorkingHoursByDay)
+	}
+}
+
+func TestAttendanceHandlerGetMonthlyStats_WithMonthFilter(t *testing.T) {
+	statsUC := &stubMonthlyAttendanceStatsUseCase{
+		output: &usecases.GetMonthlyAttendanceStatsOutput{Month: "2026-04"},
+	}
+
+	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?month=2026-04", nil)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.GetMonthlyStats(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if statsUC.input == nil {
+		t.Fatal("expected input to be passed to use case")
+	}
+	if statsUC.input.StartDate == nil || statsUC.input.StartDate.Format("2006-01-02") != "2026-04-01" {
+		t.Fatalf("startDate input = %v, want 2026-04-01", statsUC.input.StartDate)
+	}
+	if statsUC.input.EndDate == nil || statsUC.input.EndDate.Format("2006-01") != "2026-04" {
+		t.Fatalf("endDate input = %v, want month 2026-04", statsUC.input.EndDate)
+	}
+	if statsUC.input.PeriodLabel == nil || *statsUC.input.PeriodLabel != "2026-04" {
+		t.Fatalf("periodLabel input = %v, want 2026-04", statsUC.input.PeriodLabel)
+	}
+}
+
+func TestAttendanceHandlerGetMonthlyStats_WithRangeFilter(t *testing.T) {
+	statsUC := &stubMonthlyAttendanceStatsUseCase{
+		output: &usecases.GetMonthlyAttendanceStatsOutput{Month: "2026-04-10 to 2026-04-15"},
+	}
+
+	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?startDate=2026-04-10&endDate=2026-04-15", nil)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.GetMonthlyStats(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if statsUC.input == nil {
+		t.Fatal("expected input to be passed to use case")
+	}
+	if statsUC.input.StartDate == nil || statsUC.input.StartDate.Format("2006-01-02 15:04:05") != "2026-04-10 00:00:00" {
+		t.Fatalf("startDate input = %v, want 2026-04-10 00:00:00", statsUC.input.StartDate)
+	}
+	if statsUC.input.EndDate == nil || statsUC.input.EndDate.Format("2006-01-02 15:04:05") != "2026-04-15 23:59:59" {
+		t.Fatalf("endDate input = %v, want 2026-04-15 23:59:59", statsUC.input.EndDate)
+	}
+	if statsUC.input.PeriodLabel == nil || *statsUC.input.PeriodLabel != "2026-04-10 to 2026-04-15" {
+		t.Fatalf("periodLabel input = %v, want range label", statsUC.input.PeriodLabel)
+	}
+}
+
+func TestAttendanceHandlerGetMonthlyStats_WithYearFilter(t *testing.T) {
+	statsUC := &stubMonthlyAttendanceStatsUseCase{
+		output: &usecases.GetMonthlyAttendanceStatsOutput{Month: "2026"},
+	}
+
+	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?year=2026", nil)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.GetMonthlyStats(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if statsUC.input == nil {
+		t.Fatal("expected input to be passed to use case")
+	}
+	if statsUC.input.StartDate == nil || statsUC.input.StartDate.Format("2006-01-02 15:04:05") != "2026-01-01 00:00:00" {
+		t.Fatalf("startDate input = %v, want 2026-01-01 00:00:00", statsUC.input.StartDate)
+	}
+	if statsUC.input.PeriodLabel == nil || *statsUC.input.PeriodLabel != "2026" {
+		t.Fatalf("periodLabel input = %v, want 2026", statsUC.input.PeriodLabel)
+	}
+}
+
+func TestAttendanceHandlerGetMonthlyStats_RejectsMixedFilters(t *testing.T) {
+	handler := &AttendanceHandler{getMonthlyStatsUC: &stubMonthlyAttendanceStatsUseCase{}}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?month=2026-04&startDate=2026-04-01&endDate=2026-04-10", nil)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.GetMonthlyStats(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
 	}
 }

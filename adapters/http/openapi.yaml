@@ -500,6 +500,44 @@ components:
             type: string
           example: ["admin"]
 
+    Shift:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "shf_general"
+        startTime:
+          type: string
+          example: "09:00"
+        endTime:
+          type: string
+          example: "17:00"
+        graceMinutes:
+          type: integer
+          example: 15
+
+    ShiftListResponse:
+      type: object
+      properties:
+        shifts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Shift"
+
+    ShiftRequest:
+      type: object
+      required: [startTime, endTime, graceMinutes]
+      properties:
+        startTime:
+          type: string
+          example: "09:00"
+        endTime:
+          type: string
+          example: "17:00"
+        graceMinutes:
+          type: integer
+          example: 15
+
     AttendanceWorkHoursConfig:
       type: object
       properties:
@@ -583,6 +621,9 @@ components:
         deviceUid:
           type: string
           example: "adev_001"
+        deviceName:
+          type: string
+          example: "Main Gate Reader"
         deviceUserId:
           type: string
           example: "1001"
@@ -621,6 +662,193 @@ components:
           type: integer
           example: 3
 
+    EmployeeAttendanceLogsResponse:
+      type: object
+      properties:
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceLogItem"
+        total:
+          type: integer
+          example: 44
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 3
+
+    AttendanceException:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            [
+              missed_punch_in,
+              missed_punch_out,
+              late_arrival,
+              early_departure,
+              absence,
+            ]
+          example: late_arrival
+        minutesDelta:
+          type: integer
+          nullable: true
+          example: 12
+
+    DailyAttendanceLogItem:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2024-06-01"
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        employeeName:
+          type: string
+          example: "Ahmed Al-Sayed"
+        departmentUid:
+          type: string
+          nullable: true
+          example: "dept_001"
+        checkIn:
+          type: string
+          nullable: true
+          example: "08:04:00"
+        checkOut:
+          type: string
+          nullable: true
+          example: "16:03:00"
+        checkInDevice:
+          type: string
+          nullable: true
+          example: "Main Gate Reader"
+        checkOutDevice:
+          type: string
+          nullable: true
+          example: "Main Gate Reader"
+        workedHours:
+          type: number
+          format: float
+          example: 7.98
+        lateArrival:
+          type: boolean
+          example: false
+        earlyDeparture:
+          type: boolean
+          example: false
+        missingCheckIn:
+          type: boolean
+          example: false
+        missingCheckOut:
+          type: boolean
+          example: false
+        exceptions:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceException"
+
+    DepartmentDailyAttendanceLogsResponse:
+      type: object
+      properties:
+        departmentUid:
+          type: string
+          example: "dept_001"
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyAttendanceLogItem"
+        total:
+          type: integer
+          example: 44
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 3
+
+    EmployeeDailyAttendanceLogsResponse:
+      type: object
+      properties:
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        records:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyAttendanceLogItem"
+        total:
+          type: integer
+          example: 20
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 20
+        totalPages:
+          type: integer
+          example: 1
+
+    MonthlyWorkingHoursByDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2024-06-01"
+        workedHours:
+          type: number
+          format: float
+          example: 7.98
+
+    MonthlyAttendanceStatsResponse:
+      type: object
+      properties:
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        month:
+          type: string
+          description: Selected period label (for example YYYY-MM, YYYY, or custom start/end range)
+          example: "2024-06"
+        totalWorkedHours:
+          type: number
+          format: float
+          example: 123.5
+        averageCheckInTime:
+          type: string
+          nullable: true
+          example: "08:07:14"
+        averageCheckOutTime:
+          type: string
+          nullable: true
+          example: "17:03:22"
+        missingCheckInCount:
+          type: integer
+          example: 2
+        missingCheckOutCount:
+          type: integer
+          example: 1
+        workingHoursByDay:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyWorkingHoursByDay"
+
     AttendanceDevice:
       type: object
       properties:
@@ -644,7 +872,7 @@ components:
           example: "ZK-123456"
         status:
           type: string
-          enum: [online, offline]
+          enum: [online, offline, deactivated]
           example: offline
         lastStatusKnownAt:
           type: string
@@ -683,6 +911,9 @@ components:
         offline:
           type: integer
           example: 2
+        deactivated:
+          type: integer
+          example: 1
 
     AttendanceDeviceConnectionCheck:
       type: object
@@ -738,6 +969,23 @@ components:
         serialNumber:
           type: string
           example: "ZK-123456"
+
+    UpdateAttendanceDeviceRequest:
+      type: object
+      required: [ip, port, name]
+      properties:
+        ip:
+          type: string
+          example: "192.168.1.10"
+        port:
+          type: integer
+          example: 4370
+        name:
+          type: string
+          example: "Main Gate Reader"
+        location:
+          type: string
+          example: "Building A - Gate 1"
 
     RegisterAttendanceDeviceResponse:
       type: object
@@ -2298,6 +2546,104 @@ paths:
               schema:
                 $ref: "#/components/schemas/LeaveType"
 
+  # ─── SHIFTS ─────────────────────────────────────────────────────────────────
+
+  /api/v1/admin/shifts:
+    get:
+      tags: [Shifts]
+      summary: List shifts
+      responses:
+        "200":
+          description: Shifts list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftListResponse"
+
+    post:
+      tags: [Shifts]
+      summary: Create shift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftRequest"
+      responses:
+        "201":
+          description: Shift created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/admin/shifts/{uid}:
+    get:
+      tags: [Shifts]
+      summary: Get shift by UID
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "shf_general"
+      responses:
+        "200":
+          description: Shift details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+        "404":
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Shifts]
+      summary: Update shift
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "shf_general"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftRequest"
+      responses:
+        "200":
+          description: Shift updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Shift not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # ─── ATTENDANCE ─────────────────────────────────────────────────────────────
 
   /api/v1/attendance/departments/{departmentUid}/logs:
@@ -2387,6 +2733,314 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/attendance/departments/{departmentUid}/daily-logs:
+    get:
+      tags: [Attendance]
+      summary: List daily attendance logs for a department
+      parameters:
+        - name: departmentUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "dept_001"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [date, employeeName]
+            default: date
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: employeeUid
+          in: query
+          schema:
+            type: string
+        - name: employeeName
+          in: query
+          schema:
+            type: string
+        - name: employeeNameMode
+          in: query
+          schema:
+            type: string
+            enum: [equals, contains]
+        - name: deviceUid
+          in: query
+          schema:
+            type: string
+        - name: punchType
+          in: query
+          schema:
+            type: string
+            enum: [check_in, check_out, break_start, break_end, unknown]
+        - name: startDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-01"
+        - name: endDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-30"
+      responses:
+        "200":
+          description: Department daily attendance logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentDailyAttendanceLogsResponse"
+        "400":
+          description: Invalid query/path parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Department not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/attendance/employees/{employeeUid}/logs:
+    get:
+      tags: [Attendance]
+      summary: List attendance logs for an employee
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [punchedAt, employeeName, punchType]
+            default: punchedAt
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: employeeName
+          in: query
+          schema:
+            type: string
+        - name: employeeNameMode
+          in: query
+          schema:
+            type: string
+            enum: [equals, contains]
+        - name: deviceUid
+          in: query
+          schema:
+            type: string
+        - name: punchType
+          in: query
+          schema:
+            type: string
+            enum: [check_in, check_out, break_start, break_end, unknown]
+        - name: startDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-01"
+        - name: endDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-30"
+      responses:
+        "200":
+          description: Employee attendance logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeAttendanceLogsResponse"
+        "400":
+          description: Invalid query/path parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/attendance/employees/{employeeUid}/daily-logs:
+    get:
+      tags: [Attendance]
+      summary: List daily attendance logs for an employee
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [date, employeeName]
+            default: date
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: employeeName
+          in: query
+          schema:
+            type: string
+        - name: employeeNameMode
+          in: query
+          schema:
+            type: string
+            enum: [equals, contains]
+        - name: deviceUid
+          in: query
+          schema:
+            type: string
+        - name: punchType
+          in: query
+          schema:
+            type: string
+            enum: [check_in, check_out, break_start, break_end, unknown]
+        - name: startDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-01"
+        - name: endDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339
+          schema:
+            type: string
+          example: "2024-06-30"
+      responses:
+        "200":
+          description: Employee daily attendance logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmployeeDailyAttendanceLogsResponse"
+        "400":
+          description: Invalid query/path parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/attendance/employees/{employeeUid}/logs/stats/monthly:
+    get:
+      tags: [Attendance]
+      summary: Get attendance stats for an employee over a monthly/yearly/custom period
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: startDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339. Must be provided together with endDate. Cannot be combined with month or year.
+          schema:
+            type: string
+          example: "2024-06-01"
+        - name: endDate
+          in: query
+          description: Accepts YYYY-MM-DD or RFC3339. Must be provided together with startDate. Cannot be combined with month or year.
+          schema:
+            type: string
+          example: "2024-06-30"
+        - name: month
+          in: query
+          description: Month period in YYYY-MM format. Cannot be combined with year/startDate/endDate.
+          schema:
+            type: string
+          example: "2024-06"
+        - name: year
+          in: query
+          description: Year period in YYYY format. Cannot be combined with month/startDate/endDate.
+          schema:
+            type: string
+          example: "2024"
+      responses:
+        "200":
+          description: Monthly attendance statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyAttendanceStatsResponse"
+        "400":
+          description: Invalid employee UID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/attendance/summary/daily:
     get:
       tags: [Attendance]
@@ -2412,47 +3066,6 @@ paths:
                 $ref: "#/components/schemas/AttendanceDailySummaryResponse"
         "400":
           description: Invalid date format
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-  /api/v1/attendance/work-hours:
-    get:
-      tags: [Attendance]
-      summary: Get work-hours configuration
-      responses:
-        "200":
-          description: Work-hours configuration
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AttendanceWorkHoursConfig"
-        "500":
-          description: Failed to read configuration
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
-    put:
-      tags: [Attendance]
-      summary: Set work-hours configuration
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AttendanceWorkHoursConfig"
-      responses:
-        "200":
-          description: Updated work-hours configuration
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AttendanceWorkHoursConfig"
-        "400":
-          description: Invalid request body or invalid time values
           content:
             application/json:
               schema:
@@ -2487,6 +3100,17 @@ paths:
           schema:
             type: integer
             default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all, online, offline, deactivated]
+            default: all
+        - name: search
+          in: query
+          schema:
+            type: string
+          example: "Main Gate"
       responses:
         "200":
           description: Paginated attendance devices list
@@ -2566,8 +3190,86 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "409":
+          description: Device is deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/v1/admin/attendance-devices/{uid}:
+    get:
+      tags: [Attendance Devices]
+      summary: Get attendance device by UID
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "adev_001"
+      responses:
+        "200":
+          description: Attendance device details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceDevice"
+        "400":
+          description: Invalid UID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    patch:
+      tags: [Attendance Devices]
+      summary: Update an attendance device
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "adev_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAttendanceDeviceRequest"
+      responses:
+        "200":
+          description: Device updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceDevice"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Device conflict (duplicate IP:port)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
     delete:
       tags: [Attendance Devices]
       summary: Delete an attendance device
@@ -2588,7 +3290,7 @@ paths:
                 properties:
                   message:
                     type: string
-                    example: "Device removed"
+                    example: "Device deactivated"
         "400":
           description: Invalid UID
           content:
@@ -2597,6 +3299,47 @@ paths:
                 $ref: "#/components/schemas/Error"
         "404":
           description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/admin/attendance-devices/{uid}/activate:
+    patch:
+      tags: [Attendance Devices]
+      summary: Activate a deactivated attendance device
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "adev_001"
+      responses:
+        "200":
+          description: Device activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Device activated"
+        "400":
+          description: Invalid UID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Device already active
           content:
             application/json:
               schema:

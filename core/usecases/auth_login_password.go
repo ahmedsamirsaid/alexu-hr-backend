@@ -109,6 +109,12 @@ func (uc *LoginPasswordUseCase) Execute(ctx context.Context, input LoginPassword
 		user.Roles[i] = *r
 	}
 
+	managedDepartmentUIDs, err := uc.roleRepo.GetManagedDepartmentUIDs(ctx, uc.db, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.ManagedDepartmentUIDs = managedDepartmentUIDs
+
 	// Check web portal access (user must have a role other than "Employee")
 	if !user.HasWebPortalAccess() {
 		return nil, ErrWebAccessDenied
@@ -138,7 +144,7 @@ func (uc *LoginPasswordUseCase) toUserOutput(ctx context.Context, user *domain.U
 
 	for i, role := range user.Roles {
 		roleNames[i] = role.Name
-		if role.IsSystem {
+		if role.HasAllPermissions() {
 			permSet["*"] = true
 		} else {
 			for _, perm := range role.Permissions {
@@ -153,11 +159,12 @@ func (uc *LoginPasswordUseCase) toUserOutput(ctx context.Context, user *domain.U
 	}
 
 	output := &UserOutput{
-		UID:         user.UID,
-		Phone:       user.Phone,
-		EmployeeUID: user.EmployeeUID,
-		Roles:       roleNames,
-		Permissions: permissions,
+		UID:                   user.UID,
+		Phone:                 user.Phone,
+		EmployeeUID:           user.EmployeeUID,
+		Roles:                 roleNames,
+		Permissions:           permissions,
+		ManagedDepartmentUIDs: append([]string(nil), user.ManagedDepartmentUIDs...),
 	}
 
 	// Fetch employee name if linked

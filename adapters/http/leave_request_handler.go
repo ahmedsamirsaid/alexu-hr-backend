@@ -372,6 +372,12 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 
 // GetLeaveRequest handles GET /api/v1/leave-requests/{uid}
 func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
@@ -417,6 +423,14 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 	if output.LeaveType != nil {
 		resp.LeaveTypeNameEN = output.LeaveType.NameEN
 		resp.LeaveTypeNameAR = output.LeaveType.NameAR
+	}
+
+	if !claims.HasPermission("leave:record") {
+		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+		if err != nil || currentUser.EmployeeUID == nil || *currentUser.EmployeeUID != output.LeaveRequest.EmployeeUID {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view your own leave requests")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, resp)

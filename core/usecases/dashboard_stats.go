@@ -4,8 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
+
+type GetDashboardStatsInput struct {
+	ManagedDepartmentUIDs []string
+}
 
 // DashboardStatsOutput contains the dashboard statistics.
 type DashboardStatsOutput struct {
@@ -16,9 +21,10 @@ type DashboardStatsOutput struct {
 
 // GetDashboardStatsUseCase handles retrieving dashboard statistics.
 type GetDashboardStatsUseCase struct {
-	db              ports.DB
-	employeeRepo    ports.EmployeeRepository
-	leaveRecordRepo ports.LeaveRecordRepository
+	db               ports.DB
+	employeeRepo     ports.EmployeeRepository
+	leaveRecordRepo  ports.LeaveRecordRepository
+	leaveRequestRepo ports.LeaveRequestRepository
 }
 
 // NewGetDashboardStatsUseCase creates a new get dashboard stats use case.
@@ -26,16 +32,22 @@ func NewGetDashboardStatsUseCase(
 	db ports.DB,
 	employeeRepo ports.EmployeeRepository,
 	leaveRecordRepo ports.LeaveRecordRepository,
+	leaveRequestRepo ports.LeaveRequestRepository,
 ) *GetDashboardStatsUseCase {
 	return &GetDashboardStatsUseCase{
-		db:              db,
-		employeeRepo:    employeeRepo,
-		leaveRecordRepo: leaveRecordRepo,
+		db:               db,
+		employeeRepo:     employeeRepo,
+		leaveRecordRepo:  leaveRecordRepo,
+		leaveRequestRepo: leaveRequestRepo,
 	}
 }
 
 // Execute retrieves dashboard statistics.
-func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context) (*DashboardStatsOutput, error) {
+func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context, input GetDashboardStatsInput) (*DashboardStatsOutput, error) {
+	if len(input.ManagedDepartmentUIDs) > 0 {
+		return uc.executeScoped(ctx, input.ManagedDepartmentUIDs)
+	}
+
 	totalEmployees, err := uc.employeeRepo.Count(ctx, uc.db)
 	if err != nil {
 		return nil, err
@@ -52,4 +64,60 @@ func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context) (*DashboardStat
 		LeavesToday:     leavesToday,
 		PendingRequests: 0, // Placeholder for future approval workflow
 	}, nil
+}
+
+func (uc *GetDashboardStatsUseCase) executeScoped(ctx context.Context, departmentUIDs []string) (*DashboardStatsOutput, error) {
+	allowedDepartments := make(map[string]struct{}, len(departmentUIDs))
+	for _, departmentUID := range departmentUIDs {
+		allowedDepartments[departmentUID] = struct{}{}
+	}
+
+	employees, err := uc.employeeRepo.List(ctx, uc.db, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	filteredEmployees := make([]*domain.Employee, 0)
+	for _, employee := range employees {
+		if employee.DepartmentUID == nil {
+			continue
+		}
+		if _, ok := allowedDepartments[*employee.DepartmentUID]; ok {
+			filteredEmployees = append(filteredEmployees, employee)
+		}
+	}
+
+	today := time.Now()
+	leavesToday := 0
+	pendingRequests := 0
+
+	for _, employee := range filteredEmployees {
+		onLeave, err := uc.leaveRecordRepo.HasLeaveOnDate(ctx, uc.db, employee.ID, today)
+		if err != nil {
+			return nil, err
+		}
+		if onLeave {
+			leavesToday++
+		}
+
+		employeeUID := employee.UID
+		pendingCount, err := uc.leaveRequestRepo.Count(ctx, uc.db, ports.LeaveRequestListFilter{
+			Status:      ptrApprovalStatus(domain.ApprovalRequestStatusPending),
+			EmployeeUID: &employeeUID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		pendingRequests += pendingCount
+	}
+
+	return &DashboardStatsOutput{
+		TotalEmployees:  len(filteredEmployees),
+		LeavesToday:     leavesToday,
+		PendingRequests: pendingRequests,
+	}, nil
+}
+
+func ptrApprovalStatus(status domain.ApprovalRequestStatus) *domain.ApprovalRequestStatus {
+	return &status
 }

@@ -44,7 +44,7 @@ SELECT
         WHEN seq.n = 1 THEN ds.dept_code || ' Department Manager'
         ELSE ds.dept_code || ' Staff ' || printf('%02d', seq.n)
     END AS name,
-    '+201188' || printf('%04d', (ds.dept_idx * 10) + seq.n) AS mobile,
+    '+201188' || printf('%04d', (ds.dept_idx * 10) + seq.n) || '00' AS mobile,
     '299' || printf('%011d', (ds.dept_idx * 10) + seq.n) AS government_id,
     'U56' || ds.dept_code || printf('%02d', seq.n) AS university_id,
     lower(ds.dept_code) || '.seed' || printf('%02d', seq.n) || '@university.edu.eg' AS email,

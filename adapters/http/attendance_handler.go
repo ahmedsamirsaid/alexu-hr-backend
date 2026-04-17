@@ -115,7 +115,7 @@ type dailyAttendanceLogItemResponse struct {
 	EmployeeName      string                        `json:"employeeName"`
 	DepartmentUID     *string                       `json:"departmentUid,omitempty"`
 	CheckIn           *string                       `json:"checkIn,omitempty"`
-	ChecInLogUID      *string                       `json:"checkInLogUid,omitempty"`
+	CheckInLogUID     *string                       `json:"checkInLogUid,omitempty"`
 	CheckOut          *string                       `json:"checkOut,omitempty"`
 	CheckOutLogUID    *string                       `json:"checkOutLogUid,omitempty"`
 	CheckInDevice     *string                       `json:"checkInDevice,omitempty"`
@@ -846,7 +846,7 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 			EmployeeName:      item.EmployeeName,
 			DepartmentUID:     item.DepartmentUID,
 			CheckIn:           checkIn,
-			ChecInLogUID:      item.ChechInLogUID,
+			CheckInLogUID:      item.CheckInLogUID,
 			CheckOut:          checkOut,
 			CheckOutLogUID:    item.CheckOutLogUID,
 			CheckInDevice:     item.CheckInDevice,

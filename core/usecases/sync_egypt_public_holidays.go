@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 )
 
 var holidayCodeSanitizer = regexp.MustCompile(`[^A-Z0-9]+`)
+var holidayDayOffPrefixSanitizer = regexp.MustCompile(`(?i)^day off for\s+`)
 
 type SyncEgyptPublicHolidaysOutput struct {
 	CreatedCount        int
@@ -25,17 +27,37 @@ type SyncEgyptPublicHolidaysOutput struct {
 	DeletedAbsenceCount int
 }
 
-type nagerHoliday struct {
+type syncedHoliday struct {
 	Date      string `json:"date"`
 	LocalName string `json:"localName"`
 	Name      string `json:"name"`
+	URLID     string `json:"urlId"`
 	Global    bool   `json:"global"`
+}
+
+type calendarificResponse struct {
+	Response struct {
+		Holidays []calendarificHoliday `json:"holidays"`
+	} `json:"response"`
+}
+
+type calendarificHoliday struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	PrimaryType string   `json:"primary_type"`
+	URLID       string   `json:"urlid"`
+	Type        []string `json:"type"`
+	Date        struct {
+		ISO string `json:"iso"`
+	} `json:"date"`
 }
 
 type SyncEgyptPublicHolidaysUseCase struct {
 	db             ports.DB
 	holidayDefRepo ports.HolidayDefinitionRepository
 	endpoint       string
+	apiKey         string
+	country        string
 	httpClient     *http.Client
 	location       *time.Location
 }
@@ -44,6 +66,8 @@ func NewSyncEgyptPublicHolidaysUseCase(
 	db ports.DB,
 	holidayDefRepo ports.HolidayDefinitionRepository,
 	endpoint string,
+	apiKey string,
+	country string,
 	timezone string,
 ) *SyncEgyptPublicHolidaysUseCase {
 	loc, err := time.LoadLocation(timezone)
@@ -55,13 +79,15 @@ func NewSyncEgyptPublicHolidaysUseCase(
 		db:             db,
 		holidayDefRepo: holidayDefRepo,
 		endpoint:       endpoint,
+		apiKey:         strings.TrimSpace(apiKey),
+		country:        strings.TrimSpace(country),
 		httpClient:     &http.Client{Timeout: 12 * time.Second},
 		location:       loc,
 	}
 }
 
 func (uc *SyncEgyptPublicHolidaysUseCase) Execute(ctx context.Context) (*SyncEgyptPublicHolidaysOutput, error) {
-	if strings.TrimSpace(uc.endpoint) == "" {
+	if strings.TrimSpace(uc.endpoint) == "" || uc.apiKey == "" {
 		return &SyncEgyptPublicHolidaysOutput{}, nil
 	}
 
@@ -98,7 +124,11 @@ func (uc *SyncEgyptPublicHolidaysUseCase) Execute(ctx context.Context) (*SyncEgy
 			continue
 		}
 
-		holidayCode := buildHolidayCode(row.Name, dateValue)
+		codeSeed := row.Name
+		if strings.TrimSpace(row.URLID) != "" {
+			codeSeed = stripCalendarificCountryPrefix(row.URLID)
+		}
+		holidayCode := buildHolidayCode(codeSeed, dateValue)
 		fetchedUpcomingCodes[holidayCode] = struct{}{}
 		definition, created, err := uc.ensureDefinition(ctx, tx, holidayCode, row, dateValue)
 		if err != nil {
@@ -178,8 +208,29 @@ func deleteMissingUpcomingAutoHolidays(
 	return deleted, nil
 }
 
-func (uc *SyncEgyptPublicHolidaysUseCase) fetchHolidays(ctx context.Context) ([]nagerHoliday, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uc.endpoint, nil)
+func (uc *SyncEgyptPublicHolidaysUseCase) fetchHolidays(ctx context.Context) ([]syncedHoliday, error) {
+	now := time.Now().In(uc.location)
+	years := []int{now.Year(), now.Year() + 1}
+	rows := make([]syncedHoliday, 0)
+
+	for _, year := range years {
+		yearRows, err := uc.fetchHolidaysForYear(ctx, year)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, yearRows...)
+	}
+
+	return rows, nil
+}
+
+func (uc *SyncEgyptPublicHolidaysUseCase) fetchHolidaysForYear(ctx context.Context, year int) ([]syncedHoliday, error) {
+	requestURL, err := uc.buildCalendarificURL(year)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -195,14 +246,99 @@ func (uc *SyncEgyptPublicHolidaysUseCase) fetchHolidays(ctx context.Context) ([]
 		return nil, fmt.Errorf("holiday sync failed: status=%d body=%s", resp.StatusCode, string(body))
 	}
 
-	var rows []nagerHoliday
-	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+	var payload calendarificResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, err
 	}
+
+	dayOffExistsByIdentity := make(map[string]struct{})
+	for _, holiday := range payload.Response.Holidays {
+		if !isNationalHoliday(holiday) {
+			continue
+		}
+		if isDayOffHolidayName(holiday.Name) {
+			identity := canonicalHolidayIdentity(holiday.Name)
+			if identity != "" {
+				dayOffExistsByIdentity[identity] = struct{}{}
+			}
+		}
+	}
+
+	rows := make([]syncedHoliday, 0, len(payload.Response.Holidays))
+	for _, holiday := range payload.Response.Holidays {
+		isGlobal := isNationalHoliday(holiday)
+		if !isGlobal {
+			continue
+		}
+
+		identity := canonicalHolidayIdentity(holiday.Name)
+		if _, exists := dayOffExistsByIdentity[identity]; exists && !isDayOffHolidayName(holiday.Name) {
+			// Prefer the observed "Day off for ..." holiday entry over the base holiday entry.
+			continue
+		}
+
+		rows = append(rows, syncedHoliday{
+			Date:      strings.TrimSpace(holiday.Date.ISO),
+			Name:      strings.TrimSpace(holiday.Name),
+			LocalName: "",
+			URLID:     strings.TrimSpace(holiday.URLID),
+			Global:    true,
+		})
+	}
+
 	return rows, nil
 }
 
-func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, q ports.Querier, code string, row nagerHoliday, dateValue time.Time) (*domain.HolidayDefinition, bool, error) {
+func (uc *SyncEgyptPublicHolidaysUseCase) buildCalendarificURL(year int) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(uc.endpoint))
+	if err != nil {
+		return "", err
+	}
+
+	query := parsed.Query()
+	query.Set("api_key", uc.apiKey)
+	country := uc.country
+	if country == "" {
+		country = "EG"
+	}
+	query.Set("country", country)
+	query.Set("year", fmt.Sprintf("%d", year))
+	query.Set("type", "national")
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String(), nil
+}
+
+func isNationalHoliday(holiday calendarificHoliday) bool {
+	if strings.EqualFold(strings.TrimSpace(holiday.PrimaryType), "National holiday") {
+		return true
+	}
+	for _, holidayType := range holiday.Type {
+		if strings.EqualFold(strings.TrimSpace(holidayType), "National holiday") {
+			return true
+		}
+	}
+	return false
+}
+
+func isDayOffHolidayName(name string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(name)), "day off for ")
+}
+
+func canonicalHolidayIdentity(name string) string {
+	canonical := holidayDayOffPrefixSanitizer.ReplaceAllString(strings.TrimSpace(name), "")
+	return strings.ToLower(strings.TrimSpace(canonical))
+}
+
+func stripCalendarificCountryPrefix(urlID string) string {
+	trimmed := strings.TrimSpace(urlID)
+	if idx := strings.Index(trimmed, "/"); idx >= 0 && idx+1 < len(trimmed) {
+		return trimmed[idx+1:]
+	}
+	return trimmed
+}
+
+func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, q ports.Querier, code string, row syncedHoliday, dateValue time.Time) (*domain.HolidayDefinition, bool, error) {
 	definition, err := uc.holidayDefRepo.GetByCode(ctx, q, code)
 	if err != nil {
 		return nil, false, err
@@ -214,9 +350,6 @@ func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, 
 			definition.NameAR = strings.TrimSpace(row.LocalName)
 			if definition.NameEN == "" {
 				definition.NameEN = code
-			}
-			if definition.NameAR == "" {
-				definition.NameAR = definition.NameEN
 			}
 			updateQuery := `
 				UPDATE holiday_definitions
@@ -240,9 +373,6 @@ func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, 
 	}
 	if definition.NameEN == "" {
 		definition.NameEN = code
-	}
-	if definition.NameAR == "" {
-		definition.NameAR = definition.NameEN
 	}
 
 	if err := uc.holidayDefRepo.Create(ctx, q, definition); err != nil {

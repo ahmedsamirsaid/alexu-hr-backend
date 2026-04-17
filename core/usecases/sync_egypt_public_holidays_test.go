@@ -3,8 +3,10 @@ package usecases
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,7 +22,8 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 
 	today := normalizeDateOnly(time.Now().UTC())
 	upcomingDate := today.AddDate(0, 0, 2)
-	manualDate := today.AddDate(0, 0, 3)
+	dayOffDate := today.AddDate(0, 0, 3)
+	manualDate := today.AddDate(0, 0, 4)
 	pastDate := today.AddDate(0, 0, -1)
 	nextYearDate := time.Date(today.Year()+1, 1, 7, 0, 0, 0, 0, time.UTC)
 
@@ -45,24 +48,95 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?)
-	`, domain.GenerateUID("aex"), uid, upcomingDate.Format("2006-01-02"), domain.AttendanceExceptionTypeAbsence, now, now)
+	`, domain.GenerateUID("aex"), uid, dayOffDate.Format("2006-01-02"), domain.AttendanceExceptionTypeAbsence, now, now)
 	if err != nil {
 		t.Fatalf("failed to seed attendance exception: %v", err)
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rows := []nagerHoliday{
-			{Date: upcomingDate.Format("2006-01-02"), Name: "Upcoming Global", LocalName: "Upcoming Global", Global: true},
-			{Date: manualDate.Format("2006-01-02"), Name: "Manual Keep", LocalName: "Manual Keep", Global: true},
-			{Date: pastDate.Format("2006-01-02"), Name: "Past Global", LocalName: "Past Global", Global: true},
-			{Date: nextYearDate.Format("2006-01-02"), Name: "Next Year", LocalName: "Next Year", Global: true},
-			{Date: today.AddDate(0, 0, 4).Format("2006-01-02"), Name: "Non Global", LocalName: "Non Global", Global: false},
+		if got := r.URL.Query().Get("api_key"); got != "test-api-key" {
+			t.Fatalf("expected api_key=test-api-key got %q", got)
 		}
-		_ = json.NewEncoder(w).Encode(rows)
+		if got := strings.ToUpper(r.URL.Query().Get("country")); got != "EG" {
+			t.Fatalf("expected country=EG got %q", got)
+		}
+		if got := strings.ToLower(r.URL.Query().Get("type")); got != "national" {
+			t.Fatalf("expected type=national got %q", got)
+		}
+
+		currentYear := today.Year()
+		nextYear := currentYear + 1
+		year := r.URL.Query().Get("year")
+
+		response := calendarificResponse{}
+		switch year {
+		case fmt.Sprintf("%d", currentYear):
+			response.Response.Holidays = []calendarificHoliday{
+				{
+					Name:        "Upcoming Global",
+					Description: "عطلة قادمة",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: upcomingDate.Format("2006-01-02")},
+				},
+				{
+					Name:        "Day off for Upcoming Global",
+					Description: "تعويض عطلة قادمة",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: dayOffDate.Format("2006-01-02")},
+				},
+				{
+					Name:        "Manual Keep",
+					Description: "عطلة يدوية",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: manualDate.Format("2006-01-02")},
+				},
+				{
+					Name:        "Past Global",
+					Description: "عطلة سابقة",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: pastDate.Format("2006-01-02")},
+				},
+				{
+					Name:        "Non Global",
+					Description: "Regional",
+					PrimaryType: "Regional holiday",
+					Type:        []string{"Regional holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: today.AddDate(0, 0, 4).Format("2006-01-02")},
+				},
+			}
+		case fmt.Sprintf("%d", nextYear):
+			response.Response.Holidays = []calendarificHoliday{
+				{
+					Name:        "Next Year",
+					Description: "عطلة العام القادم",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: nextYearDate.Format("2006-01-02")},
+				},
+			}
+		}
+
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	uc := NewSyncEgyptPublicHolidaysUseCase(db, defRepo, server.URL, "UTC")
+	uc := NewSyncEgyptPublicHolidaysUseCase(db, defRepo, server.URL, "test-api-key", "EG", "UTC")
 	output, err := uc.Execute(context.Background())
 	if err != nil {
 		t.Fatalf("sync returned error: %v", err)
@@ -81,7 +155,7 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 		t.Fatalf("expected deleted absence=1 got %d", output.DeletedAbsenceCount)
 	}
 
-	upcomingCode := buildHolidayCode("Upcoming Global", upcomingDate)
+	upcomingCode := buildHolidayCode("Day off for Upcoming Global", dayOffDate)
 	upcomingDefinition, err := defRepo.GetByCode(context.Background(), db, upcomingCode)
 	if err != nil {
 		t.Fatalf("failed to get synced holiday: %v", err)
@@ -91,6 +165,17 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 	}
 	if upcomingDefinition.IsManual {
 		t.Fatal("expected synced upcoming holiday to be non-manual")
+	}
+	if upcomingDefinition.Date.Format("2006-01-02") != dayOffDate.Format("2006-01-02") {
+		t.Fatalf("expected synced holiday date=%s got %s", dayOffDate.Format("2006-01-02"), upcomingDefinition.Date.Format("2006-01-02"))
+	}
+
+	baseDefinition, err := defRepo.GetByCode(context.Background(), db, buildHolidayCode("Upcoming Global", upcomingDate))
+	if err != nil {
+		t.Fatalf("failed to check base holiday presence: %v", err)
+	}
+	if baseDefinition != nil {
+		t.Fatalf("expected base holiday to be filtered when day-off variant exists")
 	}
 
 	manualUpdated, err := defRepo.GetByCode(context.Background(), db, manualCode)
@@ -102,7 +187,7 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 	}
 
 	var remaining int
-	row := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM attendance_exceptions WHERE attendance_date = ? AND exception_type = ?`, upcomingDate.Format("2006-01-02"), domain.AttendanceExceptionTypeAbsence)
+	row := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM attendance_exceptions WHERE attendance_date = ? AND exception_type = ?`, dayOffDate.Format("2006-01-02"), domain.AttendanceExceptionTypeAbsence)
 	if err := row.Scan(&remaining); err != nil {
 		t.Fatalf("failed to count attendance exceptions: %v", err)
 	}
@@ -170,15 +255,36 @@ func TestSyncEgyptPublicHolidaysUseCase_ReconcilesUpcomingAutoOnly(t *testing.T)
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rows := []nagerHoliday{
-			{Date: keptFetchedDate.Format("2006-01-02"), Name: "Kept From Fetch", LocalName: "Kept From Fetch", Global: true},
-			{Date: manualUpcomingDate.Format("2006-01-02"), Name: "Manual Upcoming", LocalName: "Manual Upcoming", Global: true},
+		if got := strings.ToLower(r.URL.Query().Get("type")); got != "national" {
+			t.Fatalf("expected type=national got %q", got)
 		}
-		_ = json.NewEncoder(w).Encode(rows)
+
+		response := calendarificResponse{}
+		response.Response.Holidays = []calendarificHoliday{
+			{
+				Name:        "Kept From Fetch",
+				Description: "قادم",
+				PrimaryType: "National holiday",
+				Type:        []string{"National holiday"},
+				Date: struct {
+					ISO string "json:\"iso\""
+				}{ISO: keptFetchedDate.Format("2006-01-02")},
+			},
+			{
+				Name:        "Manual Upcoming",
+				Description: "يدوي",
+				PrimaryType: "National holiday",
+				Type:        []string{"National holiday"},
+				Date: struct {
+					ISO string "json:\"iso\""
+				}{ISO: manualUpcomingDate.Format("2006-01-02")},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
-	uc := NewSyncEgyptPublicHolidaysUseCase(db, defRepo, server.URL, "UTC")
+	uc := NewSyncEgyptPublicHolidaysUseCase(db, defRepo, server.URL, "test-api-key", "EG", "UTC")
 	output, err := uc.Execute(context.Background())
 	if err != nil {
 		t.Fatalf("sync returned error: %v", err)

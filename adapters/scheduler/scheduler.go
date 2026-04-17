@@ -9,21 +9,24 @@ import (
 )
 
 type Scheduler struct {
-	autoRejectUC *usecases.AutoRejectExpiredRequestsUseCase
-	interval     time.Duration
-	stopCh       chan struct{}
-	doneCh       chan struct{}
+	autoRejectUC  *usecases.AutoRejectExpiredRequestsUseCase
+	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase
+	interval      time.Duration
+	stopCh        chan struct{}
+	doneCh        chan struct{}
 }
 
 func New(
 	autoRejectUC *usecases.AutoRejectExpiredRequestsUseCase,
+	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase,
 	intervalHours int,
 ) *Scheduler {
 	return &Scheduler{
-		autoRejectUC: autoRejectUC,
-		interval:     time.Duration(intervalHours) * time.Hour,
-		stopCh:       make(chan struct{}),
-		doneCh:       make(chan struct{}),
+		autoRejectUC:  autoRejectUC,
+		holidaySyncUC: holidaySyncUC,
+		interval:      time.Duration(intervalHours) * time.Hour,
+		stopCh:        make(chan struct{}),
+		doneCh:        make(chan struct{}),
 	}
 }
 
@@ -69,6 +72,21 @@ func (s *Scheduler) runJobs(ctx context.Context) {
 			slog.Error("scheduler.runJobs.auto_reject", "error", err)
 		} else if output.RejectedCount > 0 {
 			slog.Info("scheduler.runJobs.auto_reject.completed", "rejected_count", output.RejectedCount)
+		}
+	}
+
+	if s.holidaySyncUC != nil {
+		output, err := s.holidaySyncUC.Execute(ctx)
+		if err != nil {
+			slog.Error("scheduler.runJobs.holiday_sync", "error", err)
+		} else if output.CreatedCount > 0 || output.UpdatedCount > 0 || output.DeletedAbsenceCount > 0 {
+			slog.Info(
+				"scheduler.runJobs.holiday_sync.completed",
+				"created", output.CreatedCount,
+				"updated", output.UpdatedCount,
+				"deleted_absences", output.DeletedAbsenceCount,
+				"skipped_past", output.SkippedPastCount,
+			)
 		}
 	}
 

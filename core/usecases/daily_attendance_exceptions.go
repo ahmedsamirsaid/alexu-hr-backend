@@ -188,6 +188,84 @@ func normalizeDateOnly(value time.Time) time.Time {
 	return time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.Local)
 }
 
+type nonWorkingDateChecker struct {
+	holidayRepo ports.HolidayDefinitionRepository
+	weekendSet  map[int]struct{}
+	holidaySet  map[string]struct{}
+	holidayMemo map[string]bool
+	db          ports.DB
+	ctx         context.Context
+}
+
+func newNonWorkingDateChecker(ctx context.Context, db ports.DB, weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository, start, end *time.Time) (*nonWorkingDateChecker, error) {
+	checker := &nonWorkingDateChecker{
+		holidayRepo: holidayRepo,
+		weekendSet:  make(map[int]struct{}),
+		holidaySet:  make(map[string]struct{}),
+		holidayMemo: make(map[string]bool),
+		db:          db,
+		ctx:         ctx,
+	}
+
+	if weekendRepo == nil {
+		return checker, nil
+	}
+
+	weekendDays, err := weekendRepo.GetWeekendDays(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, day := range weekendDays {
+		checker.weekendSet[day] = struct{}{}
+	}
+
+	if holidayRepo != nil && start != nil && end != nil {
+		holidays, err := holidayRepo.ListByDateRange(ctx, db, normalizeDateOnly(*start), normalizeDateOnly(*end).Add(24*time.Hour-time.Nanosecond))
+		if err != nil {
+			return nil, err
+		}
+
+		for _, holiday := range holidays {
+			checker.holidaySet[normalizeDateOnly(holiday.Date).Format("2006-01-02")] = struct{}{}
+		}
+	}
+
+	return checker, nil
+}
+
+func (c *nonWorkingDateChecker) IsNonWorking(dateValue time.Time) (bool, error) {
+	dateOnly := normalizeDateOnly(dateValue)
+	if _, exists := c.weekendSet[int(dateOnly.Weekday())]; exists {
+		return true, nil
+	}
+
+	dateKey := dateOnly.Format("2006-01-02")
+	if _, exists := c.holidaySet[dateKey]; exists {
+		return true, nil
+	}
+
+	if memoValue, exists := c.holidayMemo[dateKey]; exists {
+		return memoValue, nil
+	}
+	if c.holidayRepo == nil {
+		c.holidayMemo[dateKey] = false
+		return false, nil
+	}
+
+	holidays, err := c.holidayRepo.ListByDateRange(c.ctx, c.db, dateOnly, dateOnly.Add(24*time.Hour-time.Nanosecond))
+	if err != nil {
+		return false, err
+	}
+	hasHoliday := len(holidays) > 0
+	c.holidayMemo[dateKey] = hasHoliday
+	if hasHoliday {
+		c.holidaySet[dateKey] = struct{}{}
+	}
+
+	return hasHoliday, nil
+}
+
 func listDepartmentEmployeesForAttendance(ctx context.Context, db ports.DB, departmentUID string, filter ports.DepartmentAttendanceLogsFilter) ([]departmentEmployeeForAttendance, error) {
 	query := `
 		SELECT id, uid, name, department_uid, hire_date, status
@@ -252,9 +330,14 @@ func listDepartmentEmployeesForAttendance(ctx context.Context, db ports.DB, depa
 	return employees, nil
 }
 
-func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, items []DailyAttendanceLogItem, employees []departmentEmployeeForAttendance, departmentUID string, filter ports.DepartmentAttendanceLogsFilter, start, end time.Time) ([]DailyAttendanceLogItem, error) {
+func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository, items []DailyAttendanceLogItem, employees []departmentEmployeeForAttendance, departmentUID string, filter ports.DepartmentAttendanceLogsFilter, start, end time.Time) ([]DailyAttendanceLogItem, error) {
 	_ = leaveRepo
 	_ = employees
+
+	checker, err := newNonWorkingDateChecker(ctx, db, weekendRepo, holidayRepo, &start, &end)
+	if err != nil {
+		return nil, err
+	}
 
 	if filter.DeviceUID != nil || filter.PunchType != nil {
 		return items, nil
@@ -320,6 +403,14 @@ func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo po
 			return nil, err
 		}
 
+		nonWorking, err := checker.IsNonWorking(dateParsed)
+		if err != nil {
+			return nil, err
+		}
+		if nonWorking {
+			continue
+		}
+
 		key := dailyAttendanceKey(employeeUID, dateParsed)
 		if _, exists := itemByKey[key]; exists {
 			continue
@@ -349,8 +440,13 @@ func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo po
 	return items, nil
 }
 
-func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, items []DailyAttendanceLogItem, employees []departmentEmployeeForAttendance, departmentUID string, filter ports.DepartmentAttendanceLogsFilter) ([]DailyAttendanceLogItem, error) {
+func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository, items []DailyAttendanceLogItem, employees []departmentEmployeeForAttendance, departmentUID string, filter ports.DepartmentAttendanceLogsFilter) ([]DailyAttendanceLogItem, error) {
 	_ = leaveRepo
+
+	checker, err := newNonWorkingDateChecker(ctx, db, weekendRepo, holidayRepo, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if filter.DeviceUID != nil || filter.PunchType != nil {
 		return items, nil
@@ -410,6 +506,14 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 		}
 
 		for _, dateValue := range visibleDates {
+			nonWorking, err := checker.IsNonWorking(dateValue)
+			if err != nil {
+				return nil, err
+			}
+			if nonWorking {
+				continue
+			}
+
 			for _, employee := range employees {
 				if employee.HireDate.After(dateValue) {
 					continue
@@ -458,6 +562,14 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 			return nil, err
 		}
 
+		nonWorking, err := checker.IsNonWorking(dateParsed)
+		if err != nil {
+			return nil, err
+		}
+		if nonWorking {
+			continue
+		}
+
 		key := dailyAttendanceKey(employeeUID, dateParsed)
 		if _, exists := itemByKey[key]; exists {
 			continue
@@ -487,8 +599,13 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 	return items, nil
 }
 
-func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, items []DailyAttendanceLogItem, employee *domain.Employee, start, end time.Time) ([]DailyAttendanceLogItem, error) {
+func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository, items []DailyAttendanceLogItem, employee *domain.Employee, start, end time.Time) ([]DailyAttendanceLogItem, error) {
 	_ = leaveRepo
+
+	checker, err := newNonWorkingDateChecker(ctx, db, weekendRepo, holidayRepo, &start, &end)
+	if err != nil {
+		return nil, err
+	}
 
 	if employee == nil || employee.Status != domain.EmployeeStatusActive {
 		return items, nil
@@ -530,6 +647,14 @@ func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo port
 			return nil, err
 		}
 
+		nonWorking, err := checker.IsNonWorking(dateParsed)
+		if err != nil {
+			return nil, err
+		}
+		if nonWorking {
+			continue
+		}
+
 		key := dailyAttendanceKey(employeeUID, dateParsed)
 		if _, exists := itemByKey[key]; exists {
 			continue
@@ -560,8 +685,13 @@ func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo port
 	return items, nil
 }
 
-func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, items []DailyAttendanceLogItem, employee *domain.Employee) ([]DailyAttendanceLogItem, error) {
+func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, leaveRepo ports.LeaveRecordRepository, weekendRepo ports.WeekendConfigRepository, holidayRepo ports.HolidayDefinitionRepository, items []DailyAttendanceLogItem, employee *domain.Employee) ([]DailyAttendanceLogItem, error) {
 	_ = leaveRepo
+
+	checker, err := newNonWorkingDateChecker(ctx, db, weekendRepo, holidayRepo, nil, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	if employee == nil || employee.Status != domain.EmployeeStatusActive {
 		return items, nil
@@ -594,6 +724,14 @@ func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, le
 
 	visibleDates := visibleAttendanceDates(items)
 	for _, dateValue := range visibleDates {
+		nonWorking, err := checker.IsNonWorking(dateValue)
+		if err != nil {
+			return nil, err
+		}
+		if nonWorking {
+			continue
+		}
+
 		hasLeave, err := hasLeaveOnAttendanceDay(ctx, db, leaveRepo, employee.ID, dateValue)
 		if err != nil {
 			return nil, err
@@ -632,6 +770,14 @@ func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, le
 		dateParsed, err := time.Parse("2006-01-02", dateValue)
 		if err != nil {
 			return nil, err
+		}
+
+		nonWorking, err := checker.IsNonWorking(dateParsed)
+		if err != nil {
+			return nil, err
+		}
+		if nonWorking {
+			continue
 		}
 
 		key := dailyAttendanceKey(employeeUID, dateParsed)

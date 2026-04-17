@@ -33,12 +33,12 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux := http.NewServeMux()
 
-	protectedMux.HandleFunc("GET /api/v1/dashboard/stats", cfg.DashboardHandler.GetStats)
+	protectedMux.Handle("GET /api/v1/dashboard/stats", RequirePermission("employees:read")(http.HandlerFunc(cfg.DashboardHandler.GetStats)))
 	protectedMux.HandleFunc("POST /api/v1/auth/logout", cfg.AuthHandler.Logout)
 	protectedMux.HandleFunc("GET /api/v1/auth/me", cfg.AuthHandler.GetCurrentUser)
 
 	protectedMux.Handle("POST /api/v1/leave", RequirePermission("leave:record")(http.HandlerFunc(cfg.LeaveHandler.RecordLeave)))
-	protectedMux.Handle("GET /api/v1/leave-records", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveHandler.ListAllLeaveRecords)))
+	protectedMux.Handle("GET /api/v1/leave-records", RequirePermission("leave:record")(http.HandlerFunc(cfg.LeaveHandler.ListAllLeaveRecords)))
 	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/balance", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveHandler.GetBalance)))
 	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/leave-records", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveHandler.ListLeaveRecords)))
 
@@ -85,15 +85,15 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}/active", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.ToggleLeaveType)))
 
-	protectedMux.HandleFunc("POST /api/v1/leave-requests", cfg.LeaveRequestHandler.SubmitLeaveRequest)
-	protectedMux.HandleFunc("GET /api/v1/leave-requests", cfg.LeaveRequestHandler.ListLeaveRequests)
-	protectedMux.HandleFunc("GET /api/v1/leave-requests/{uid}", cfg.LeaveRequestHandler.GetLeaveRequest)
-	protectedMux.HandleFunc("POST /api/v1/leave-requests/{uid}/cancel", cfg.LeaveRequestHandler.CancelLeaveRequest)
+	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
+	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
+	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
+	protectedMux.Handle("POST /api/v1/leave-requests/{uid}/cancel", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.CancelLeaveRequest)))
 
-	protectedMux.HandleFunc("GET /api/v1/approvals/pending", cfg.LeaveRequestHandler.ListPendingApprovals)
-	protectedMux.HandleFunc("POST /api/v1/approvals/{uid}/approve", cfg.LeaveRequestHandler.ApproveRequest)
-	protectedMux.HandleFunc("POST /api/v1/approvals/{uid}/reject", cfg.LeaveRequestHandler.RejectRequest)
-	protectedMux.HandleFunc("GET /api/v1/approvals/{uid}/history", cfg.LeaveRequestHandler.GetApprovalHistory)
+	protectedMux.Handle("GET /api/v1/approvals/pending", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ListPendingApprovals)))
+	protectedMux.Handle("POST /api/v1/approvals/{uid}/approve", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ApproveRequest)))
+	protectedMux.Handle("POST /api/v1/approvals/{uid}/reject", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.RejectRequest)))
+	protectedMux.Handle("GET /api/v1/approvals/{uid}/history", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.GetApprovalHistory)))
 
 	protectedMux.HandleFunc("POST /api/v1/device-tokens", cfg.DeviceTokenHandler.Register)
 	protectedMux.HandleFunc("DELETE /api/v1/device-tokens/{uid}", cfg.DeviceTokenHandler.Unregister)

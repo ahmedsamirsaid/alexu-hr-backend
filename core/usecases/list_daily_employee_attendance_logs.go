@@ -9,12 +9,13 @@ import (
 )
 
 type ListDailyEmployeeAttendanceLogsOutput struct {
-	EmployeeUID string
-	Total       int
-	Page        int
-	PageSize    int
-	TotalPages  int
-	Records     []DailyAttendanceLogItem
+	EmployeeUID   string
+	DepartmentUID *string
+	Total         int
+	Page          int
+	PageSize      int
+	TotalPages    int
+	Records       []DailyAttendanceLogItem
 }
 
 type ListDailyEmployeeAttendanceLogsInput struct {
@@ -129,11 +130,12 @@ func (uc *ListDailyEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, i
 	pagedRecords := paginateDailyAttendanceItems(records, params)
 
 	return &ListDailyEmployeeAttendanceLogsOutput{
-		EmployeeUID: input.EmployeeUID,
-		Total:       total,
-		Page:        params.Page,
-		PageSize:    params.PageSize,
-		TotalPages:  ports.TotalPages(total, params.PageSize),
-		Records:     pagedRecords,
+		EmployeeUID:   input.EmployeeUID,
+		DepartmentUID: employee.DepartmentUID,
+		Total:         total,
+		Page:          params.Page,
+		PageSize:      params.PageSize,
+		TotalPages:    ports.TotalPages(total, params.PageSize),
+		Records:       pagedRecords,
 	}, nil
 }

@@ -15,11 +15,11 @@ import (
 
 // mockEmployeeRepoForImport implements EmployeeRepository for import tests
 type mockEmployeeRepoForImport struct {
-	employees           []*domain.Employee
-	existingGovIDs      []string
-	existingMobiles     []string
-	existingUniIDs      []string
-	createdEmployees    []*domain.Employee
+	employees        []*domain.Employee
+	existingGovIDs   []string
+	existingMobiles  []string
+	existingUniIDs   []string
+	createdEmployees []*domain.Employee
 }
 
 // mockUserRepoForImport implements UserRepository for import tests
@@ -174,6 +174,13 @@ func (m *mockRoleRepoForImport) GetDepartmentManager(ctx context.Context, q port
 	return nil, nil
 }
 
+func (m *mockRoleRepoForImport) GetManagedDepartmentUIDs(ctx context.Context, q ports.Querier, userID int64) ([]string, error) {
+	_ = ctx
+	_ = q
+	_ = userID
+	return nil, nil
+}
+
 // newTestImportUseCase creates a use case with default mocks for testing
 func newTestImportUseCase(db *mockDB, empRepo *mockEmployeeRepoForImport, userRepo *mockUserRepoForImport, roleRepo *mockRoleRepoForImport) *usecases.ImportEmployeesUseCase {
 	if userRepo == nil {
@@ -306,11 +313,11 @@ func TestImportEmployees_ValidFile(t *testing.T) {
 func TestImportEmployees_MissingRequiredFields(t *testing.T) {
 	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
 	rows := [][]string{
-		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},        // Missing name
-		{"فاطمة علي", "", "29002021234567", "EMP002", "", "2024-03-01", "active"},          // Missing mobile
-		{"عمر حسن", "01055555555", "", "EMP003", "", "2024-03-01", "active"},               // Missing gov ID
-		{"سارة أحمد", "01066666666", "30001011234567", "", "", "2024-03-01", "active"},     // Missing uni ID
-		{"محمد علي", "01077777777", "31001011234567", "EMP005", "", "", "active"},          // Missing hire date
+		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},    // Missing name
+		{"فاطمة علي", "", "29002021234567", "EMP002", "", "2024-03-01", "active"},      // Missing mobile
+		{"عمر حسن", "01055555555", "", "EMP003", "", "2024-03-01", "active"},           // Missing gov ID
+		{"سارة أحمد", "01066666666", "30001011234567", "", "", "2024-03-01", "active"}, // Missing uni ID
+		{"محمد علي", "01077777777", "31001011234567", "EMP005", "", "", "active"},      // Missing hire date
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -343,9 +350,9 @@ func TestImportEmployees_MissingRequiredFields(t *testing.T) {
 func TestImportEmployees_InvalidFormats(t *testing.T) {
 	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
 	rows := [][]string{
-		{"أحمد محمد", "invalid_mobile", "28501011234567", "EMP001", "", "2024-01-15", "active"},   // Invalid mobile
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "invalid-date", "active"},    // Invalid date
-		{"عمر حسن", "01055555555", "30001011234567", "EMP003", "", "2024-03-01", "unknown"},       // Invalid status
+		{"أحمد محمد", "invalid_mobile", "28501011234567", "EMP001", "", "2024-01-15", "active"}, // Invalid mobile
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "invalid-date", "active"},  // Invalid date
+		{"عمر حسن", "01055555555", "30001011234567", "EMP003", "", "2024-03-01", "unknown"},     // Invalid status
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -626,8 +633,8 @@ func TestImportEmployees_DuplicateUserPhoneError(t *testing.T) {
 func TestImportEmployees_DateFormats(t *testing.T) {
 	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},     // YYYY-MM-DD
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "15/01/2024", "active"},     // DD/MM/YYYY
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"}, // YYYY-MM-DD
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "15/01/2024", "active"}, // DD/MM/YYYY
 	}
 
 	buf := createTestExcelFile(t, headers, rows)

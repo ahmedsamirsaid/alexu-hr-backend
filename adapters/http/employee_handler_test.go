@@ -235,6 +235,13 @@ func (m *mockRoleRepo) GetDepartmentManager(ctx context.Context, q ports.Querier
 	return nil, nil
 }
 
+func (m *mockRoleRepo) GetManagedDepartmentUIDs(ctx context.Context, q ports.Querier, userID int64) ([]string, error) {
+	_ = ctx
+	_ = q
+	_ = userID
+	return nil, nil
+}
+
 // defaultMockRoleRepo returns a role repo with the Employee role
 func defaultMockRoleRepo() *mockRoleRepo {
 	return &mockRoleRepo{

@@ -176,6 +176,14 @@ func (h *AttendanceHandler) ListDepartmentLogs(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	claims := GetClaims(r)
+	if isScopedAttendanceClaims(claims) {
+		if !claims.HasDepartmentAccess(departmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+			return
+		}
+	}
+
 	query, err := parseAttendanceLogsListQuery(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -254,6 +262,14 @@ func (h *AttendanceHandler) ListEmployeeLogs(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	claims := GetClaims(r)
+	if isScopedAttendanceClaims(claims) {
+		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return
+		}
+	}
+
 	logs := make([]attendanceLogItemResponse, 0, len(output.Logs))
 	for _, item := range output.Logs {
 		logs = append(logs, attendanceLogItemResponse{
@@ -285,6 +301,14 @@ func (h *AttendanceHandler) ListDailyDepartmentLogs(w http.ResponseWriter, r *ht
 	if departmentUID == "" {
 		writeError(w, http.StatusBadRequest, "departmentUid is required")
 		return
+	}
+
+	claims := GetClaims(r)
+	if isScopedAttendanceClaims(claims) {
+		if !claims.HasDepartmentAccess(departmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+			return
+		}
 	}
 
 	query, err := parseDailyAttendanceLogsListQuery(r)
@@ -345,6 +369,14 @@ func (h *AttendanceHandler) ListDailyEmployeeLogs(w http.ResponseWriter, r *http
 	if err != nil {
 		h.writeUseCaseError(w, err)
 		return
+	}
+
+	claims := GetClaims(r)
+	if isScopedAttendanceClaims(claims) {
+		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, listDailyEmployeeLogsResponse{
@@ -623,6 +655,10 @@ func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) 
 	}
 }
 
+func isScopedAttendanceClaims(claims *JWTClaims) bool {
+	return claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0
+}
+
 func decodeCreateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*parsedCreateAttendanceLogRequest, bool) {
 	var req createAttendanceLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -804,15 +840,15 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 			checkOut = &v
 		}
 
-		records = append(records, dailyAttendanceLogItemResponse{	
+		records = append(records, dailyAttendanceLogItemResponse{
 			Date:              item.Date.Format("2006-01-02"),
 			EmployeeUID:       item.EmployeeUID,
 			EmployeeName:      item.EmployeeName,
 			DepartmentUID:     item.DepartmentUID,
 			CheckIn:           checkIn,
-			ChecInLogUID: item.ChechInLogUID,
+			ChecInLogUID:      item.ChechInLogUID,
 			CheckOut:          checkOut,
-			CheckOutLogUID: item.CheckOutLogUID,
+			CheckOutLogUID:    item.CheckOutLogUID,
 			CheckInDevice:     item.CheckInDevice,
 			CheckInDeviceUID:  item.CheckInDeviceUID,
 			CheckOutDevice:    item.CheckOutDevice,

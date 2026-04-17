@@ -360,3 +360,38 @@ func (r *RoleRepository) GetDepartmentManager(ctx context.Context, q ports.Queri
 	row := q.QueryRowContext(ctx, query, departmentUID)
 	return userRepo.scanUser(row)
 }
+
+func (r *RoleRepository) GetManagedDepartmentUIDs(ctx context.Context, q ports.Querier, userID int64) ([]string, error) {
+	query := `
+		SELECT DISTINCT ur.department_uid
+		FROM user_roles ur
+		JOIN roles r ON ur.role_id = r.id
+		WHERE ur.user_id = ?
+		  AND r.uid = 'role_department_manager'
+		  AND ur.department_uid IS NOT NULL
+		ORDER BY ur.department_uid ASC`
+
+	rows, err := q.QueryContext(ctx, query, userID)
+	if err != nil {
+		slog.Error("role_repository.GetManagedDepartmentUIDs.query", "error", err, "user_id", userID)
+		return nil, err
+	}
+	defer rows.Close()
+
+	managedDepartmentUIDs := make([]string, 0)
+	for rows.Next() {
+		var departmentUID string
+		if err := rows.Scan(&departmentUID); err != nil {
+			slog.Error("role_repository.GetManagedDepartmentUIDs.scan_row", "error", err, "user_id", userID)
+			return nil, err
+		}
+		managedDepartmentUIDs = append(managedDepartmentUIDs, departmentUID)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("role_repository.GetManagedDepartmentUIDs.rows_iteration", "error", err, "user_id", userID)
+		return nil, err
+	}
+
+	return managedDepartmentUIDs, nil
+}

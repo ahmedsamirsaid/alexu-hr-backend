@@ -372,7 +372,25 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 			e.name,
 			e.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
+			(
+			SELECT ar1.uid
+			FROM attendance_records ar1
+			WHERE ar1.employee_uid = ar.employee_uid
+				AND date(ar1.punched_at) = date(ar.punched_at)
+				AND ar1.punch_type IN ('check_in', 'unknown')
+			ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+			LIMIT 1
+			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
+			(
+			SELECT ar2.uid
+			FROM attendance_records ar2
+			WHERE ar2.employee_uid = ar.employee_uid
+				AND date(ar2.punched_at) = date(ar.punched_at)
+				AND ar2.punch_type IN ('check_out', 'unknown')
+			ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+			LIMIT 1
+			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1

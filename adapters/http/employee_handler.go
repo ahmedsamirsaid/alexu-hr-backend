@@ -92,6 +92,7 @@ type EmployeeListItemResponse struct {
 
 // GetEmployee handles GET /api/v1/employees/{uid}
 func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
@@ -111,6 +112,13 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if isScopedDepartmentClaims(claims) {
+		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return
+		}
+	}
+
 	writeJSON(w, http.StatusOK, GetEmployeeResponse{
 		UID:           output.UID,
 		Name:          output.Name,
@@ -127,10 +135,15 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 
 // ListEmployees handles GET /api/v1/employees
 func (h *EmployeeHandler) ListEmployees(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	input, err := parseListFilters(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if isScopedDepartmentClaims(claims) {
+		input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
 	}
 
 	output, err := h.listUC.Execute(r.Context(), input)
@@ -230,6 +243,12 @@ func (h *EmployeeHandler) ImportEmployees(w http.ResponseWriter, r *http.Request
 
 // ExportEmployees handles GET /api/v1/employees/export
 func (h *EmployeeHandler) ExportEmployees(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if isScopedDepartmentClaims(claims) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Export is not permitted for scoped department users")
+		return
+	}
+
 	input, err := parseExportFilters(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -248,6 +267,12 @@ func (h *EmployeeHandler) ExportEmployees(w http.ResponseWriter, r *http.Request
 
 // ExportEmployeesPDF handles GET /api/v1/employees/export/pdf
 func (h *EmployeeHandler) ExportEmployeesPDF(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if isScopedDepartmentClaims(claims) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Export is not permitted for scoped department users")
+		return
+	}
+
 	input, err := parseExportFilters(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -430,6 +455,10 @@ func isXLSXFile(filename string) bool {
 	}
 	ext := filename[len(filename)-5:]
 	return ext == ".xlsx"
+}
+
+func isScopedDepartmentClaims(claims *JWTClaims) bool {
+	return claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0
 }
 
 func writeFileResponse(w http.ResponseWriter, data []byte, filename, contentType string) {

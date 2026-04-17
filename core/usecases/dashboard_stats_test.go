@@ -58,6 +58,59 @@ type mockLeaveRecordRepoForDashboard struct {
 	err         error
 }
 
+type mockLeaveRequestRepoForDashboard struct {
+	count int
+	err   error
+}
+
+func (m *mockLeaveRequestRepoForDashboard) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) GetByApprovalRequestUID(ctx context.Context, q ports.Querier, approvalRequestUID string) (*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) Create(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
+	return nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) Update(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
+	return nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) ListByEmployee(ctx context.Context, q ports.Querier, employeeUID string) ([]*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) ListByEmployeePaginated(ctx context.Context, q ports.Querier, employeeUID string, limit, offset int) ([]*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) CountByEmployee(ctx context.Context, q ports.Querier, employeeUID string) (int, error) {
+	return 0, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) HasOverlapping(ctx context.Context, q ports.Querier, employeeUID string, startDate, endDate time.Time, excludeUID *string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) List(ctx context.Context, q ports.Querier, filter ports.LeaveRequestListFilter, limit, offset int) ([]*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
+func (m *mockLeaveRequestRepoForDashboard) Count(ctx context.Context, q ports.Querier, filter ports.LeaveRequestListFilter) (int, error) {
+	return m.count, m.err
+}
+
+func (m *mockLeaveRequestRepoForDashboard) FindExpiredPending(ctx context.Context, q ports.Querier, graceDays int) ([]*domain.LeaveRequest, error) {
+	return nil, nil
+}
+
 func (m *mockLeaveRecordRepoForDashboard) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveRecord, error) {
 	return nil, nil
 }
@@ -146,10 +199,11 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 			db := &mockDB{tx: &mockTx{}}
 			employeeRepo := &mockEmployeeRepoForDashboard{count: tt.employeeCount}
 			leaveRecordRepo := &mockLeaveRecordRepoForDashboard{leavesToday: tt.leavesToday}
+			leaveRequestRepo := &mockLeaveRequestRepoForDashboard{}
 
-			uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo)
+			uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo)
 
-			output, err := uc.Execute(context.Background())
+			output, err := uc.Execute(context.Background(), usecases.GetDashboardStatsInput{})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -174,10 +228,11 @@ func TestGetDashboardStatsUseCase_PendingRequestsAlwaysZero(t *testing.T) {
 	db := &mockDB{tx: &mockTx{}}
 	employeeRepo := &mockEmployeeRepoForDashboard{count: 100}
 	leaveRecordRepo := &mockLeaveRecordRepoForDashboard{leavesToday: 10}
+	leaveRequestRepo := &mockLeaveRequestRepoForDashboard{}
 
-	uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo)
+	uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo)
 
-	output, err := uc.Execute(context.Background())
+	output, err := uc.Execute(context.Background(), usecases.GetDashboardStatsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

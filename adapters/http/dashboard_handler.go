@@ -28,7 +28,13 @@ func NewDashboardHandler(getStatsUC *usecases.GetDashboardStatsUseCase) *Dashboa
 
 // GetStats handles GET /api/v1/dashboard/stats
 func (h *DashboardHandler) GetStats(w http.ResponseWriter, r *http.Request) {
-	output, err := h.getStatsUC.Execute(r.Context())
+	claims := GetClaims(r)
+	input := usecases.GetDashboardStatsInput{}
+	if claims != nil && !claims.HasPermission("*") {
+		input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
+	}
+
+	output, err := h.getStatsUC.Execute(r.Context(), input)
 	if err != nil {
 		slog.Error("dashboard_handler.GetStats.execute_usecase", "error", err)
 		writeError(w, http.StatusInternalServerError, err.Error())

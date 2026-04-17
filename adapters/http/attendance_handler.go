@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -160,6 +163,8 @@ type monthlyAttendanceStatsResponse struct {
 	Month                string                      `json:"month"`
 	TotalWorkedHours     float64                     `json:"totalWorkedHours"`
 	AverageCheckInTime   *string                     `json:"averageCheckInTime,omitempty"`
+	AverageCheckOutTime  *string                     `json:"averageCheckOutTime,omitempty"`
+	MissingCheckInCount  int                         `json:"missingCheckInCount"`
 	MissingCheckOutCount int                         `json:"missingCheckOutCount"`
 	WorkingHoursByDay    []workingHoursByDayResponse `json:"workingHoursByDay"`
 }
@@ -462,8 +467,94 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	monthValue := strings.TrimSpace(r.URL.Query().Get("month"))
+	yearValue := strings.TrimSpace(r.URL.Query().Get("year"))
+	startDateValue := strings.TrimSpace(r.URL.Query().Get("startDate"))
+	endDateValue := strings.TrimSpace(r.URL.Query().Get("endDate"))
+
+	if monthValue != "" && (yearValue != "" || startDateValue != "" || endDateValue != "") {
+		writeError(w, http.StatusBadRequest, "month cannot be combined with year/startDate/endDate")
+		return
+	}
+	if yearValue != "" && (startDateValue != "" || endDateValue != "") {
+		writeError(w, http.StatusBadRequest, "year cannot be combined with startDate/endDate")
+		return
+	}
+	if (startDateValue == "") != (endDateValue == "") {
+		writeError(w, http.StatusBadRequest, "startDate and endDate must be provided together")
+		return
+	}
+
+	var startDate *time.Time
+	var endDate *time.Time
+	var periodLabel *string
+
+	if monthValue != "" {
+		monthStart, err := time.Parse("2006-01", monthValue)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid month format, expected YYYY-MM")
+			return
+		}
+
+		monthEnd := monthStart.AddDate(0, 1, 0).Add(-time.Nanosecond)
+		now := time.Now()
+		if monthStart.Year() == now.Year() && monthStart.Month() == now.Month() {
+			todayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), now.Location())
+			if monthEnd.After(todayEnd) {
+				monthEnd = todayEnd
+			}
+		}
+
+		startDate = &monthStart
+		endDate = &monthEnd
+		periodLabel = &monthValue
+	} else if yearValue != "" {
+		year, err := strconv.Atoi(yearValue)
+		if err != nil || year < 1 || year > 9999 {
+			writeError(w, http.StatusBadRequest, "invalid year format, expected YYYY")
+			return
+		}
+
+		yearStart := time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC)
+		yearEnd := time.Date(year, time.December, 31, 23, 59, 59, int(time.Second-time.Nanosecond), time.UTC)
+		now := time.Now()
+		if year == now.Year() {
+			todayEnd := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), now.Location())
+			if yearEnd.After(todayEnd) {
+				yearEnd = todayEnd
+			}
+		}
+
+		startDate = &yearStart
+		endDate = &yearEnd
+		periodLabel = &yearValue
+	} else if startDateValue != "" && endDateValue != "" {
+		start, err := parseAttendanceListDateTime(startDateValue, false)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid startDate parameter")
+			return
+		}
+		end, err := parseAttendanceListDateTime(endDateValue, true)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid endDate parameter")
+			return
+		}
+		if start.After(end) {
+			writeError(w, http.StatusBadRequest, "startDate must be before or equal to endDate")
+			return
+		}
+
+		startDate = &start
+		endDate = &end
+		label := fmt.Sprintf("%s to %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+		periodLabel = &label
+	}
+
 	output, err := h.getMonthlyStatsUC.Execute(r.Context(), usecases.GetMonthlyAttendanceStatsInput{
 		EmployeeUID: employeeUID,
+		StartDate:   startDate,
+		EndDate:     endDate,
+		PeriodLabel: periodLabel,
 	})
 	if err != nil {
 		h.writeUseCaseError(w, err)
@@ -474,6 +565,12 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 	if output.AverageCheckInTime != nil {
 		v := output.AverageCheckInTime.Format("15:04:05")
 		averageCheckInTime = &v
+	}
+
+	var averageCheckOutTime *string
+	if output.AverageCheckOutTime != nil {
+		v := output.AverageCheckOutTime.Format("15:04:05")
+		averageCheckOutTime = &v
 	}
 
 	workingHoursByDay := make([]workingHoursByDayResponse, 0, len(output.WorkingHoursByDay))
@@ -489,6 +586,8 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		Month:                output.Month,
 		TotalWorkedHours:     output.TotalWorkedHours,
 		AverageCheckInTime:   averageCheckInTime,
+		AverageCheckOutTime:  averageCheckOutTime,
+		MissingCheckInCount:  output.MissingCheckInCount,
 		MissingCheckOutCount: output.MissingCheckOutCount,
 		WorkingHoursByDay:    workingHoursByDay,
 	})

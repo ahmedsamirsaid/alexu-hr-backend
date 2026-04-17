@@ -31,6 +31,8 @@ func (m *mockMonthlyStatsDB) ExecContext(ctx context.Context, query string, args
 type mockAttendanceRecordRepoForMonthlyStats struct {
 	records        []*domain.AttendanceRecord
 	gotEmployeeUID *string
+	gotStartDate   *time.Time
+	gotEndDate     *time.Time
 }
 
 func (m *mockAttendanceRecordRepoForMonthlyStats) Create(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) (bool, error) {
@@ -51,6 +53,8 @@ func (m *mockAttendanceRecordRepoForMonthlyStats) ListByDate(ctx context.Context
 
 func (m *mockAttendanceRecordRepoForMonthlyStats) ListByDateRange(ctx context.Context, q ports.Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
 	m.gotEmployeeUID = employeeUID
+	m.gotStartDate = &startDate
+	m.gotEndDate = &endDate
 	return m.records, nil
 }
 
@@ -115,6 +119,12 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute(t *testing.T) {
 	if repo.gotEmployeeUID == nil || *repo.gotEmployeeUID != "emp_1" {
 		t.Fatalf("employeeUID filter = %v, want emp_1", repo.gotEmployeeUID)
 	}
+	if repo.gotStartDate == nil || repo.gotStartDate.Format("2006-01-02 15:04:05") != "2026-04-01 00:00:00" {
+		t.Fatalf("startDate = %v, want 2026-04-01 00:00:00", repo.gotStartDate)
+	}
+	if repo.gotEndDate == nil || repo.gotEndDate.Format("2006-01-02 15:04:05") != "2026-04-03 23:59:59" {
+		t.Fatalf("endDate = %v, want 2026-04-03 23:59:59", repo.gotEndDate)
+	}
 
 	if output.Month != "2026-04" {
 		t.Fatalf("Month = %q, want %q", output.Month, "2026-04")
@@ -124,6 +134,12 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute(t *testing.T) {
 	}
 	if output.AverageCheckInTime == nil || output.AverageCheckInTime.Format("15:04:05") != "08:15:00" {
 		t.Fatalf("AverageCheckInTime = %v, want 08:15:00", output.AverageCheckInTime)
+	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "16:45:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 16:45:00", output.AverageCheckOutTime)
+	}
+	if output.MissingCheckInCount != 0 {
+		t.Fatalf("MissingCheckInCount = %d, want 0", output.MissingCheckInCount)
 	}
 	if output.MissingCheckOutCount != 1 {
 		t.Fatalf("MissingCheckOutCount = %d, want 1", output.MissingCheckOutCount)
@@ -139,5 +155,94 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute(t *testing.T) {
 	}
 	if output.WorkingHoursByDay[2].Date.Format("2006-01-02") != "2026-04-03" || output.WorkingHoursByDay[2].WorkedHours != 8.25 {
 		t.Fatalf("day 3 = %+v, want date 2026-04-03 with 8.25 hours", output.WorkingHoursByDay[2])
+	}
+}
+
+func TestGetMonthlyAttendanceStatsUseCaseExecute_WithCustomRange(t *testing.T) {
+	repo := &mockAttendanceRecordRepoForMonthlyStats{
+		records: []*domain.AttendanceRecord{
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 14, 8, 45, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckIn},
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 14, 17, 0, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckOut},
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 15, 9, 0, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckIn},
+		},
+	}
+
+	uc := NewGetMonthlyAttendanceStatsUseCase(&mockMonthlyStatsDB{}, repo)
+
+	start := time.Date(2026, 4, 14, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 15, 23, 59, 59, 0, time.UTC)
+	label := "2026-04-14 to 2026-04-15"
+
+	output, err := uc.Execute(context.Background(), GetMonthlyAttendanceStatsInput{
+		EmployeeUID: "emp_1",
+		StartDate:   &start,
+		EndDate:     &end,
+		PeriodLabel: &label,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if repo.gotStartDate == nil || repo.gotStartDate.Format("2006-01-02 15:04:05") != "2026-04-14 00:00:00" {
+		t.Fatalf("startDate = %v, want 2026-04-14 00:00:00", repo.gotStartDate)
+	}
+	if repo.gotEndDate == nil || repo.gotEndDate.Format("2006-01-02 15:04:05") != "2026-04-15 23:59:59" {
+		t.Fatalf("endDate = %v, want 2026-04-15 23:59:59", repo.gotEndDate)
+	}
+	if output.Month != label {
+		t.Fatalf("Month = %q, want %q", output.Month, label)
+	}
+	if len(output.WorkingHoursByDay) != 2 {
+		t.Fatalf("len(WorkingHoursByDay) = %d, want 2", len(output.WorkingHoursByDay))
+	}
+	if output.WorkingHoursByDay[0].Date.Format("2006-01-02") != "2026-04-14" || output.WorkingHoursByDay[0].WorkedHours != 8.25 {
+		t.Fatalf("day 1 = %+v, want date 2026-04-14 with 8.25 hours", output.WorkingHoursByDay[0])
+	}
+	if output.WorkingHoursByDay[1].Date.Format("2006-01-02") != "2026-04-15" || output.WorkingHoursByDay[1].WorkedHours != 0 {
+		t.Fatalf("day 2 = %+v, want date 2026-04-15 with 0 hours", output.WorkingHoursByDay[1])
+	}
+	if output.MissingCheckOutCount != 1 {
+		t.Fatalf("MissingCheckOutCount = %d, want 1", output.MissingCheckOutCount)
+	}
+	if output.MissingCheckInCount != 0 {
+		t.Fatalf("MissingCheckInCount = %d, want 0", output.MissingCheckInCount)
+	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "17:00:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 17:00:00", output.AverageCheckOutTime)
+	}
+}
+
+func TestGetMonthlyAttendanceStatsUseCaseExecute_WithMissingCheckIn(t *testing.T) {
+	repo := &mockAttendanceRecordRepoForMonthlyStats{
+		records: []*domain.AttendanceRecord{
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 20, 17, 30, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckOut},
+		},
+	}
+
+	uc := NewGetMonthlyAttendanceStatsUseCase(&mockMonthlyStatsDB{}, repo)
+
+	start := time.Date(2026, 4, 20, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 20, 23, 59, 59, 0, time.UTC)
+
+	output, err := uc.Execute(context.Background(), GetMonthlyAttendanceStatsInput{
+		EmployeeUID: "emp_1",
+		StartDate:   &start,
+		EndDate:     &end,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if output.MissingCheckInCount != 1 {
+		t.Fatalf("MissingCheckInCount = %d, want 1", output.MissingCheckInCount)
+	}
+	if output.MissingCheckOutCount != 0 {
+		t.Fatalf("MissingCheckOutCount = %d, want 0", output.MissingCheckOutCount)
+	}
+	if output.AverageCheckInTime != nil {
+		t.Fatalf("AverageCheckInTime = %v, want nil", output.AverageCheckInTime)
+	}
+	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "17:30:00" {
+		t.Fatalf("AverageCheckOutTime = %v, want 17:30:00", output.AverageCheckOutTime)
 	}
 }

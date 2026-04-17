@@ -74,8 +74,26 @@ func (uc *ListDailyEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, i
 		EndDate:          input.EndDate,
 	}
 
-	rangeStart, rangeEnd, hasRange := expandDateRange(filter.StartDate, filter.EndDate)
-	if !hasRange {
+	var rangeStart time.Time
+	var rangeEnd time.Time
+
+	if filter.StartDate != nil || filter.EndDate != nil {
+		if filter.StartDate != nil {
+			rangeStart = normalizeDateOnly(*filter.StartDate)
+		}
+		if filter.EndDate != nil {
+			rangeEnd = normalizeDateOnly(*filter.EndDate)
+		}
+		if filter.StartDate == nil {
+			rangeStart = rangeEnd
+		}
+		if filter.EndDate == nil {
+			rangeEnd = rangeStart
+		}
+		if rangeEnd.Before(rangeStart) {
+			rangeStart, rangeEnd = rangeEnd, rangeStart
+		}
+	} else {
 		rangeEnd = time.Now()
 		rangeStart = normalizeDateOnly(rangeEnd.AddDate(0, 0, -6))
 		rangeEnd = normalizeDateOnly(rangeEnd).Add(24*time.Hour - time.Nanosecond)

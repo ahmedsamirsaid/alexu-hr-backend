@@ -152,6 +152,12 @@ func (m *mockAttendanceRecordRepo) CountDailyByEmployeeUID(ctx context.Context, 
 	return m.countReturn, nil
 }
 
+func (m *mockAttendanceRecordRepo) ListDaily(ctx context.Context, q ports.Querier, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
+	m.gotFilter = filter
+	m.gotListParams = params
+	return m.dailyListReturn, nil
+}
+
 func (m *mockAttendanceRecordRepo) ResolveEmployeeUIDByDeviceUserID(ctx context.Context, q ports.Querier, deviceUserID string) (*string, error) {
 	return nil, nil
 }

@@ -21,6 +21,7 @@ type RouterConfig struct {
 	WeekendHandler          *WeekendHandler
 	AttendanceHandler       *AttendanceHandler
 	HolidayHandler          *HolidayHandler
+	DebugHandler            *DebugHandler
 	JWTService              *JWTService
 	AuthEnabled             bool
 }
@@ -112,6 +113,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/attendance/summary/daily", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetDailySummary)))
 
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices/stats", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Stats)))
+	protectedMux.Handle("POST /api/v1/admin/debug/push-test", RequirePermission("users:write")(http.HandlerFunc(cfg.DebugHandler.SendTestPush)))
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.List)))
 	protectedMux.Handle("GET /api/v1/admin/attendance-devices/{uid}", RequirePermission("attendance-devices:read")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Get)))
 	protectedMux.Handle("POST /api/v1/admin/attendance-devices", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Register)))

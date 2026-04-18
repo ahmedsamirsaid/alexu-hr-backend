@@ -90,6 +90,10 @@ func (m *mockAttendanceRecordRepoForMonthlyStats) CountDailyByEmployeeUID(ctx co
 	return 0, nil
 }
 
+func (m *mockAttendanceRecordRepoForMonthlyStats) ListDaily(ctx context.Context, q ports.Querier, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
+	return nil, nil
+}
+
 func (m *mockAttendanceRecordRepoForMonthlyStats) ResolveEmployeeUIDByDeviceUserID(ctx context.Context, q ports.Querier, deviceUserID string) (*string, error) {
 	return nil, nil
 }

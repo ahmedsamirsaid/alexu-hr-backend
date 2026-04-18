@@ -111,7 +111,8 @@ func (s *FCMNotificationService) sendToToken(token, title, body string, data por
 		Android: &messaging.AndroidConfig{
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
-				ChannelID: "approval_channel",
+				ChannelID: "APPROVAL_CHANNEL",
+				Sound: "default",
 			},
 		},
 		APNS: &messaging.APNSConfig{

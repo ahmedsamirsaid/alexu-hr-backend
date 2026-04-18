@@ -53,5 +53,6 @@ type AttendanceRecordRepository interface {
 	CountDailyByDepartmentUID(ctx context.Context, q Querier, departmentUID string, filter DepartmentAttendanceLogsFilter) (int, error)
 	ListDailyByEmployeeUID(ctx context.Context, q Querier, employeeUID string, filter DepartmentAttendanceLogsFilter, params ListParams) ([]*DailyAttendanceGroup, error)
 	CountDailyByEmployeeUID(ctx context.Context, q Querier, employeeUID string, filter DepartmentAttendanceLogsFilter) (int, error)
+	ListDaily(ctx context.Context, q Querier, filter DepartmentAttendanceLogsFilter, params ListParams) ([]*DailyAttendanceGroup, error)
 	ResolveEmployeeUIDByDeviceUserID(ctx context.Context, q Querier, deviceUserID string) (*string, error)
 }

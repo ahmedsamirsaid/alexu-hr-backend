@@ -34,6 +34,7 @@ type AppConfig struct {
 	HolidaySyncAPIKey      string
 	HolidaySyncCountry     string
 	HolidaySyncTimezone    string
+	SchedulerIntervalMinutes int
 }
 
 func LoadConfig() *AppConfig {
@@ -62,6 +63,7 @@ func LoadConfig() *AppConfig {
 		SchedulerEnabled:       getEnvBool("BANU_MUSA_SCHEDULER_ENABLED", true),
 		ExpiredLeaveGraceDays:  getEnvInt("BANU_MUSA_EXPIRED_LEAVE_GRACE_DAYS", 1),
 		SchedulerIntervalHours: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_HOURS", 1),
+		SchedulerIntervalMinutes: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_MINUTES", 1),
 		HolidaySyncEndpoint:    getEnv("BANU_MUSA_HOLIDAY_SYNC_ENDPOINT", "https://calendarific.com/api/v2/holidays"),
 		HolidaySyncAPIKey:      getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", ""),
 		HolidaySyncCountry:     getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),

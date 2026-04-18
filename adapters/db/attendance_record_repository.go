@@ -470,6 +470,90 @@ func (r *AttendanceRecordRepository) CountDailyByEmployeeUID(ctx context.Context
 	return total, nil
 }
 
+func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Querier, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
+	baseQuery := `
+		SELECT
+			date(ar.punched_at) AS attendance_date,
+			ar.employee_uid,
+			e.name,
+			e.department_uid,
+			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
+			(
+				SELECT ar1.uid
+				FROM attendance_records ar1
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_log_uid,
+			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
+			(
+				SELECT ar2.uid
+				FROM attendance_records ar2
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_log_uid,
+			(
+				SELECT ad1.name
+				FROM attendance_records ar1
+				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_device,
+			(
+				SELECT ad1.uid
+				FROM attendance_records ar1
+				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
+				WHERE ar1.employee_uid = ar.employee_uid
+					AND date(ar1.punched_at) = date(ar.punched_at)
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				LIMIT 1
+			) AS check_in_device_uid,
+			(
+				SELECT ad2.name
+				FROM attendance_records ar2
+				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_device,
+			(
+				SELECT ad2.uid
+				FROM attendance_records ar2
+				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
+				WHERE ar2.employee_uid = ar.employee_uid
+					AND date(ar2.punched_at) = date(ar.punched_at)
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				LIMIT 1
+			) AS check_out_device_uid
+		FROM attendance_records ar
+		INNER JOIN employees e ON e.uid = ar.employee_uid
+		WHERE 1 = 1`
+
+	whereClause, args := buildAttendanceLogsWhere(filter)
+	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
+	if err != nil {
+		return nil, err
+	}
+
+	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
+		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
+	args = append(args, params.PageSize, params.Offset())
+
+	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDaily", "scope", "all")
+}
+
 func (r *AttendanceRecordRepository) ResolveEmployeeUIDByDeviceUserID(ctx context.Context, q ports.Querier, deviceUserID string) (*string, error) {
 	query := `
 		SELECT uid
@@ -710,6 +794,54 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 func buildDepartmentAttendanceLogsWhere(departmentUID string, filter ports.DepartmentAttendanceLogsFilter) (string, []any) {
 	clauses := []string{}
 	args := []any{departmentUID}
+
+	if filter.EmployeeUID != nil {
+		clauses = append(clauses, "ar.employee_uid = ?")
+		args = append(args, *filter.EmployeeUID)
+	}
+	if filter.EmployeeName != nil {
+		mode := "contains"
+		if filter.EmployeeNameMode != nil && *filter.EmployeeNameMode != "" {
+			mode = *filter.EmployeeNameMode
+		}
+
+		switch mode {
+		case "equals":
+			clauses = append(clauses, "e.name = ?")
+			args = append(args, *filter.EmployeeName)
+		case "contains":
+			clauses = append(clauses, "e.name LIKE ?")
+			args = append(args, "%"+*filter.EmployeeName+"%")
+		}
+	}
+	if filter.DeviceUID != nil {
+		clauses = append(clauses, "ar.device_uid = ?")
+		args = append(args, *filter.DeviceUID)
+	}
+	if filter.PunchType != nil {
+		clauses = append(clauses, "ar.punch_type = ?")
+		args = append(args, *filter.PunchType)
+	}
+	if filter.StartDate != nil {
+		clauses = append(clauses, "datetime(ar.punched_at) >= datetime(?)")
+		args = append(args, filter.StartDate.Format(time.RFC3339))
+	}
+	if filter.EndDate != nil {
+		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
+		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
+		args = append(args, inclusiveEndDate.Format(time.RFC3339))
+	}
+
+	if len(clauses) == 0 {
+		return "", args
+	}
+
+	return " AND " + strings.Join(clauses, " AND "), args
+}
+
+func buildAttendanceLogsWhere(filter ports.DepartmentAttendanceLogsFilter) (string, []any) {
+	clauses := []string{}
+	args := []any{}
 
 	if filter.EmployeeUID != nil {
 		clauses = append(clauses, "ar.employee_uid = ?")

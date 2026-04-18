@@ -17,7 +17,7 @@ func TestLeaveRecordRepository_Create(t *testing.T) {
 
 	// Seed dependencies
 	employee := tdb.SeedEmployee("Ahmed Hassan")
-	leaveType := tdb.SeedLeaveType("CASUAL", "Casual Leave", "العارضة", 7)
+	leaveType := tdb.SeedLeaveType("CASUAL_"+domain.GenerateUID("lt"), "Casual Leave", "العارضة", 7)
 
 	record := &domain.LeaveRecord{
 		UID:         domain.GenerateUID("leave"),
@@ -52,7 +52,7 @@ func TestLeaveRecordRepository_GetByID(t *testing.T) {
 
 	// Seed dependencies and create record
 	employee := tdb.SeedEmployee("Ahmed Hassan")
-	leaveType := tdb.SeedLeaveType("CASUAL", "Casual Leave", "العارضة", 7)
+	leaveType := tdb.SeedLeaveType("CASUAL_"+domain.GenerateUID("lt"), "Casual Leave", "العارضة", 7)
 
 	notes := "Family emergency"
 	record := &domain.LeaveRecord{
@@ -241,10 +241,10 @@ func TestLeaveRecordRepository_ListByEmployeeAndDateRange(t *testing.T) {
 		startDate string
 		endDate   string
 	}{
-		{"2026-01-05", "2026-01-05"},  // Outside range (before)
-		{"2026-01-10", "2026-01-11"},  // Inside range
-		{"2026-01-15", "2026-01-15"},  // Inside range
-		{"2026-01-25", "2026-01-26"},  // Outside range (after)
+		{"2026-01-05", "2026-01-05"}, // Outside range (before)
+		{"2026-01-10", "2026-01-11"}, // Inside range
+		{"2026-01-15", "2026-01-15"}, // Inside range
+		{"2026-01-25", "2026-01-26"}, // Outside range (after)
 	}
 
 	for _, d := range dates {
@@ -408,5 +408,73 @@ func TestLeaveRecordRepository_Transaction(t *testing.T) {
 	}
 	if found != nil {
 		t.Error("Record should not exist after rollback")
+	}
+}
+
+func TestLeaveRecordRepository_CountOnLeaveToday_UsesDateOnlyMatching(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	repo := NewLeaveRecordRepository()
+	ctx := context.Background()
+
+	employee := tdb.SeedEmployee("Ahmed Hassan")
+	leaveType := tdb.SeedLeaveType("CASUAL_"+domain.GenerateUID("lt"), "Casual Leave", "العارضة", 7)
+
+	record := &domain.LeaveRecord{
+		UID:         domain.GenerateUID("leave"),
+		EmployeeID:  employee.ID,
+		LeaveTypeID: leaveType.ID,
+		StartDate:   ParseDate(t, "2026-04-18"),
+		EndDate:     ParseDate(t, "2026-04-18"),
+		Days:        1,
+		RecordedAt:  time.Now(),
+	}
+	if err := repo.Create(ctx, tdb.SQLiteDB, record); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	queryDate := time.Date(2026, 4, 18, 0, 30, 0, 0, time.FixedZone("UTC+14", 14*60*60))
+	count, err := repo.CountOnLeaveToday(ctx, tdb.SQLiteDB, queryDate)
+	if err != nil {
+		t.Fatalf("CountOnLeaveToday() error = %v", err)
+	}
+
+	if count != 1 {
+		t.Errorf("CountOnLeaveToday() = %d, want 1", count)
+	}
+}
+
+func TestLeaveRecordRepository_HasLeaveOnDate_UsesDateOnlyMatching(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	repo := NewLeaveRecordRepository()
+	ctx := context.Background()
+
+	employee := tdb.SeedEmployee("Ahmed Hassan")
+	leaveType := tdb.SeedLeaveType("CASUAL_"+domain.GenerateUID("lt"), "Casual Leave", "العارضة", 7)
+
+	record := &domain.LeaveRecord{
+		UID:         domain.GenerateUID("leave"),
+		EmployeeID:  employee.ID,
+		LeaveTypeID: leaveType.ID,
+		StartDate:   ParseDate(t, "2026-04-18"),
+		EndDate:     ParseDate(t, "2026-04-18"),
+		Days:        1,
+		RecordedAt:  time.Now(),
+	}
+	if err := repo.Create(ctx, tdb.SQLiteDB, record); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	queryDate := time.Date(2026, 4, 18, 0, 30, 0, 0, time.FixedZone("UTC+14", 14*60*60))
+	hasLeave, err := repo.HasLeaveOnDate(ctx, tdb.SQLiteDB, employee.ID, queryDate)
+	if err != nil {
+		t.Fatalf("HasLeaveOnDate() error = %v", err)
+	}
+
+	if !hasLeave {
+		t.Errorf("HasLeaveOnDate() = %v, want true", hasLeave)
 	}
 }

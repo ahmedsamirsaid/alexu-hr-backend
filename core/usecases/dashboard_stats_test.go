@@ -181,6 +181,7 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 		pendingRequests         int
 		expectedTotalEmployees  int
 		expectedCheckedInToday  int
+		expectedCheckedOutToday int
 		expectedLeavesToday     int
 		expectedPendingRequests int
 	}{
@@ -196,6 +197,7 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 			pendingRequests:         7,
 			expectedTotalEmployees:  150,
 			expectedCheckedInToday:  2,
+			expectedCheckedOutToday: 2,
 			expectedLeavesToday:     5,
 			expectedPendingRequests: 7,
 		},
@@ -206,6 +208,7 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 			pendingRequests:         0,
 			expectedTotalEmployees:  0,
 			expectedCheckedInToday:  0,
+			expectedCheckedOutToday: 0,
 			expectedLeavesToday:     0,
 			expectedPendingRequests: 0,
 		},
@@ -218,10 +221,12 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 				{EmployeeUID: "emp_11", PunchType: domain.AttendancePunchTypeCheckIn},
 				{EmployeeUID: "emp_12", PunchType: domain.AttendancePunchTypeUnknown},
 				{EmployeeUID: "emp_12", PunchType: domain.AttendancePunchTypeCheckIn},
+				{EmployeeUID: "emp_11", PunchType: domain.AttendancePunchTypeCheckOut},
 			},
 			pendingRequests:         12,
 			expectedTotalEmployees:  500,
 			expectedCheckedInToday:  3,
+			expectedCheckedOutToday: 2,
 			expectedLeavesToday:     100,
 			expectedPendingRequests: 12,
 		},
@@ -248,6 +253,10 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 
 			if output.CheckedInToday != tt.expectedCheckedInToday {
 				t.Errorf("CheckedInToday = %d, want %d", output.CheckedInToday, tt.expectedCheckedInToday)
+			}
+
+			if output.CheckedOutToday != tt.expectedCheckedOutToday {
+				t.Errorf("CheckedOutToday = %d, want %d", output.CheckedOutToday, tt.expectedCheckedOutToday)
 			}
 
 			if output.LeavesToday != tt.expectedLeavesToday {
@@ -317,5 +326,9 @@ func TestGetDashboardStatsUseCase_ExecuteScopedCountsCheckedInForManagedDepartme
 
 	if output.CheckedInToday != 1 {
 		t.Errorf("CheckedInToday = %d, want %d", output.CheckedInToday, 1)
+	}
+
+	if output.CheckedOutToday != 1 {
+		t.Errorf("CheckedOutToday = %d, want %d", output.CheckedOutToday, 1)
 	}
 }

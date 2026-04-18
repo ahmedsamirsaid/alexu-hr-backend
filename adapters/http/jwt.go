@@ -16,6 +16,7 @@ var (
 type JWTClaims struct {
 	UserID                int64    `json:"userId"`
 	UserUID               string   `json:"userUid"`
+	EmployeeUID           *string  `json:"employeeUid,omitempty"`
 	Roles                 []string `json:"roles"`
 	Permissions           []string `json:"permissions"`
 	ManagedDepartmentUIDs []string `json:"managedDepartmentUids"`
@@ -62,6 +63,7 @@ func (s *JWTService) GenerateAccessToken(user *domain.User) (string, error) {
 	claims := JWTClaims{
 		UserID:                user.ID,
 		UserUID:               user.UID,
+		EmployeeUID:           user.EmployeeUID,
 		Roles:                 roles,
 		Permissions:           permissions,
 		ManagedDepartmentUIDs: managedDepts,

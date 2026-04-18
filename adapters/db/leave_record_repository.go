@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -215,6 +216,8 @@ func (r *LeaveRecordRepository) ListAllPaginated(ctx context.Context, q ports.Qu
 		args = append(args, *filter.EndDate)
 	}
 
+	query, args = applyLeaveRecordDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	query += ` ORDER BY lr.start_date DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -292,6 +295,8 @@ func (r *LeaveRecordRepository) CountAll(ctx context.Context, q ports.Querier, f
 		args = append(args, *filter.EndDate)
 	}
 
+	query, args = applyLeaveRecordDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	var count int
 	err := q.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
@@ -332,4 +337,24 @@ func (r *LeaveRecordRepository) HasLeaveOnDate(ctx context.Context, q ports.Quer
 	}
 
 	return count > 0, nil
+}
+
+func applyLeaveRecordDepartmentScope(query string, args []any, departmentUIDs []string) (string, []any) {
+	if departmentUIDs == nil {
+		return query, args
+	}
+
+	if len(departmentUIDs) == 0 {
+		query += ` AND 1=0`
+		return query, args
+	}
+
+	placeholders := make([]string, 0, len(departmentUIDs))
+	for _, departmentUID := range departmentUIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, departmentUID)
+	}
+
+	query += ` AND e.department_uid IN (` + strings.Join(placeholders, ",") + `)`
+	return query, args
 }

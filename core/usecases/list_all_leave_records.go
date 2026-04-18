@@ -9,12 +9,13 @@ import (
 )
 
 type ListAllLeaveRecordsInput struct {
-	Search       string
-	LeaveTypeUID *string
-	StartDate    *time.Time
-	EndDate      *time.Time
-	Page         int
-	PageSize     int
+	Search                string
+	LeaveTypeUID          *string
+	StartDate             *time.Time
+	EndDate               *time.Time
+	Page                  int
+	PageSize              int
+	ManagedDepartmentUIDs []string
 }
 
 type AllLeaveRecordInfo struct {
@@ -91,6 +92,9 @@ func (uc *ListAllLeaveRecordsUseCase) Execute(ctx context.Context, input ListAll
 		Search:    input.Search,
 		StartDate: input.StartDate,
 		EndDate:   input.EndDate,
+	}
+	if input.ManagedDepartmentUIDs != nil {
+		filter.DepartmentUIDs = append([]string(nil), input.ManagedDepartmentUIDs...)
 	}
 
 	// Resolve leave type UID to ID if provided

@@ -50,8 +50,10 @@ func (m *mockLeaveTypeRepoForAll) SetActive(ctx context.Context, q ports.Querier
 }
 
 type mockLeaveRecordRepoForAll struct {
-	records []*ports.LeaveRecordWithEmployee
-	total   int
+	records         []*ports.LeaveRecordWithEmployee
+	total           int
+	lastListFilter  ports.ListAllLeaveRecordsFilter
+	lastCountFilter ports.ListAllLeaveRecordsFilter
 }
 
 func (m *mockLeaveRecordRepoForAll) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveRecord, error) {
@@ -87,10 +89,12 @@ func (m *mockLeaveRecordRepoForAll) ListByEmployeeAndType(ctx context.Context, q
 }
 
 func (m *mockLeaveRecordRepoForAll) ListAllPaginated(ctx context.Context, q ports.Querier, filter ports.ListAllLeaveRecordsFilter, limit, offset int) ([]*ports.LeaveRecordWithEmployee, error) {
+	m.lastListFilter = filter
 	return m.records, nil
 }
 
 func (m *mockLeaveRecordRepoForAll) CountAll(ctx context.Context, q ports.Querier, filter ports.ListAllLeaveRecordsFilter) (int, error) {
+	m.lastCountFilter = filter
 	return m.total, nil
 }
 
@@ -178,6 +182,43 @@ func TestListAllLeaveRecordsUseCase_Execute(t *testing.T) {
 
 		if output.Records[0].LeaveTypeNameAR != "العارضة" {
 			t.Errorf("expected leave type name 'العارضة', got '%s'", output.Records[0].LeaveTypeNameAR)
+		}
+
+		if leaveRecordRepo.lastCountFilter.DepartmentUIDs != nil {
+			t.Errorf("expected nil department scope for unscoped queries, got %v", leaveRecordRepo.lastCountFilter.DepartmentUIDs)
+		}
+
+		if leaveRecordRepo.lastListFilter.DepartmentUIDs != nil {
+			t.Errorf("expected nil department scope for unscoped queries, got %v", leaveRecordRepo.lastListFilter.DepartmentUIDs)
+		}
+	})
+
+	t.Run("applies managed department scope when provided", func(t *testing.T) {
+		input := usecases.ListAllLeaveRecordsInput{
+			Page:                  1,
+			PageSize:              10,
+			ManagedDepartmentUIDs: []string{"dept_sec", "dept_hr"},
+		}
+
+		_, err := uc.Execute(ctx, input)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(leaveRecordRepo.lastCountFilter.DepartmentUIDs) != 2 {
+			t.Fatalf("expected 2 department scopes in count filter, got %d", len(leaveRecordRepo.lastCountFilter.DepartmentUIDs))
+		}
+
+		if leaveRecordRepo.lastCountFilter.DepartmentUIDs[0] != "dept_sec" || leaveRecordRepo.lastCountFilter.DepartmentUIDs[1] != "dept_hr" {
+			t.Errorf("unexpected count filter department scope: %v", leaveRecordRepo.lastCountFilter.DepartmentUIDs)
+		}
+
+		if len(leaveRecordRepo.lastListFilter.DepartmentUIDs) != 2 {
+			t.Fatalf("expected 2 department scopes in list filter, got %d", len(leaveRecordRepo.lastListFilter.DepartmentUIDs))
+		}
+
+		if leaveRecordRepo.lastListFilter.DepartmentUIDs[0] != "dept_sec" || leaveRecordRepo.lastListFilter.DepartmentUIDs[1] != "dept_hr" {
+			t.Errorf("unexpected list filter department scope: %v", leaveRecordRepo.lastListFilter.DepartmentUIDs)
 		}
 	})
 

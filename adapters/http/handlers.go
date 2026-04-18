@@ -314,6 +314,15 @@ func (h *LeaveHandler) ListLeaveRecords(w http.ResponseWriter, r *http.Request) 
 
 func (h *LeaveHandler) ListAllLeaveRecords(w http.ResponseWriter, r *http.Request) {
 	input := usecases.ListAllLeaveRecordsInput{}
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+
+	if !claims.HasPermission("*") {
+		input.ManagedDepartmentUIDs = append([]string{}, claims.ManagedDepartmentUIDs...)
+	}
 
 	if search := r.URL.Query().Get("search"); search != "" {
 		input.Search = search

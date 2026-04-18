@@ -276,6 +276,10 @@ func (m *mockShiftRepoForAttendance) Upsert(ctx context.Context, q ports.Querier
 	return nil
 }
 
+func withAdminClaims(req *http.Request) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), ClaimsContextKey, &JWTClaims{Permissions: []string{"*"}}))
+}
+
 func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 	recordRepo := &mockAttendanceRecordRepo{
 		countReturn: 2,
@@ -308,6 +312,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -388,6 +393,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -408,6 +414,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -422,6 +429,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *te
 	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -464,6 +472,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 
@@ -581,6 +590,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -673,6 +683,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs_IncludesCheckoutOnlyRecord(t *
 	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("departmentUid", "dept_1")
 	rr := httptest.NewRecorder()
 
@@ -750,6 +761,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 
@@ -997,6 +1009,7 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 	handler.GetMonthlyStats(rr, req)
@@ -1050,6 +1063,7 @@ func TestAttendanceHandlerGetMonthlyStats_WithMonthFilter(t *testing.T) {
 	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?month=2026-04", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 	handler.GetMonthlyStats(rr, req)
@@ -1079,6 +1093,7 @@ func TestAttendanceHandlerGetMonthlyStats_WithRangeFilter(t *testing.T) {
 	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?startDate=2026-04-10&endDate=2026-04-15", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 	handler.GetMonthlyStats(rr, req)
@@ -1108,6 +1123,7 @@ func TestAttendanceHandlerGetMonthlyStats_WithYearFilter(t *testing.T) {
 	handler := &AttendanceHandler{getMonthlyStatsUC: statsUC}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?year=2026", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 	handler.GetMonthlyStats(rr, req)
@@ -1130,6 +1146,7 @@ func TestAttendanceHandlerGetMonthlyStats_RejectsMixedFilters(t *testing.T) {
 	handler := &AttendanceHandler{getMonthlyStatsUC: &stubMonthlyAttendanceStatsUseCase{}}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs/stats/monthly?month=2026-04&startDate=2026-04-01&endDate=2026-04-10", nil)
+	req = withAdminClaims(req)
 	req.SetPathValue("employeeUid", "emp_1")
 	rr := httptest.NewRecorder()
 	handler.GetMonthlyStats(rr, req)

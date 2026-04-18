@@ -177,11 +177,9 @@ func (h *AttendanceHandler) ListDepartmentLogs(w http.ResponseWriter, r *http.Re
 	}
 
 	claims := GetClaims(r)
-	if isScopedAttendanceClaims(claims) {
-		if !claims.HasDepartmentAccess(departmentUID) {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
-			return
-		}
+	if !canAccessDepartmentAttendance(claims, departmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		return
 	}
 
 	query, err := parseAttendanceLogsListQuery(r)
@@ -263,11 +261,9 @@ func (h *AttendanceHandler) ListEmployeeLogs(w http.ResponseWriter, r *http.Requ
 	}
 
 	claims := GetClaims(r)
-	if isScopedAttendanceClaims(claims) {
-		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
-			return
-		}
+	if !canAccessEmployeeAttendance(claims, employeeUID, output.DepartmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+		return
 	}
 
 	logs := make([]attendanceLogItemResponse, 0, len(output.Logs))
@@ -304,11 +300,9 @@ func (h *AttendanceHandler) ListDailyDepartmentLogs(w http.ResponseWriter, r *ht
 	}
 
 	claims := GetClaims(r)
-	if isScopedAttendanceClaims(claims) {
-		if !claims.HasDepartmentAccess(departmentUID) {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
-			return
-		}
+	if !canAccessDepartmentAttendance(claims, departmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		return
 	}
 
 	query, err := parseDailyAttendanceLogsListQuery(r)
@@ -372,11 +366,9 @@ func (h *AttendanceHandler) ListDailyEmployeeLogs(w http.ResponseWriter, r *http
 	}
 
 	claims := GetClaims(r)
-	if isScopedAttendanceClaims(claims) {
-		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
-			return
-		}
+	if !canAccessEmployeeAttendance(claims, employeeUID, output.DepartmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, listDailyEmployeeLogsResponse{
@@ -497,6 +489,29 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 	if employeeUID == "" {
 		writeError(w, http.StatusBadRequest, "employeeUid is required")
 		return
+	}
+
+	claims := GetClaims(r)
+	if !canAccessRequestedEmployee(claims, employeeUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+		return
+	}
+	if claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0 {
+		accessOutput, err := h.listEmployeeLogsUC.Execute(r.Context(), usecases.ListEmployeeAttendanceLogsInput{
+			EmployeeUID: employeeUID,
+			ListParams: ports.ListParams{
+				Page:     1,
+				PageSize: 1,
+			},
+		})
+		if err != nil {
+			h.writeUseCaseError(w, err)
+			return
+		}
+		if accessOutput.DepartmentUID == nil || !claims.HasDepartmentAccess(*accessOutput.DepartmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return
+		}
 	}
 
 	monthValue := strings.TrimSpace(r.URL.Query().Get("month"))
@@ -655,8 +670,43 @@ func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) 
 	}
 }
 
-func isScopedAttendanceClaims(claims *JWTClaims) bool {
-	return claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0
+func canAccessRequestedEmployee(claims *JWTClaims, employeeUID string) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.HasPermission("*") {
+		return true
+	}
+	if len(claims.ManagedDepartmentUIDs) > 0 {
+		return true
+	}
+	return claims.EmployeeUID != nil && *claims.EmployeeUID == employeeUID
+}
+
+func canAccessEmployeeAttendance(claims *JWTClaims, employeeUID string, departmentUID *string) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.HasPermission("*") {
+		return true
+	}
+	if len(claims.ManagedDepartmentUIDs) > 0 {
+		return departmentUID != nil && claims.HasDepartmentAccess(*departmentUID)
+	}
+	return claims.EmployeeUID != nil && *claims.EmployeeUID == employeeUID
+}
+
+func canAccessDepartmentAttendance(claims *JWTClaims, departmentUID string) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.HasPermission("*") {
+		return true
+	}
+	if len(claims.ManagedDepartmentUIDs) > 0 {
+		return claims.HasDepartmentAccess(departmentUID)
+	}
+	return false
 }
 
 func decodeCreateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*parsedCreateAttendanceLogRequest, bool) {
@@ -846,7 +896,7 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 			EmployeeName:      item.EmployeeName,
 			DepartmentUID:     item.DepartmentUID,
 			CheckIn:           checkIn,
-			CheckInLogUID:      item.CheckInLogUID,
+			CheckInLogUID:     item.CheckInLogUID,
 			CheckOut:          checkOut,
 			CheckOutLogUID:    item.CheckOutLogUID,
 			CheckInDevice:     item.CheckInDevice,

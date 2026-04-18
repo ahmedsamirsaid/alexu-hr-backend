@@ -18,6 +18,9 @@ type ListAllLeaveRecordsFilter struct {
 	LeaveTypeID *int64
 	StartDate   *time.Time
 	EndDate     *time.Time
+	// DepartmentUIDs limits results to specific departments when non-nil.
+	// A non-nil empty slice means no departments are accessible and should return no rows.
+	DepartmentUIDs []string
 }
 
 type LeaveRecordRepository interface {

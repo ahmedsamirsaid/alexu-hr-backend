@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -215,6 +216,8 @@ func (r *LeaveRecordRepository) ListAllPaginated(ctx context.Context, q ports.Qu
 		args = append(args, *filter.EndDate)
 	}
 
+	query, args = applyLeaveRecordDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	query += ` ORDER BY lr.start_date DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -292,6 +295,8 @@ func (r *LeaveRecordRepository) CountAll(ctx context.Context, q ports.Querier, f
 		args = append(args, *filter.EndDate)
 	}
 
+	query, args = applyLeaveRecordDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	var count int
 	err := q.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
@@ -306,10 +311,12 @@ func (r *LeaveRecordRepository) CountOnLeaveToday(ctx context.Context, q ports.Q
 	query := `
 		SELECT COUNT(DISTINCT employee_id)
 		FROM leave_records
-		WHERE date(?) BETWEEN date(start_date) AND date(end_date)`
+		WHERE ? BETWEEN substr(start_date, 1, 10) AND substr(end_date, 1, 10)`
+
+	day := date.Format("2006-01-02")
 
 	var count int
-	err := q.QueryRowContext(ctx, query, date).Scan(&count)
+	err := q.QueryRowContext(ctx, query, day).Scan(&count)
 	if err != nil {
 		slog.Error("leave_record_repository.CountOnLeaveToday.scan", "error", err)
 		return 0, err
@@ -322,14 +329,36 @@ func (r *LeaveRecordRepository) HasLeaveOnDate(ctx context.Context, q ports.Quer
 		SELECT COUNT(*)
 		FROM leave_records
 		WHERE employee_id = ?
-			AND date(?) BETWEEN date(start_date) AND date(end_date)`
+			AND ? BETWEEN substr(start_date, 1, 10) AND substr(end_date, 1, 10)`
+
+	day := date.Format("2006-01-02")
 
 	var count int
-	err := q.QueryRowContext(ctx, query, employeeID, date).Scan(&count)
+	err := q.QueryRowContext(ctx, query, employeeID, day).Scan(&count)
 	if err != nil {
 		slog.Error("leave_record_repository.HasLeaveOnDate.scan", "error", err, "employee_id", employeeID)
 		return false, err
 	}
 
 	return count > 0, nil
+}
+
+func applyLeaveRecordDepartmentScope(query string, args []any, departmentUIDs []string) (string, []any) {
+	if departmentUIDs == nil {
+		return query, args
+	}
+
+	if len(departmentUIDs) == 0 {
+		query += ` AND 1=0`
+		return query, args
+	}
+
+	placeholders := make([]string, 0, len(departmentUIDs))
+	for _, departmentUID := range departmentUIDs {
+		placeholders = append(placeholders, "?")
+		args = append(args, departmentUID)
+	}
+
+	query += ` AND e.department_uid IN (` + strings.Join(placeholders, ",") + `)`
+	return query, args
 }

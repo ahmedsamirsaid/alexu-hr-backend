@@ -27,8 +27,10 @@ type RoleOutput struct {
 }
 
 type EmployeeBasic struct {
-	UID  string `json:"uid"`
-	Name string `json:"name"`
+	UID      string  `json:"uid"`
+	Name     string  `json:"name"`
+	Email    *string `json:"email,omitempty"`
+	HireDate string  `json:"hireDate"`
 }
 
 type GetCurrentUserUseCase struct {
@@ -115,8 +117,10 @@ func (uc *GetCurrentUserUseCase) Execute(ctx context.Context, input GetCurrentUs
 		}
 		if employee != nil {
 			output.Employee = &EmployeeBasic{
-				UID:  employee.UID,
-				Name: employee.Name,
+				UID:      employee.UID,
+				Name:     employee.Name,
+				Email:    employee.Email,
+				HireDate: employee.HireDate.Format("2006-01-02"),
 			}
 		}
 	}

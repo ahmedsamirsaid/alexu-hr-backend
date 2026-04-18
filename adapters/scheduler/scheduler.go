@@ -12,6 +12,7 @@ type Scheduler struct {
 	autoRejectUC        *usecases.AutoRejectExpiredRequestsUseCase
 	holidaySyncUC       *usecases.SyncEgyptPublicHolidaysUseCase
 	absenceSyncUC       *usecases.SyncDailyAbsencesUseCase
+	missingCheckOutsUC  *usecases.NotifyMissingCheckOutsUseCase
 	interval            time.Duration
 	location            *time.Location
 	lastHolidaySyncDate string
@@ -24,7 +25,8 @@ func New(
 	autoRejectUC *usecases.AutoRejectExpiredRequestsUseCase,
 	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase,
 	absenceSyncUC *usecases.SyncDailyAbsencesUseCase,
-	intervalHours int,
+	missingCheckOutsUC *usecases.NotifyMissingCheckOutsUseCase,
+	interval time.Duration,
 	timezone string,
 ) *Scheduler {
 	loc, err := time.LoadLocation(timezone)
@@ -33,13 +35,14 @@ func New(
 	}
 
 	return &Scheduler{
-		autoRejectUC:  autoRejectUC,
-		holidaySyncUC: holidaySyncUC,
-		absenceSyncUC: absenceSyncUC,
-		interval:      time.Duration(intervalHours) * time.Hour,
-		location:      loc,
-		stopCh:        make(chan struct{}),
-		doneCh:        make(chan struct{}),
+		autoRejectUC:       autoRejectUC,
+		holidaySyncUC:      holidaySyncUC,
+		absenceSyncUC:      absenceSyncUC,
+		missingCheckOutsUC: missingCheckOutsUC,
+		interval:           interval,
+		location:           loc,
+		stopCh:             make(chan struct{}),
+		doneCh:             make(chan struct{}),
 	}
 }
 
@@ -122,6 +125,15 @@ func (s *Scheduler) runJobs(ctx context.Context) {
 				"skipped_leave", output.SkippedLeaveCount,
 				"skipped_hire_date", output.SkippedHireDateCount,
 			)
+		}
+	}
+
+	if s.missingCheckOutsUC != nil {
+		output, err := s.missingCheckOutsUC.Execute(ctx)
+		if err != nil {
+			slog.Error("scheduler.runJobs.missing_check_outs", "error", err)
+		} else if output.NotifiedCount > 0 {
+			slog.Info("scheduler.runJobs.missing_check_outs.completed", "notified_count", output.NotifiedCount)
 		}
 	}
 

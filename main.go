@@ -62,6 +62,7 @@ func main() {
 	leaveRequestRepo := db.NewLeaveRequestRepository()
 
 	deviceTokenRepo := db.NewDeviceTokenRepository()
+	attendanceReminderRepo := db.NewAttendanceReminderRepository()
 
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
 	shiftRepo := db.NewShiftRepository()
@@ -190,6 +191,10 @@ func main() {
 
 	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
 	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
+	notifyMissingCheckOutsUC := usecases.NewNotifyMissingCheckOutsUseCase(
+		sqliteDB, attendanceRecordRepo, attendanceReminderRepo, employeeRepo, departmentRepo, shiftRepo, holidayDefinitionRepo, leaveRecordRepo, userRepo, notificationService,
+	)
+	sendTestPushUC := usecases.NewSendTestPushNotificationUseCase(sqliteDB, userRepo, notificationService)
 
 	listDepartmentAttendanceLogsUC := usecases.NewListDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo)
 	listEmployeeAttendanceLogsUC := usecases.NewListEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo)
@@ -263,6 +268,7 @@ func main() {
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
 	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
+	debugHandler := httpAdapter.NewDebugHandler(sendTestPushUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(
 		listDepartmentAttendanceLogsUC,
 		listEmployeeAttendanceLogsUC,
@@ -291,15 +297,20 @@ func main() {
 		HolidayHandler:          holidayHandler,
 		ShiftHandler:            shiftHandler,
 		AttendanceHandler:       attendanceHandler,
+		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
 	})
 
 	var sched *scheduler.Scheduler
 	if cfg.SchedulerEnabled {
-		sched = scheduler.New(autoRejectExpiredUC, holidaySyncUC, absenceSyncUC, cfg.SchedulerIntervalHours, cfg.HolidaySyncTimezone)
+		interval := time.Duration(cfg.SchedulerIntervalMinutes) * time.Minute
+		if interval <= 0 {
+			interval = time.Duration(cfg.SchedulerIntervalHours) * time.Hour
+		}
+		sched = scheduler.New(autoRejectExpiredUC, holidaySyncUC, absenceSyncUC, notifyMissingCheckOutsUC, interval, cfg.HolidaySyncTimezone)
 		sched.Start(context.Background())
-		slog.Info("main.main.scheduler_enabled", "interval_hours", cfg.SchedulerIntervalHours, "grace_days", cfg.ExpiredLeaveGraceDays)
+		slog.Info("main.main.scheduler_enabled", "interval", interval, "grace_days", cfg.ExpiredLeaveGraceDays)
 	} else {
 		slog.Info("main.main.scheduler_disabled")
 	}

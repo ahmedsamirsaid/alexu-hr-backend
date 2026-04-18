@@ -65,7 +65,7 @@ func LoadConfig() *AppConfig {
 		SchedulerIntervalHours: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_HOURS", 1),
 		SchedulerIntervalMinutes: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_MINUTES", 1),
 		HolidaySyncEndpoint:    getEnv("BANU_MUSA_HOLIDAY_SYNC_ENDPOINT", "https://calendarific.com/api/v2/holidays"),
-		HolidaySyncAPIKey:      getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", ""),
+		HolidaySyncAPIKey:      getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", "ysvLh7UNdrI0mbH9afetHcsaYcDGBiag"),
 		HolidaySyncCountry:     getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),
 		HolidaySyncTimezone:    getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
 	}

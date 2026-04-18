@@ -738,22 +738,16 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		}
 
 		if checkIn.Valid {
-			t, err := time.Parse(time.RFC3339Nano, checkIn.String)
+			t, err := parseAttendanceTimestamp(checkIn.String)
 			if err != nil {
-				t, err = time.Parse(time.RFC3339, checkIn.String)
-				if err != nil {
-					return nil, err
-				}
+				return nil, err
 			}
 			group.CheckIn = &t
 		}
 		if checkOut.Valid {
-			t, err := time.Parse(time.RFC3339Nano, checkOut.String)
+			t, err := parseAttendanceTimestamp(checkOut.String)
 			if err != nil {
-				t, err = time.Parse(time.RFC3339, checkOut.String)
-				if err != nil {
-					return nil, err
-				}
+				return nil, err
 			}
 			group.CheckOut = &t
 		}
@@ -789,6 +783,24 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 	}
 
 	return groups, nil
+}
+
+func parseAttendanceTimestamp(value string) (time.Time, error) {
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+
+	for _, layout := range layouts {
+		parsed, err := time.Parse(layout, value)
+		if err == nil {
+			return parsed, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("invalid attendance timestamp format: %s", value)
 }
 
 func buildDepartmentAttendanceLogsWhere(departmentUID string, filter ports.DepartmentAttendanceLogsFilter) (string, []any) {

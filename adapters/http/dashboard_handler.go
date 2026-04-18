@@ -10,6 +10,7 @@ import (
 // DashboardStatsResponse represents the dashboard stats API response.
 type DashboardStatsResponse struct {
 	TotalEmployees  int `json:"totalEmployees"`
+	CheckedInToday  int `json:"checkedInToday"`
 	LeavesToday     int `json:"leavesToday"`
 	PendingRequests int `json:"pendingRequests"`
 }
@@ -43,6 +44,7 @@ func (h *DashboardHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, DashboardStatsResponse{
 		TotalEmployees:  output.TotalEmployees,
+		CheckedInToday:  output.CheckedInToday,
 		LeavesToday:     output.LeavesToday,
 		PendingRequests: output.PendingRequests,
 	})

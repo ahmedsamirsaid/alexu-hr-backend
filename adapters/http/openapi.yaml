@@ -471,6 +471,9 @@ components:
         totalEmployees:
           type: integer
           example: 120
+        checkedInToday:
+          type: integer
+          example: 95
         leavesToday:
           type: integer
           example: 5

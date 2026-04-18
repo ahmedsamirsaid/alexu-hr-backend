@@ -25,7 +25,7 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 	dayOffDate := today.AddDate(0, 0, 3)
 	manualDate := today.AddDate(0, 0, 4)
 	pastDate := today.AddDate(0, 0, -1)
-	nextYearDate := time.Date(today.Year()+1, 1, 7, 0, 0, 0, 0, time.UTC)
+	nextYearDate := time.Date(today.Year()+1, 5, 1, 0, 0, 0, 0, time.UTC)
 
 	manualCode := buildHolidayCode("Manual Keep", manualDate)
 	manualDef := &domain.HolidayDefinition{
@@ -73,19 +73,21 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 		case fmt.Sprintf("%d", currentYear):
 			response.Response.Holidays = []calendarificHoliday{
 				{
-					Name:        "Upcoming Global",
-					Description: "عطلة قادمة",
+					Name:        "Coptic Christmas Day",
+					Description: "Coptic Christmas Day is a national holiday in Egypt",
 					PrimaryType: "National holiday",
 					Type:        []string{"National holiday"},
+					URLID:       "egypt/coptic-christmas-day",
 					Date: struct {
 						ISO string "json:\"iso\""
 					}{ISO: upcomingDate.Format("2006-01-02")},
 				},
 				{
-					Name:        "Day off for Upcoming Global",
-					Description: "تعويض عطلة قادمة",
+					Name:        "Day off for Coptic Christmas Day",
+					Description: "Coptic Christmas Day is a national holiday in Egypt",
 					PrimaryType: "National holiday",
 					Type:        []string{"National holiday"},
+					URLID:       "egypt/coptic-christmas-day",
 					Date: struct {
 						ISO string "json:\"iso\""
 					}{ISO: dayOffDate.Format("2006-01-02")},
@@ -98,6 +100,16 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 					Date: struct {
 						ISO string "json:\"iso\""
 					}{ISO: manualDate.Format("2006-01-02")},
+				},
+				{
+					Name:        "Revolution Day July 23",
+					Description: "Revolution Day July 23 is a national holiday in Egypt",
+					PrimaryType: "National holiday",
+					Type:        []string{"National holiday"},
+					URLID:       "egypt/revolution-day-july-23",
+					Date: struct {
+						ISO string "json:\"iso\""
+					}{ISO: today.AddDate(0, 0, 5).Format("2006-01-02")},
 				},
 				{
 					Name:        "Past Global",
@@ -121,10 +133,11 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 		case fmt.Sprintf("%d", nextYear):
 			response.Response.Holidays = []calendarificHoliday{
 				{
-					Name:        "Next Year",
-					Description: "عطلة العام القادم",
+					Name:        "Labor Day",
+					Description: "Labor Day, International Workers' Day, and May Day, is a day off for workers in many countries around the world.",
 					PrimaryType: "National holiday",
 					Type:        []string{"National holiday"},
+					URLID:       "egypt/labor-day",
 					Date: struct {
 						ISO string "json:\"iso\""
 					}{ISO: nextYearDate.Format("2006-01-02")},
@@ -142,8 +155,8 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 		t.Fatalf("sync returned error: %v", err)
 	}
 
-	if output.CreatedCount != 2 {
-		t.Fatalf("expected created=2 got %d", output.CreatedCount)
+	if output.CreatedCount != 3 {
+		t.Fatalf("expected created=3 got %d", output.CreatedCount)
 	}
 	if output.DeletedCount != 0 {
 		t.Fatalf("expected deleted=0 got %d", output.DeletedCount)
@@ -155,7 +168,7 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 		t.Fatalf("expected deleted absence=1 got %d", output.DeletedAbsenceCount)
 	}
 
-	upcomingCode := buildHolidayCode("Day off for Upcoming Global", dayOffDate)
+	upcomingCode := buildHolidayCode("coptic-christmas-day", dayOffDate)
 	upcomingDefinition, err := defRepo.GetByCode(context.Background(), db, upcomingCode)
 	if err != nil {
 		t.Fatalf("failed to get synced holiday: %v", err)
@@ -169,13 +182,32 @@ func TestSyncEgyptPublicHolidaysUseCase_FiltersAndPreservesManual(t *testing.T) 
 	if upcomingDefinition.Date.Format("2006-01-02") != dayOffDate.Format("2006-01-02") {
 		t.Fatalf("expected synced holiday date=%s got %s", dayOffDate.Format("2006-01-02"), upcomingDefinition.Date.Format("2006-01-02"))
 	}
-
-	baseDefinition, err := defRepo.GetByCode(context.Background(), db, buildHolidayCode("Upcoming Global", upcomingDate))
-	if err != nil {
-		t.Fatalf("failed to check base holiday presence: %v", err)
+	if upcomingDefinition.NameAR != "إجازة عيد الميلاد المجيد" {
+		t.Fatalf("expected localized arabic holiday name, got %q", upcomingDefinition.NameAR)
 	}
-	if baseDefinition != nil {
-		t.Fatalf("expected base holiday to be filtered when day-off variant exists")
+
+	laborDayCode := buildHolidayCode("labor-day", nextYearDate)
+	laborDayDefinition, err := defRepo.GetByCode(context.Background(), db, laborDayCode)
+	if err != nil {
+		t.Fatalf("failed to get labor day holiday: %v", err)
+	}
+	if laborDayDefinition == nil {
+		t.Fatalf("expected labor day holiday with code %s", laborDayCode)
+	}
+	if laborDayDefinition.NameAR != "عيد العمال" {
+		t.Fatalf("expected labor day arabic name, got %q", laborDayDefinition.NameAR)
+	}
+
+	july23Code := buildHolidayCode("revolution-day-july-23", today.AddDate(0, 0, 5))
+	july23Definition, err := defRepo.GetByCode(context.Background(), db, july23Code)
+	if err != nil {
+		t.Fatalf("failed to get july 23 holiday: %v", err)
+	}
+	if july23Definition == nil {
+		t.Fatalf("expected july 23 holiday with code %s", july23Code)
+	}
+	if july23Definition.NameAR != "ثورة 23 يوليو" {
+		t.Fatalf("expected july 23 arabic name, got %q", july23Definition.NameAR)
 	}
 
 	manualUpdated, err := defRepo.GetByCode(context.Background(), db, manualCode)
@@ -208,7 +240,7 @@ func TestSyncEgyptPublicHolidaysUseCase_ReconcilesUpcomingAutoOnly(t *testing.T)
 	manualUpcomingDate := today.AddDate(0, 0, 4)
 	pastAutoDate := today.AddDate(0, 0, -2)
 
-	keptFetchedCode := buildHolidayCode("Kept From Fetch", keptFetchedDate)
+	keptFetchedCode := buildHolidayCode("labor-day", keptFetchedDate)
 	missingUpcomingAutoCode := buildHolidayCode("Will Be Removed", missingUpcomingAutoDate)
 	manualUpcomingCode := buildHolidayCode("Manual Upcoming", manualUpcomingDate)
 	pastAutoCode := buildHolidayCode("Past Auto", pastAutoDate)
@@ -262,10 +294,11 @@ func TestSyncEgyptPublicHolidaysUseCase_ReconcilesUpcomingAutoOnly(t *testing.T)
 		response := calendarificResponse{}
 		response.Response.Holidays = []calendarificHoliday{
 			{
-				Name:        "Kept From Fetch",
-				Description: "قادم",
+				Name:        "Labor Day",
+				Description: "Labor Day, International Workers' Day, and May Day, is a day off for workers in many countries around the world.",
 				PrimaryType: "National holiday",
 				Type:        []string{"National holiday"},
+				URLID:       "egypt/labor-day",
 				Date: struct {
 					ISO string "json:\"iso\""
 				}{ISO: keptFetchedDate.Format("2006-01-02")},
@@ -275,6 +308,7 @@ func TestSyncEgyptPublicHolidaysUseCase_ReconcilesUpcomingAutoOnly(t *testing.T)
 				Description: "يدوي",
 				PrimaryType: "National holiday",
 				Type:        []string{"National holiday"},
+				URLID:       "egypt/manual-upcoming",
 				Date: struct {
 					ISO string "json:\"iso\""
 				}{ISO: manualUpcomingDate.Format("2006-01-02")},
@@ -300,6 +334,9 @@ func TestSyncEgyptPublicHolidaysUseCase_ReconcilesUpcomingAutoOnly(t *testing.T)
 	}
 	if keptFetched == nil {
 		t.Fatalf("expected fetched upcoming auto holiday to remain")
+	}
+	if keptFetched.NameAR != "عيد العمال" {
+		t.Fatalf("expected kept fetched holiday to be localized, got %q", keptFetched.NameAR)
 	}
 
 	removedAuto, err := defRepo.GetByCode(context.Background(), db, missingUpcomingAutoCode)

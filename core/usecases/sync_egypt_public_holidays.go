@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,6 +19,22 @@ import (
 
 var holidayCodeSanitizer = regexp.MustCompile(`[^A-Z0-9]+`)
 var holidayDayOffPrefixSanitizer = regexp.MustCompile(`(?i)^day off for\s+`)
+
+var calendarificHolidayLocalizations = map[string]string{
+	"coptic-christmas-day":      "عيد الميلاد المجيد",
+	"revolution-day-january-25": "ثورة 25 يناير",
+	"eid-al-fitr":               "عيد الفطر",
+	"spring-festival":           "عيد شم النسيم",
+	"sinai-liberation-day":      "عيد تحرير سيناء",
+	"labor-day":                 "عيد العمال",
+	"arafat-day":                "يوم عرفة",
+	"eid-al-adha":               "عيد الأضحى",
+	"muharram":                  "رأس السنة الهجرية",
+	"june-30-uprising":          "ثورة 30 يونيو",
+	"revolution-day-july-23":    "ثورة 23 يوليو",
+	"prophet-birthday":          "المولد النبوي الشريف",
+	"armed-forces-day":          "عيد القوات المسلحة",
+}
 
 type SyncEgyptPublicHolidaysOutput struct {
 	CreatedCount        int
@@ -280,7 +297,7 @@ func (uc *SyncEgyptPublicHolidaysUseCase) fetchHolidaysForYear(ctx context.Conte
 		rows = append(rows, syncedHoliday{
 			Date:      strings.TrimSpace(holiday.Date.ISO),
 			Name:      strings.TrimSpace(holiday.Name),
-			LocalName: "",
+			LocalName: localizeCalendarificHoliday(holiday),
 			URLID:     strings.TrimSpace(holiday.URLID),
 			Global:    true,
 		})
@@ -333,9 +350,71 @@ func canonicalHolidayIdentity(name string) string {
 func stripCalendarificCountryPrefix(urlID string) string {
 	trimmed := strings.TrimSpace(urlID)
 	if idx := strings.Index(trimmed, "/"); idx >= 0 && idx+1 < len(trimmed) {
-		return trimmed[idx+1:]
+		trimmed = trimmed[idx+1:]
 	}
 	return trimmed
+}
+
+func localizeCalendarificHoliday(holiday calendarificHoliday) string {
+	baseKey := calendarificHolidayLocalizationKey(holiday)
+	baseName := calendarificHolidayLocalizations[baseKey]
+	if baseName == "" {
+		return ""
+	}
+
+	normalizedName := strings.ToLower(strings.TrimSpace(holiday.Name))
+	switch {
+	case strings.HasPrefix(normalizedName, "day off for "):
+		return "إجازة " + baseName
+	case strings.HasSuffix(normalizedName, " holiday"):
+		return "عطلة " + baseName
+	default:
+		return baseName
+	}
+}
+
+func calendarificHolidayLocalizationKey(holiday calendarificHoliday) string {
+	baseKey := stripCalendarificCountryPrefix(holiday.URLID)
+	if baseKey != "" {
+		if _, exists := calendarificHolidayLocalizations[baseKey]; exists {
+			return baseKey
+		}
+		if idx := strings.LastIndex(baseKey, "-"); idx >= 0 {
+			suffix := baseKey[idx+1:]
+			if suffix != "" {
+				if _, err := strconv.Atoi(suffix); err == nil {
+					trimmedBase := baseKey[:idx]
+					if _, exists := calendarificHolidayLocalizations[trimmedBase]; exists {
+						return trimmedBase
+					}
+				}
+			}
+		}
+	}
+
+	if slugFromName := calendarificHolidaySlugFromName(holiday.Name); slugFromName != "" {
+		if _, exists := calendarificHolidayLocalizations[slugFromName]; exists {
+			return slugFromName
+		}
+	}
+
+	return baseKey
+}
+
+func calendarificHolidaySlugFromName(name string) string {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	normalized = holidayDayOffPrefixSanitizer.ReplaceAllString(normalized, "")
+	normalized = strings.TrimSuffix(normalized, " holiday")
+	normalized = strings.TrimSpace(normalized)
+	normalized = strings.ReplaceAll(normalized, "'", "")
+	normalized = strings.ReplaceAll(normalized, ".", "")
+	normalized = strings.ReplaceAll(normalized, "/", "-")
+	normalized = strings.ReplaceAll(normalized, "&", "and")
+	normalized = strings.ReplaceAll(normalized, " ", "-")
+	for strings.Contains(normalized, "--") {
+		normalized = strings.ReplaceAll(normalized, "--", "-")
+	}
+	return strings.Trim(normalized, "-")
 }
 
 func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, q ports.Querier, code string, row syncedHoliday, dateValue time.Time) (*domain.HolidayDefinition, bool, error) {

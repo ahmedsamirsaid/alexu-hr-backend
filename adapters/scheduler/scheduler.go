@@ -9,22 +9,35 @@ import (
 )
 
 type Scheduler struct {
-	autoRejectUC  *usecases.AutoRejectExpiredRequestsUseCase
-	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase
-	interval      time.Duration
-	stopCh        chan struct{}
-	doneCh        chan struct{}
+	autoRejectUC        *usecases.AutoRejectExpiredRequestsUseCase
+	holidaySyncUC       *usecases.SyncEgyptPublicHolidaysUseCase
+	absenceSyncUC       *usecases.SyncDailyAbsencesUseCase
+	interval            time.Duration
+	location            *time.Location
+	lastHolidaySyncDate string
+	lastAbsenceSyncDate string
+	stopCh              chan struct{}
+	doneCh              chan struct{}
 }
 
 func New(
 	autoRejectUC *usecases.AutoRejectExpiredRequestsUseCase,
 	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase,
+	absenceSyncUC *usecases.SyncDailyAbsencesUseCase,
 	intervalHours int,
+	timezone string,
 ) *Scheduler {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.FixedZone("Africa/Cairo", 2*60*60)
+	}
+
 	return &Scheduler{
 		autoRejectUC:  autoRejectUC,
 		holidaySyncUC: holidaySyncUC,
+		absenceSyncUC: absenceSyncUC,
 		interval:      time.Duration(intervalHours) * time.Hour,
+		location:      loc,
 		stopCh:        make(chan struct{}),
 		doneCh:        make(chan struct{}),
 	}
@@ -75,8 +88,11 @@ func (s *Scheduler) runJobs(ctx context.Context) {
 		}
 	}
 
-	if s.holidaySyncUC != nil {
+	todayKey := time.Now().In(s.location).Format("2006-01-02")
+
+	if s.holidaySyncUC != nil && s.lastHolidaySyncDate != todayKey {
 		output, err := s.holidaySyncUC.Execute(ctx)
+		s.lastHolidaySyncDate = todayKey
 		if err != nil {
 			slog.Error("scheduler.runJobs.holiday_sync", "error", err)
 		} else if output.CreatedCount > 0 || output.UpdatedCount > 0 || output.DeletedAbsenceCount > 0 {
@@ -86,6 +102,25 @@ func (s *Scheduler) runJobs(ctx context.Context) {
 				"updated", output.UpdatedCount,
 				"deleted_absences", output.DeletedAbsenceCount,
 				"skipped_past", output.SkippedPastCount,
+			)
+		}
+	}
+
+	if s.absenceSyncUC != nil && s.lastAbsenceSyncDate != todayKey {
+		output, err := s.absenceSyncUC.Execute(ctx)
+		s.lastAbsenceSyncDate = todayKey
+		if err != nil {
+			slog.Error("scheduler.runJobs.absence_sync", "error", err)
+		} else if output.SyncedAbsenceCount > 0 || output.ClearedAbsenceCount > 0 || output.SkippedNonWorking {
+			slog.Info(
+				"scheduler.runJobs.absence_sync.completed",
+				"date", output.Date,
+				"synced_absences", output.SyncedAbsenceCount,
+				"cleared_absences", output.ClearedAbsenceCount,
+				"skipped_non_working", output.SkippedNonWorking,
+				"skipped_present", output.SkippedPresentCount,
+				"skipped_leave", output.SkippedLeaveCount,
+				"skipped_hire_date", output.SkippedHireDateCount,
 			)
 		}
 	}

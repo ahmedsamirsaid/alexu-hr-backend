@@ -20,6 +20,7 @@ type DashboardAttendanceRecordRepository interface {
 type DashboardStatsOutput struct {
 	TotalEmployees  int
 	CheckedInToday  int
+	CheckedOutToday int
 	LeavesToday     int
 	PendingRequests int
 }
@@ -67,7 +68,7 @@ func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context, input GetDashbo
 		return nil, err
 	}
 
-	checkedInToday, err := uc.countCheckedInToday(ctx, today, nil)
+	checkedInToday, checkedOutToday, err := uc.countAttendanceToday(ctx, today, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -82,6 +83,7 @@ func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context, input GetDashbo
 	return &DashboardStatsOutput{
 		TotalEmployees:  totalEmployees,
 		CheckedInToday:  checkedInToday,
+		CheckedOutToday: checkedOutToday,
 		LeavesToday:     leavesToday,
 		PendingRequests: pendingRequests,
 	}, nil
@@ -111,7 +113,7 @@ func (uc *GetDashboardStatsUseCase) executeScoped(ctx context.Context, departmen
 	}
 
 	today := time.Now()
-	checkedInToday, err := uc.countCheckedInToday(ctx, today, allowedEmployeeUIDs)
+	checkedInToday, checkedOutToday, err := uc.countAttendanceToday(ctx, today, allowedEmployeeUIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -142,37 +144,43 @@ func (uc *GetDashboardStatsUseCase) executeScoped(ctx context.Context, departmen
 	return &DashboardStatsOutput{
 		TotalEmployees:  len(filteredEmployees),
 		CheckedInToday:  checkedInToday,
+		CheckedOutToday: checkedOutToday,
 		LeavesToday:     leavesToday,
 		PendingRequests: pendingRequests,
 	}, nil
 }
 
-func (uc *GetDashboardStatsUseCase) countCheckedInToday(ctx context.Context, date time.Time, allowedEmployeeUIDs map[string]struct{}) (int, error) {
+func (uc *GetDashboardStatsUseCase) countAttendanceToday(ctx context.Context, date time.Time, allowedEmployeeUIDs map[string]struct{}) (int, int, error) {
 	if uc.attendanceRepo == nil {
-		return 0, nil
+		return 0, 0, nil
 	}
 
 	records, err := uc.attendanceRepo.ListByDate(ctx, uc.db, date, nil)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 
-	seenEmployees := make(map[string]struct{})
+	checkedInEmployees := make(map[string]struct{})
+	checkedOutEmployees := make(map[string]struct{})
 	for _, record := range records {
-		if record.PunchType != domain.AttendancePunchTypeCheckIn && record.PunchType != domain.AttendancePunchTypeUnknown {
-			continue
-		}
-
 		if allowedEmployeeUIDs != nil {
 			if _, ok := allowedEmployeeUIDs[record.EmployeeUID]; !ok {
 				continue
 			}
 		}
 
-		seenEmployees[record.EmployeeUID] = struct{}{}
+		switch record.PunchType {
+		case domain.AttendancePunchTypeCheckIn:
+			checkedInEmployees[record.EmployeeUID] = struct{}{}
+		case domain.AttendancePunchTypeCheckOut:
+			checkedOutEmployees[record.EmployeeUID] = struct{}{}
+		case domain.AttendancePunchTypeUnknown:
+			checkedInEmployees[record.EmployeeUID] = struct{}{}
+			checkedOutEmployees[record.EmployeeUID] = struct{}{}
+		}
 	}
 
-	return len(seenEmployees), nil
+	return len(checkedInEmployees), len(checkedOutEmployees), nil
 }
 
 func ptrApprovalStatus(status domain.ApprovalRequestStatus) *domain.ApprovalRequestStatus {

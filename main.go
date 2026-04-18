@@ -221,6 +221,13 @@ func main() {
 		cfg.HolidaySyncCountry,
 		cfg.HolidaySyncTimezone,
 	)
+	absenceSyncUC := usecases.NewSyncDailyAbsencesUseCase(
+		sqliteDB,
+		leaveRecordRepo,
+		weekendRepo,
+		holidayDefinitionRepo,
+		cfg.HolidaySyncTimezone,
+	)
 
 	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC)
 	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
@@ -290,7 +297,7 @@ func main() {
 
 	var sched *scheduler.Scheduler
 	if cfg.SchedulerEnabled {
-		sched = scheduler.New(autoRejectExpiredUC, holidaySyncUC, cfg.SchedulerIntervalHours)
+		sched = scheduler.New(autoRejectExpiredUC, holidaySyncUC, absenceSyncUC, cfg.SchedulerIntervalHours, cfg.HolidaySyncTimezone)
 		sched.Start(context.Background())
 		slog.Info("main.main.scheduler_enabled", "interval_hours", cfg.SchedulerIntervalHours, "grace_days", cfg.ExpiredLeaveGraceDays)
 	} else {

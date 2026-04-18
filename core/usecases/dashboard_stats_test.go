@@ -12,8 +12,9 @@ import (
 
 // mockEmployeeRepoForDashboard implements EmployeeRepository for dashboard tests
 type mockEmployeeRepoForDashboard struct {
-	count int
-	err   error
+	count     int
+	employees []*domain.Employee
+	err       error
 }
 
 func (m *mockEmployeeRepoForDashboard) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Employee, error) {
@@ -33,7 +34,10 @@ func (m *mockEmployeeRepoForDashboard) Update(ctx context.Context, q ports.Queri
 }
 
 func (m *mockEmployeeRepoForDashboard) List(ctx context.Context, q ports.Querier, filter *ports.EmployeeListFilter) ([]*domain.Employee, error) {
-	return nil, nil
+	if m.employees != nil {
+		return m.employees, m.err
+	}
+	return nil, m.err
 }
 
 func (m *mockEmployeeRepoForDashboard) ExistingGovernmentIDs(ctx context.Context, q ports.Querier, governmentIDs []string) ([]string, error) {
@@ -61,6 +65,15 @@ type mockLeaveRecordRepoForDashboard struct {
 type mockLeaveRequestRepoForDashboard struct {
 	count int
 	err   error
+}
+
+type mockAttendanceRepoForDashboard struct {
+	records []*domain.AttendanceRecord
+	err     error
+}
+
+func (m *mockAttendanceRepoForDashboard) ListByDate(ctx context.Context, q ports.Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error) {
+	return m.records, m.err
 }
 
 func (m *mockLeaveRequestRepoForDashboard) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveRequest, error) {
@@ -164,33 +177,58 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 		name                    string
 		employeeCount           int
 		leavesToday             int
+		checkedInRecords        []*domain.AttendanceRecord
+		pendingRequests         int
 		expectedTotalEmployees  int
+		expectedCheckedInToday  int
+		expectedCheckedOutToday int
 		expectedLeavesToday     int
 		expectedPendingRequests int
 	}{
 		{
-			name:                    "returns correct stats",
-			employeeCount:           150,
-			leavesToday:             5,
+			name:          "returns correct stats",
+			employeeCount: 150,
+			leavesToday:   5,
+			checkedInRecords: []*domain.AttendanceRecord{
+				{EmployeeUID: "emp_1", PunchType: domain.AttendancePunchTypeCheckIn},
+				{EmployeeUID: "emp_1", PunchType: domain.AttendancePunchTypeCheckOut},
+				{EmployeeUID: "emp_2", PunchType: domain.AttendancePunchTypeUnknown},
+			},
+			pendingRequests:         7,
 			expectedTotalEmployees:  150,
+			expectedCheckedInToday:  2,
+			expectedCheckedOutToday: 2,
 			expectedLeavesToday:     5,
-			expectedPendingRequests: 0,
+			expectedPendingRequests: 7,
 		},
 		{
 			name:                    "zero employees",
 			employeeCount:           0,
 			leavesToday:             0,
+			pendingRequests:         0,
 			expectedTotalEmployees:  0,
+			expectedCheckedInToday:  0,
+			expectedCheckedOutToday: 0,
 			expectedLeavesToday:     0,
 			expectedPendingRequests: 0,
 		},
 		{
-			name:                    "many employees on leave",
-			employeeCount:           500,
-			leavesToday:             100,
+			name:          "many employees on leave",
+			employeeCount: 500,
+			leavesToday:   100,
+			checkedInRecords: []*domain.AttendanceRecord{
+				{EmployeeUID: "emp_10", PunchType: domain.AttendancePunchTypeCheckIn},
+				{EmployeeUID: "emp_11", PunchType: domain.AttendancePunchTypeCheckIn},
+				{EmployeeUID: "emp_12", PunchType: domain.AttendancePunchTypeUnknown},
+				{EmployeeUID: "emp_12", PunchType: domain.AttendancePunchTypeCheckIn},
+				{EmployeeUID: "emp_11", PunchType: domain.AttendancePunchTypeCheckOut},
+			},
+			pendingRequests:         12,
 			expectedTotalEmployees:  500,
+			expectedCheckedInToday:  3,
+			expectedCheckedOutToday: 2,
 			expectedLeavesToday:     100,
-			expectedPendingRequests: 0,
+			expectedPendingRequests: 12,
 		},
 	}
 
@@ -199,9 +237,10 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 			db := &mockDB{tx: &mockTx{}}
 			employeeRepo := &mockEmployeeRepoForDashboard{count: tt.employeeCount}
 			leaveRecordRepo := &mockLeaveRecordRepoForDashboard{leavesToday: tt.leavesToday}
-			leaveRequestRepo := &mockLeaveRequestRepoForDashboard{}
+			leaveRequestRepo := &mockLeaveRequestRepoForDashboard{count: tt.pendingRequests}
+			attendanceRepo := &mockAttendanceRepoForDashboard{records: tt.checkedInRecords}
 
-			uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo)
+			uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRepo)
 
 			output, err := uc.Execute(context.Background(), usecases.GetDashboardStatsInput{})
 			if err != nil {
@@ -210,6 +249,14 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 
 			if output.TotalEmployees != tt.expectedTotalEmployees {
 				t.Errorf("TotalEmployees = %d, want %d", output.TotalEmployees, tt.expectedTotalEmployees)
+			}
+
+			if output.CheckedInToday != tt.expectedCheckedInToday {
+				t.Errorf("CheckedInToday = %d, want %d", output.CheckedInToday, tt.expectedCheckedInToday)
+			}
+
+			if output.CheckedOutToday != tt.expectedCheckedOutToday {
+				t.Errorf("CheckedOutToday = %d, want %d", output.CheckedOutToday, tt.expectedCheckedOutToday)
 			}
 
 			if output.LeavesToday != tt.expectedLeavesToday {
@@ -223,21 +270,65 @@ func TestGetDashboardStatsUseCase_Execute(t *testing.T) {
 	}
 }
 
-func TestGetDashboardStatsUseCase_PendingRequestsAlwaysZero(t *testing.T) {
-	// This test verifies that pending requests is always 0 (placeholder)
+func TestGetDashboardStatsUseCase_CountsPendingRequests(t *testing.T) {
 	db := &mockDB{tx: &mockTx{}}
 	employeeRepo := &mockEmployeeRepoForDashboard{count: 100}
 	leaveRecordRepo := &mockLeaveRecordRepoForDashboard{leavesToday: 10}
-	leaveRequestRepo := &mockLeaveRequestRepoForDashboard{}
+	leaveRequestRepo := &mockLeaveRequestRepoForDashboard{count: 4}
+	attendanceRepo := &mockAttendanceRepoForDashboard{}
 
-	uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo)
+	uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRepo)
 
 	output, err := uc.Execute(context.Background(), usecases.GetDashboardStatsInput{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if output.PendingRequests != 0 {
-		t.Errorf("PendingRequests should always be 0, got %d", output.PendingRequests)
+	if output.PendingRequests != 4 {
+		t.Errorf("PendingRequests = %d, want %d", output.PendingRequests, 4)
+	}
+}
+
+func TestGetDashboardStatsUseCase_ExecuteScopedCountsCheckedInForManagedDepartments(t *testing.T) {
+	db := &mockDB{tx: &mockTx{}}
+	departmentA := "dep_a"
+	departmentB := "dep_b"
+
+	employeeRepo := &mockEmployeeRepoForDashboard{
+		employees: []*domain.Employee{
+			{ID: 1, UID: "emp_a1", DepartmentUID: &departmentA},
+			{ID: 2, UID: "emp_a2", DepartmentUID: &departmentA},
+			{ID: 3, UID: "emp_b1", DepartmentUID: &departmentB},
+		},
+	}
+	leaveRecordRepo := &mockLeaveRecordRepoForDashboard{}
+	leaveRequestRepo := &mockLeaveRequestRepoForDashboard{}
+	attendanceRepo := &mockAttendanceRepoForDashboard{
+		records: []*domain.AttendanceRecord{
+			{EmployeeUID: "emp_a1", PunchType: domain.AttendancePunchTypeCheckIn},
+			{EmployeeUID: "emp_a2", PunchType: domain.AttendancePunchTypeCheckOut},
+			{EmployeeUID: "emp_b1", PunchType: domain.AttendancePunchTypeCheckIn},
+		},
+	}
+
+	uc := usecases.NewGetDashboardStatsUseCase(db, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRepo)
+
+	output, err := uc.Execute(context.Background(), usecases.GetDashboardStatsInput{
+		ManagedDepartmentUIDs: []string{departmentA},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if output.TotalEmployees != 2 {
+		t.Errorf("TotalEmployees = %d, want %d", output.TotalEmployees, 2)
+	}
+
+	if output.CheckedInToday != 1 {
+		t.Errorf("CheckedInToday = %d, want %d", output.CheckedInToday, 1)
+	}
+
+	if output.CheckedOutToday != 1 {
+		t.Errorf("CheckedOutToday = %d, want %d", output.CheckedOutToday, 1)
 	}
 }

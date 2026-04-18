@@ -467,15 +467,32 @@ components:
 
     DashboardStats:
       type: object
+      required:
+        - totalEmployees
+        - checkedInToday
+        - checkedOutToday
+        - leavesToday
+        - pendingRequests
       properties:
         totalEmployees:
           type: integer
+          description: Total employees visible to the current user's scope.
           example: 120
+        checkedInToday:
+          type: integer
+          description: Distinct employees with at least one check-in or unknown attendance punch today.
+          example: 95
+        checkedOutToday:
+          type: integer
+          description: Distinct employees with at least one check-out or unknown attendance punch today.
+          example: 80
         leavesToday:
           type: integer
+          description: Distinct employees whose leave interval includes today's date.
           example: 5
         pendingRequests:
           type: integer
+          description: Pending leave requests visible to the current user's scope.
           example: 3
 
     User:
@@ -1194,6 +1211,7 @@ paths:
     get:
       tags: [Dashboard]
       summary: Get dashboard statistics
+      description: Returns today's scoped summary counts used by the dashboard cards.
       responses:
         "200":
           description: Dashboard stats

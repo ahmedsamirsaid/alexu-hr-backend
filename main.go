@@ -95,7 +95,7 @@ func main() {
 	listLeaveRecordsUC := usecases.NewListLeaveRecordsUseCase(sqliteDB, employeeRepo, leaveTypeRepo, leaveRecordRepo)
 	listAllLeaveRecordsUC := usecases.NewListAllLeaveRecordsUseCase(sqliteDB, leaveTypeRepo, leaveRecordRepo)
 
-	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo, leaveRequestRepo)
+	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
 
 	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo)
 	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)

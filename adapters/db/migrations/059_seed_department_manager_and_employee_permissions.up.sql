@@ -17,6 +17,19 @@ JOIN permissions p ON p.code IN (
     'attendance:read',
     'leave:read',
     'leave:request',
-    'leave:approve'
+    'leave:approve',
+    'attendance-devices:read'
 )
 WHERE r.uid = 'role_department_manager';
+
+
+-- Grant Employee role the permissions needed for self-service access.
+INSERT OR IGNORE INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM roles r
+JOIN permissions p ON p.code IN (
+    'attendance:read',
+    'leave:read',
+    'leave:request'
+)
+WHERE r.uid = 'role_employee';

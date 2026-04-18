@@ -10,6 +10,19 @@ WHERE role_id = (SELECT id FROM roles WHERE uid = 'role_department_manager')
           'attendance:read',
           'leave:read',
           'leave:request',
-          'leave:approve'
+          'leave:approve',
+          'attendance-devices:read'
+      )
+  );
+
+-- Revoke Employee permissions granted by 059 migration.
+DELETE FROM role_permissions
+WHERE role_id = (SELECT id FROM roles WHERE uid = 'role_employee')
+  AND permission_id IN (
+      SELECT id FROM permissions
+      WHERE code IN (
+          'attendance:read',
+          'leave:read',
+          'leave:request'
       )
   );

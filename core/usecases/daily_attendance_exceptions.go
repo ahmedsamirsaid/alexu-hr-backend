@@ -13,7 +13,7 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
-const maxAbsenceRangeDays = 62
+const maxAbsenceRangeDays = 400
 
 type departmentEmployeeForAttendance struct {
 	ID            int64

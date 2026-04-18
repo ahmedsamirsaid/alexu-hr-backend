@@ -45,6 +45,10 @@ All variables are optional with sensible defaults for local development.
 | `BANU_MUSA_SCHEDULER_ENABLED` | `true` | Enable background job scheduler |
 | `BANU_MUSA_SCHEDULER_INTERVAL_HOURS` | `1` | How often scheduler runs (hours) |
 | `BANU_MUSA_EXPIRED_LEAVE_GRACE_DAYS` | `1` | Days before auto-rejecting expired leave requests |
+| `BANU_MUSA_HOLIDAY_SYNC_ENDPOINT` | `https://calendarific.com/api/v2/holidays` | Calendarific holidays API endpoint |
+| `BANU_MUSA_HOLIDAY_SYNC_API_KEY` | `` | Calendarific API key (required for holiday sync) |
+| `BANU_MUSA_HOLIDAY_SYNC_COUNTRY` | `EG` | Country code for holiday sync |
+| `BANU_MUSA_HOLIDAY_SYNC_TIMEZONE` | `Africa/Cairo` | Timezone used by holiday sync |
 
 ## Database
 

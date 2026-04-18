@@ -424,7 +424,7 @@ func TestRecordLeaveUseCase_Execute(t *testing.T) {
 			leaveRecordRepo := &mockLeaveRecordRepo{}
 			balanceTxRepo := &mockBalanceTxRepo{}
 			weekendRepo := &mockWeekendConfigRepo{weekendDays: []int{5, 6}}
-			holidayRepo := &mockHolidayInstanceRepo{}
+			holidayRepo := &mockHolidayDefinitionRepo{}
 			leaveSync := &mockLeaveSync{}
 
 			workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayRepo)
@@ -493,7 +493,7 @@ func TestRecordLeaveUseCase_YearBoundarySplit(t *testing.T) {
 	leaveRecordRepo := &mockLeaveRecordRepo{}
 	balanceTxRepo := &mockBalanceTxRepo{}
 	weekendRepo := &mockWeekendConfigRepo{weekendDays: []int{5, 6}}
-	holidayRepo := &mockHolidayInstanceRepo{}
+	holidayRepo := &mockHolidayDefinitionRepo{}
 	leaveSync := &mockLeaveSync{}
 
 	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayRepo)

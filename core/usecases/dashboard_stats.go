@@ -62,7 +62,9 @@ func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context, input GetDashbo
 		return nil, err
 	}
 
-	today := time.Now()
+	// Use UTC day boundaries to stay consistent with SQLite date functions and
+	// frontend date filters that are based on ISO date strings.
+	today := time.Now().UTC()
 	leavesToday, err := uc.leaveRecordRepo.CountOnLeaveToday(ctx, uc.db, today)
 	if err != nil {
 		return nil, err
@@ -112,7 +114,8 @@ func (uc *GetDashboardStatsUseCase) executeScoped(ctx context.Context, departmen
 		}
 	}
 
-	today := time.Now()
+	// Keep scoped and unscoped dashboard stats on the same day basis.
+	today := time.Now().UTC()
 	checkedInToday, checkedOutToday, err := uc.countAttendanceToday(ctx, today, allowedEmployeeUIDs)
 	if err != nil {
 		return nil, err

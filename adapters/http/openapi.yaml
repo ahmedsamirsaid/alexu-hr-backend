@@ -11,7 +11,7 @@ info:
   version: 1.0.0
 
 servers:
-  - url: https://alexu-hr-backend-production.up.railway.app
+  - url: https://hr-backend-production-c71e.up.railway.app
     description: Deployed backend
   - url: http://localhost:8080
     description: Local development

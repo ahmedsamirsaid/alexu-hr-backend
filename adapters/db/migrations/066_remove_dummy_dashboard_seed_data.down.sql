@@ -1,0 +1,2 @@
+-- Irreversible cleanup migration.
+-- No-op on down: deleted dashboard dummy seed rows are not restored.

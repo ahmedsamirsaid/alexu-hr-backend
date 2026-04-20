@@ -62,6 +62,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("GET /api/v1/roles", RequirePermission("roles:read")(http.HandlerFunc(cfg.RoleHandler.ListRoles)))
 	protectedMux.Handle("POST /api/v1/roles", RequirePermission("roles:write")(http.HandlerFunc(cfg.RoleHandler.CreateRole)))
+	protectedMux.Handle("PATCH /api/v1/roles/{uid}/scope", RequirePermission("roles:write")(http.HandlerFunc(cfg.RoleHandler.SetScope)))
 	protectedMux.Handle("POST /api/v1/roles/{uid}/permissions", RequirePermission("roles:write")(http.HandlerFunc(cfg.RoleHandler.SetPermissions)))
 	protectedMux.Handle("GET /api/v1/permissions", RequirePermission("roles:read")(http.HandlerFunc(cfg.RoleHandler.ListPermissions)))
 
@@ -88,8 +89,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}/active", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.ToggleLeaveType)))
 	protectedMux.Handle("GET /api/v1/admin/weekend-config", RequirePermission("departments:read")(http.HandlerFunc(cfg.WeekendHandler.ListWeekendDays)))
-	protectedMux.Handle("GET /api/v1/admin/holidays", RequirePermission("departments:read")(http.HandlerFunc(cfg.HolidayHandler.ListHolidays)))
-	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("departments:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))
+	protectedMux.Handle("GET /api/v1/admin/holidays", RequirePermission("holidays:read")(http.HandlerFunc(cfg.HolidayHandler.ListHolidays)))
+	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))
 
 	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
 	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))

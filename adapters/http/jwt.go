@@ -19,6 +19,7 @@ type JWTClaims struct {
 	EmployeeUID           *string  `json:"employeeUid,omitempty"`
 	Roles                 []string `json:"roles"`
 	Permissions           []string `json:"permissions"`
+	AccessScope           string   `json:"accessScope"`
 	ManagedDepartmentUIDs []string `json:"managedDepartmentUids"`
 	jwt.RegisteredClaims
 }
@@ -42,23 +43,44 @@ func NewJWTService(secretKey string, accessTokenMinutes int) *JWTService {
 func (s *JWTService) GenerateAccessToken(user *domain.User) (string, error) {
 	roles := make([]string, len(user.Roles))
 	permSet := make(map[string]bool)
+	effectiveScope := domain.RoleScopeSelf
+	highestScopePriority := 0
+	managedDeptSet := make(map[string]struct{})
 
 	for i, role := range user.Roles {
 		roles[i] = role.Name
 		if role.HasAllPermissions() {
 			permSet["*"] = true
-		} else {
-			for _, perm := range role.Permissions {
-				permSet[perm.Code] = true
-			}
 		}
+
+		for _, perm := range role.Permissions {
+			permSet[perm.Code] = true
+		}
+
+		normalizedScope := domain.NormalizeRoleScopeType(role.ScopeType)
+		priority := domain.RoleScopePriority(normalizedScope)
+		if priority > highestScopePriority {
+			highestScopePriority = priority
+			effectiveScope = normalizedScope
+		}
+	}
+
+	if highestScopePriority == 0 {
+		effectiveScope = domain.RoleScopeSelf
+	}
+
+	for _, departmentUID := range user.ManagedDepartmentUIDs {
+		managedDeptSet[departmentUID] = struct{}{}
 	}
 
 	permissions := make([]string, 0, len(permSet))
 	for p := range permSet {
 		permissions = append(permissions, p)
 	}
-	managedDepts := append([]string(nil), user.ManagedDepartmentUIDs...)
+	managedDepts := make([]string, 0, len(managedDeptSet))
+	for departmentUID := range managedDeptSet {
+		managedDepts = append(managedDepts, departmentUID)
+	}
 
 	claims := JWTClaims{
 		UserID:                user.ID,
@@ -66,6 +88,7 @@ func (s *JWTService) GenerateAccessToken(user *domain.User) (string, error) {
 		EmployeeUID:           user.EmployeeUID,
 		Roles:                 roles,
 		Permissions:           permissions,
+		AccessScope:           effectiveScope,
 		ManagedDepartmentUIDs: managedDepts,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.accessTokenTTL)),
@@ -107,6 +130,27 @@ func (c *JWTClaims) HasPermission(code string) bool {
 		}
 	}
 	return false
+}
+
+func (c *JWTClaims) IsGlobalScope() bool {
+	if c == nil {
+		return false
+	}
+	return domain.NormalizeRoleScopeType(c.AccessScope) == domain.RoleScopeGlobal
+}
+
+func (c *JWTClaims) IsDepartmentScope() bool {
+	if c == nil {
+		return false
+	}
+	return domain.NormalizeRoleScopeType(c.AccessScope) == domain.RoleScopeDepartment
+}
+
+func (c *JWTClaims) IsSelfScope() bool {
+	if c == nil {
+		return false
+	}
+	return domain.NormalizeRoleScopeType(c.AccessScope) == domain.RoleScopeSelf
 }
 
 func (c *JWTClaims) HasDepartmentAccess(departmentUID string) bool {

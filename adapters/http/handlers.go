@@ -320,7 +320,7 @@ func (h *LeaveHandler) ListAllLeaveRecords(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if !claims.HasPermission("*") {
+	if !claims.HasPermission("*") && claims.IsDepartmentScope() {
 		input.ManagedDepartmentUIDs = append([]string{}, claims.ManagedDepartmentUIDs...)
 	}
 

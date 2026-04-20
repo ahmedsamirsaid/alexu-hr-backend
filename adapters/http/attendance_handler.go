@@ -496,7 +496,7 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
 		return
 	}
-	if claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0 {
+	if claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope() {
 		accessOutput, err := h.listEmployeeLogsUC.Execute(r.Context(), usecases.ListEmployeeAttendanceLogsInput{
 			EmployeeUID: employeeUID,
 			ListParams: ports.ListParams{
@@ -677,7 +677,10 @@ func canAccessRequestedEmployee(claims *JWTClaims, employeeUID string) bool {
 	if claims.HasPermission("*") {
 		return true
 	}
-	if len(claims.ManagedDepartmentUIDs) > 0 {
+	if claims.IsGlobalScope() {
+		return true
+	}
+	if claims.IsDepartmentScope() {
 		return true
 	}
 	return claims.EmployeeUID != nil && *claims.EmployeeUID == employeeUID
@@ -690,7 +693,10 @@ func canAccessEmployeeAttendance(claims *JWTClaims, employeeUID string, departme
 	if claims.HasPermission("*") {
 		return true
 	}
-	if len(claims.ManagedDepartmentUIDs) > 0 {
+	if claims.IsGlobalScope() {
+		return true
+	}
+	if claims.IsDepartmentScope() {
 		return departmentUID != nil && claims.HasDepartmentAccess(*departmentUID)
 	}
 	return claims.EmployeeUID != nil && *claims.EmployeeUID == employeeUID
@@ -703,7 +709,10 @@ func canAccessDepartmentAttendance(claims *JWTClaims, departmentUID string) bool
 	if claims.HasPermission("*") {
 		return true
 	}
-	if len(claims.ManagedDepartmentUIDs) > 0 {
+	if claims.IsGlobalScope() {
+		return true
+	}
+	if claims.IsDepartmentScope() {
 		return claims.HasDepartmentAccess(departmentUID)
 	}
 	return false

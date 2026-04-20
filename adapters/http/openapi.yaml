@@ -38,7 +38,7 @@ components:
     UserOutput:
       type: object
       properties:
-        userUid:
+        uid:
           type: string
           example: "usr_abc123"
         phone:
@@ -48,16 +48,91 @@ components:
           type: string
           nullable: true
           example: "emp_xyz789"
+        employeeName:
+          type: string
+          nullable: true
+          example: "Ahmed Al-Sayed"
+        accessScope:
+          type: string
+          enum: [global, department, self]
+          example: "department"
         roles:
           type: array
           items:
             type: string
-          example: ["admin"]
+          example: ["Department Manager"]
         permissions:
           type: array
           items:
             type: string
           example: ["employees:read", "leave:record"]
+        managedDepartmentUids:
+          type: array
+          items:
+            type: string
+          example: ["dept_001", "dept_002"]
+
+    CurrentUserRole:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "role_department_manager"
+        name:
+          type: string
+          example: "Department Manager"
+
+    CurrentUserEmployee:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "emp_xyz789"
+        name:
+          type: string
+          example: "Ahmed Al-Sayed"
+        email:
+          type: string
+          nullable: true
+          example: "ahmed@example.com"
+        hireDate:
+          type: string
+          format: date
+          example: "2023-01-15"
+
+    CurrentUserOutput:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "usr_abc123"
+        phone:
+          type: string
+          example: "+966500000001"
+        employeeUid:
+          type: string
+          nullable: true
+          example: "emp_xyz789"
+        isActive:
+          type: boolean
+          example: true
+        accessScope:
+          type: string
+          enum: [global, department, self]
+          example: "department"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/CurrentUserRole"
+        permissions:
+          type: array
+          items:
+            type: string
+          example: ["employees:read", "leave:read"]
+        employee:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/CurrentUserEmployee"
 
     AuthResponse:
       type: object
@@ -352,11 +427,24 @@ components:
         description:
           type: string
           example: "Can approve leave requests"
+        scopeType:
+          type: string
+          enum: [global, department, self]
+          example: "department"
+        isSystem:
+          type: boolean
+          example: false
         permissions:
           type: array
           items:
-            type: string
-          example: ["leave:read"]
+            $ref: "#/components/schemas/Permission"
+
+    CreateRoleResponse:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "role_001"
 
     Permission:
       type: object
@@ -1011,6 +1099,144 @@ components:
           type: string
           example: "adev_001"
 
+    WeekendConfigResponse:
+      type: object
+      properties:
+        weekendDays:
+          type: array
+          items:
+            type: integer
+          example: [5, 6]
+
+    HolidayItem:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "hdef_001"
+        date:
+          type: string
+          format: date
+          example: "2026-04-25"
+        name:
+          type: string
+          example: "Sinai Liberation Day"
+        localName:
+          type: string
+          nullable: true
+          example: "عيد تحرير سيناء"
+        isManual:
+          type: boolean
+          example: true
+
+    ListHolidaysResponse:
+      type: object
+      properties:
+        holidays:
+          type: array
+          items:
+            $ref: "#/components/schemas/HolidayItem"
+        weekendDays:
+          type: array
+          items:
+            type: integer
+          example: [5, 6]
+
+    CreateAttendanceLogRequest:
+      type: object
+      required: [employeeUid, deviceUid, punchedAt, punchType]
+      properties:
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        deviceUid:
+          type: string
+          example: "adev_001"
+        punchedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T08:30:00Z"
+        punchType:
+          type: string
+          enum: [check_in, check_out, break_start, break_end, unknown]
+          example: check_in
+
+    UpdateAttendanceLogRequest:
+      type: object
+      required: [deviceUid, punchedAt, punchType]
+      properties:
+        deviceUid:
+          type: string
+          example: "adev_001"
+        punchedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T17:00:00Z"
+        punchType:
+          type: string
+          enum: [check_in, check_out, break_start, break_end, unknown]
+          example: check_out
+
+    AttendanceLogMutationResponse:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "atr_001"
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        deviceUid:
+          type: string
+          example: "adev_001"
+        deviceUserId:
+          type: string
+          example: "dusr_123"
+        punchedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T17:00:00Z"
+        punchType:
+          type: string
+          enum: [check_in, check_out, break_start, break_end, unknown]
+          example: check_out
+        rawPayload:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T17:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T17:00:00Z"
+
+    SendTestPushRequest:
+      type: object
+      required: [userUid]
+      properties:
+        userUid:
+          type: string
+          example: "usr_abc123"
+        title:
+          type: string
+          example: "Manual test"
+        body:
+          type: string
+          example: "Ping from admin"
+        data:
+          type: object
+          additionalProperties:
+            type: string
+
+    SendTestPushResponse:
+      type: object
+      properties:
+        sentCount:
+          type: integer
+          example: 1
+
 paths:
   # ─── AUTH ───────────────────────────────────────────────────────────────────
 
@@ -1197,7 +1423,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserOutput"
+                $ref: "#/components/schemas/CurrentUserOutput"
         "401":
           description: Not authenticated
           content:
@@ -2106,7 +2332,60 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Role"
+                $ref: "#/components/schemas/CreateRoleResponse"
+
+  /api/v1/roles/{uid}/scope:
+    patch:
+      tags: [Roles]
+      summary: Set role scope
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "role_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopeType]
+              properties:
+                scopeType:
+                  type: string
+                  enum: [global, department, self]
+                  example: department
+      responses:
+        "200":
+          description: Scope updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Role scope updated"
+        "400":
+          description: Invalid scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Cannot modify system role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/v1/roles/{uid}/permissions:
     post:
@@ -2563,6 +2842,91 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LeaveType"
+
+  /api/v1/admin/weekend-config:
+    get:
+      tags: [Holidays]
+      summary: List configured weekend days
+      responses:
+        "200":
+          description: Weekend configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeekendConfigResponse"
+
+  /api/v1/admin/holidays:
+    get:
+      tags: [Holidays]
+      summary: List holidays with weekend config
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-01-01"
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+          example: "2026-12-31"
+      responses:
+        "200":
+          description: Holidays and weekend days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListHolidaysResponse"
+        "400":
+          description: Invalid date format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    post:
+      tags: [Holidays]
+      summary: Create manual holiday
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, nameEn]
+              properties:
+                date:
+                  type: string
+                  format: date
+                  example: "2026-04-25"
+                nameEn:
+                  type: string
+                  example: "Founders Day"
+                nameAr:
+                  type: string
+                  nullable: true
+                  example: "يوم المؤسسين"
+      responses:
+        "201":
+          description: Holiday created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HolidayItem"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Holiday date conflict or weekend date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ─── SHIFTS ─────────────────────────────────────────────────────────────────
 
@@ -3059,6 +3423,85 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/attendance/logs:
+    post:
+      tags: [Attendance]
+      summary: Create attendance log
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttendanceLogRequest"
+      responses:
+        "201":
+          description: Attendance log created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceLogMutationResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Employee or device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Duplicate/conflicting attendance log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/attendance/logs/{uid}:
+    patch:
+      tags: [Attendance]
+      summary: Update attendance log
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "atr_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAttendanceLogRequest"
+      responses:
+        "200":
+          description: Attendance log updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceLogMutationResponse"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Log or device not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Duplicate/conflicting attendance log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/attendance/summary/daily:
     get:
       tags: [Attendance]
@@ -3161,6 +3604,36 @@ paths:
                 $ref: "#/components/schemas/Error"
         "409":
           description: Device conflict (duplicate serial number or IP:port)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/admin/debug/push-test:
+    post:
+      tags: [Debug]
+      summary: Send test push notification to a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendTestPushRequest"
+      responses:
+        "200":
+          description: Push sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendTestPushResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
           content:
             application/json:
               schema:

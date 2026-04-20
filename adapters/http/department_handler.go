@@ -95,6 +95,7 @@ type AssignManagerRequest struct {
 
 // ListDepartments handles GET /api/v1/admin/departments
 func (h *DepartmentHandler) ListDepartments(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	activeOnly := r.URL.Query().Get("active") == "true"
 
 	output, err := h.listDeptUC.Execute(r.Context(), activeOnly)
@@ -106,6 +107,10 @@ func (h *DepartmentHandler) ListDepartments(w http.ResponseWriter, r *http.Reque
 
 	departments := make([]DepartmentResponse, 0, len(output.Departments))
 	for _, d := range output.Departments {
+		if !canAccessDepartment(claims, d.UID) {
+			continue
+		}
+
 		departments = append(departments, DepartmentResponse{
 			UID:             d.UID,
 			Code:            d.Code,
@@ -123,9 +128,15 @@ func (h *DepartmentHandler) ListDepartments(w http.ResponseWriter, r *http.Reque
 
 // GetDepartment handles GET /api/v1/admin/departments/{uid}
 func (h *DepartmentHandler) GetDepartment(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	if !canAccessDepartment(claims, uid) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
 		return
 	}
 
@@ -215,9 +226,15 @@ func (h *DepartmentHandler) CreateDepartment(w http.ResponseWriter, r *http.Requ
 
 // UpdateDepartment handles PATCH /api/v1/admin/departments/{uid}
 func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	if !canAccessDepartment(claims, uid) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
 		return
 	}
 
@@ -265,9 +282,15 @@ func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Requ
 
 // AssignManager handles POST /api/v1/admin/departments/{uid}/manager
 func (h *DepartmentHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	if !canAccessDepartment(claims, uid) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
 		return
 	}
 
@@ -309,9 +332,15 @@ func (h *DepartmentHandler) AssignManager(w http.ResponseWriter, r *http.Request
 
 // RemoveManager handles DELETE /api/v1/admin/departments/{uid}/manager
 func (h *DepartmentHandler) RemoveManager(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
 	uid := r.PathValue("uid")
 	if uid == "" {
 		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	if !canAccessDepartment(claims, uid) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
 		return
 	}
 
@@ -331,4 +360,17 @@ func (h *DepartmentHandler) RemoveManager(w http.ResponseWriter, r *http.Request
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func canAccessDepartment(claims *JWTClaims, departmentUID string) bool {
+	if claims == nil {
+		return false
+	}
+	if claims.HasPermission("*") || claims.IsGlobalScope() {
+		return true
+	}
+	if claims.IsDepartmentScope() {
+		return claims.HasDepartmentAccess(departmentUID)
+	}
+	return false
 }

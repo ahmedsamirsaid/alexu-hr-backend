@@ -10,6 +10,7 @@ import (
 type CreateRoleInput struct {
 	Name        string
 	Description string
+	ScopeType   string
 }
 
 type CreateRoleOutput struct {
@@ -41,7 +42,12 @@ func (uc *CreateRoleUseCase) Execute(ctx context.Context, input CreateRoleInput)
 		return nil, ErrRoleNameExists
 	}
 
-	role := domain.NewRole(input.Name, input.Description)
+	normalizedScopeType := domain.NormalizeRoleScopeType(input.ScopeType)
+	if normalizedScopeType == "" {
+		return nil, ErrInvalidRoleScopeType
+	}
+
+	role := domain.NewRole(input.Name, input.Description, normalizedScopeType)
 
 	if err := uc.roleRepo.Create(ctx, uc.db, role); err != nil {
 		return nil, err

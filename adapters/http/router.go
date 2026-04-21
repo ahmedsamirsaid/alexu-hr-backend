@@ -24,6 +24,7 @@ type RouterConfig struct {
 	DebugHandler            *DebugHandler
 	JWTService              *JWTService
 	AuthEnabled             bool
+	DocumentHandler *DocumentHandler
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -44,6 +45,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/leave-records", RequirePermission("leave:record")(http.HandlerFunc(cfg.LeaveHandler.ListAllLeaveRecords)))
 	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/balance", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveHandler.GetBalance)))
 	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/leave-records", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveHandler.ListLeaveRecords)))
+	protectedMux.Handle("POST /api/v1/documents/presign-upload", RequirePermission("documents:write")(http.HandlerFunc(cfg.DocumentHandler.GenerateUploadURL)))
+	protectedMux.Handle("POST /api/v1/documents/presign-download", RequirePermission("documents:read")(http.HandlerFunc(cfg.DocumentHandler.GenerateDownloadURL)))
 
 	protectedMux.Handle("GET /api/v1/employees/{uid}", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.GetEmployee)))
 	protectedMux.Handle("GET /api/v1/employees", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.ListEmployees)))

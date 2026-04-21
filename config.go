@@ -35,6 +35,15 @@ type AppConfig struct {
 	HolidaySyncCountry     string
 	HolidaySyncTimezone    string
 	SchedulerIntervalMinutes int
+	// Storage config
+	MinIOEndpoint                string
+	MinIOAccessKey               string
+	MinIOSecretKey               string
+	MinIOUseSSL                  bool
+	MinIODocumentsBucket         string
+	MinIOAutoCreateBucket        bool
+	MinIOUploadExpiryMinutes     int
+	MinIODownloadExpiryMinutes   int
 }
 
 func LoadConfig() *AppConfig {
@@ -68,6 +77,16 @@ func LoadConfig() *AppConfig {
 		HolidaySyncAPIKey:      getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", "ysvLh7UNdrI0mbH9afetHcsaYcDGBiag"),
 		HolidaySyncCountry:     getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),
 		HolidaySyncTimezone:    getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
+
+		// Storage config
+		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "localhost:9000"),
+		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "minioadmin"),
+		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "minioadmin"),
+		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", false),
+		MinIODocumentsBucket:       getEnv("BANU_MUSA_MINIO_DOCUMENTS_BUCKET", "leave_documents"),
+		MinIOAutoCreateBucket:      getEnvBool("BANU_MUSA_MINIO_AUTO_CREATE_BUCKET", true),
+		MinIOUploadExpiryMinutes:   getEnvInt("BANU_MUSA_MINIO_UPLOAD_EXPIRY_MINUTES", 15),
+		MinIODownloadExpiryMinutes: getEnvInt("BANU_MUSA_MINIO_DOWNLOAD_EXPIRY_MINUTES", 15),
 	}
 }
 

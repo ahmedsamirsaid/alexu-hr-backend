@@ -99,7 +99,7 @@ func TestNonWorkingDateChecker_FallbackWeekendAndHoliday(t *testing.T) {
 	weekendRepo := dbadapter.NewWeekendConfigRepository()
 	createUC := NewCreateManualHolidayUseCase(db, defRepo, weekendRepo)
 
-	holidayDate := normalizeDateOnly(time.Now().AddDate(0, 0, 4))
+	holidayDate := nextWeekdayDate(time.Now(), time.Monday)
 	if _, err := createUC.Execute(context.Background(), CreateManualHolidayInput{Date: holidayDate, NameEN: "Test Holiday"}); err != nil {
 		t.Fatalf("failed to create holiday: %v", err)
 	}

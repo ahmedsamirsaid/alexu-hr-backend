@@ -24,6 +24,7 @@ type UserOutput struct {
 	Phone                 string   `json:"phone"`
 	EmployeeUID           *string  `json:"employeeUid"`
 	EmployeeName          *string  `json:"employeeName,omitempty"`
+	AccessScope           string   `json:"accessScope"`
 	Roles                 []string `json:"roles"`
 	Permissions           []string `json:"permissions"`
 	ManagedDepartmentUIDs []string `json:"managedDepartmentUids"`
@@ -198,6 +199,7 @@ func (uc *VerifyOTPUseCase) toUserOutput(ctx context.Context, user *domain.User)
 		UID:                   user.UID,
 		Phone:                 user.Phone,
 		EmployeeUID:           user.EmployeeUID,
+		AccessScope:           determineAccessScope(user.Roles),
 		Roles:                 roleNames,
 		Permissions:           permissions,
 		ManagedDepartmentUIDs: append([]string(nil), user.ManagedDepartmentUIDs...),

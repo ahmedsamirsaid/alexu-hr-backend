@@ -144,25 +144,34 @@ func (m *mockUserRepoForMissingCheckOuts) GetByID(ctx context.Context, q ports.Q
 }
 
 type mockHolidayInstanceRepoForAttendanceReminders struct {
-	holidays []*domain.HolidayInstance
+	holidays []*domain.HolidayDefinition
 }
 
-func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.HolidayInstance, error) {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.HolidayDefinition, error) {
 	return nil, nil
 }
-func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByDefinitionAndYear(ctx context.Context, q ports.Querier, definitionID int64, year int) (*domain.HolidayInstance, error) {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByCode(ctx context.Context, q ports.Querier, code string) (*domain.HolidayDefinition, error) {
 	return nil, nil
 }
-func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByYear(ctx context.Context, q ports.Querier, year int) ([]*domain.HolidayInstance, error) {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByDate(ctx context.Context, q ports.Querier, date time.Time) ([]*domain.HolidayDefinition, error) {
 	return m.holidays, nil
 }
-func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayInstance, error) {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) GetByDefinitionAndYear(ctx context.Context, q ports.Querier, definitionID int64, year int) (*domain.HolidayDefinition, error) {
+	return nil, nil
+}
+func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByYear(ctx context.Context, q ports.Querier, year int) ([]*domain.HolidayDefinition, error) {
 	return m.holidays, nil
 }
-func (m *mockHolidayInstanceRepoForAttendanceReminders) Create(ctx context.Context, q ports.Querier, instance *domain.HolidayInstance) error {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
+	return m.holidays, nil
+}
+func (m *mockHolidayInstanceRepoForAttendanceReminders) List(ctx context.Context, q ports.Querier) ([]*domain.HolidayDefinition, error) {
+	return m.holidays, nil
+}
+func (m *mockHolidayInstanceRepoForAttendanceReminders) Create(ctx context.Context, q ports.Querier, instance *domain.HolidayDefinition) error {
 	return nil
 }
-func (m *mockHolidayInstanceRepoForAttendanceReminders) Update(ctx context.Context, q ports.Querier, instance *domain.HolidayInstance) error {
+func (m *mockHolidayInstanceRepoForAttendanceReminders) Update(ctx context.Context, q ports.Querier, instance *domain.HolidayDefinition) error {
 	return nil
 }
 
@@ -412,7 +421,7 @@ func TestNotifyMissingCheckOutsUseCaseSkipsMissingCheckInOnHolidayOrLeave(t *tes
 	notificationService := &mockNotificationService{sentCount: 1}
 
 	holidayUC := NewNotifyMissingCheckOutsUseCase(nil, recordRepo, reminderRepo, employeeRepo, nil, shiftRepo, &mockHolidayInstanceRepoForAttendanceReminders{
-		holidays: []*domain.HolidayInstance{{UID: "hol_1"}},
+		holidays: []*domain.HolidayDefinition{{UID: "hol_1"}},
 	}, &mockLeaveRecordRepoForAttendanceReminders{}, userRepo, notificationService)
 	holidayUC.now = func() time.Time {
 		return time.Date(day.Year(), day.Month(), day.Day(), 9, 16, 0, 0, time.Local)

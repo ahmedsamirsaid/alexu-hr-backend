@@ -74,10 +74,10 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("PATCH /api/v1/admin/approval-flows/{uid}/steps/{stepUid}", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.UpdateApprovalFlowStep)))
 	protectedMux.Handle("DELETE /api/v1/admin/approval-flows/{uid}/steps/{stepUid}", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.DeleteApprovalFlowStep)))
 
-	protectedMux.Handle("GET /api/v1/admin/shifts", RequirePermission("attendance:read")(http.HandlerFunc(cfg.ShiftHandler.List)))
-	protectedMux.Handle("GET /api/v1/admin/shifts/{uid}", RequirePermission("attendance:read")(http.HandlerFunc(cfg.ShiftHandler.Get)))
-	protectedMux.Handle("POST /api/v1/admin/shifts", RequirePermission("attendance:write")(http.HandlerFunc(cfg.ShiftHandler.Create)))
-	protectedMux.Handle("PATCH /api/v1/admin/shifts/{uid}", RequirePermission("attendance:write")(http.HandlerFunc(cfg.ShiftHandler.Update)))
+	protectedMux.Handle("GET /api/v1/admin/shifts", RequirePermission("shift:read")(http.HandlerFunc(cfg.ShiftHandler.List)))
+	protectedMux.Handle("GET /api/v1/admin/shifts/{uid}", RequirePermission("shift:read")(http.HandlerFunc(cfg.ShiftHandler.Get)))
+	protectedMux.Handle("POST /api/v1/admin/shifts", RequirePermission("shift:write")(http.HandlerFunc(cfg.ShiftHandler.Create)))
+	protectedMux.Handle("PATCH /api/v1/admin/shifts/{uid}", RequirePermission("shift:write")(http.HandlerFunc(cfg.ShiftHandler.Update)))
 
 	protectedMux.Handle("GET /api/v1/admin/departments", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.ListDepartments)))
 	protectedMux.Handle("GET /api/v1/admin/departments/{uid}", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.GetDepartment)))
@@ -93,8 +93,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))
 
 	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
-	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
-	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
+	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
+	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequirePermission("leave:read")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
 	protectedMux.Handle("POST /api/v1/leave-requests/{uid}/cancel", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.CancelLeaveRequest)))
 
 	protectedMux.Handle("GET /api/v1/approvals/pending", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ListPendingApprovals)))

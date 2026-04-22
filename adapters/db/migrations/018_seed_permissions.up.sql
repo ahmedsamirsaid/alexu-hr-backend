@@ -9,4 +9,6 @@ INSERT INTO permissions (uid, code, description) VALUES
     ('perm_users_read', 'users:read', 'View user accounts'),
     ('perm_users_write', 'users:write', 'Create/update user accounts'),
     ('perm_roles_read', 'roles:read', 'View roles and permissions'),
-    ('perm_roles_write', 'roles:write', 'Create/update roles, assign permissions');
+    ('perm_roles_write', 'roles:write', 'Create/update roles, assign permissions'),
+    ('perm_documents_read', 'documents:read', 'Read Documents'),
+    ('perm_documents_write', 'documents:write', 'Write Documents');

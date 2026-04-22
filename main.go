@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
+	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
@@ -37,6 +37,25 @@ func main() {
 	if err := runMigrations(sqliteDB.DB(), cfg.DBMigrationsPath); err != nil {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
+	}
+	
+	
+	minioService, err := minioAdapter.NewService(minioAdapter.Config{
+	Endpoint:  cfg.MinIOEndpoint,
+	AccessKey: cfg.MinIOAccessKey,
+	SecretKey: cfg.MinIOSecretKey,
+	UseSSL:    cfg.MinIOUseSSL,
+	})
+	if err != nil {
+		slog.Error("main.main.init_minio", "error", err)
+		os.Exit(1)
+	}
+
+	if cfg.MinIOAutoCreateBucket {
+		if err := minioService.EnsureBucket(context.Background(), cfg.MinIODocumentsBucket); err != nil {
+			slog.Error("main.main.ensure_documents_bucket", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	employeeRepo := db.NewEmployeeRepository()
@@ -279,6 +298,21 @@ func main() {
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
 	)
+	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIOUploadExpiryMinutes,
+	)
+
+	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIODownloadExpiryMinutes,
+	)
+	documentHandler := httpAdapter.NewDocumentHandler(
+		generateDocumentUploadURLUC,
+		generateDocumentDownloadURLUC,
+	)
 
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
 		LeaveHandler:            leaveHandler,
@@ -300,6 +334,7 @@ func main() {
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
+		DocumentHandler: documentHandler,
 	})
 
 	var sched *scheduler.Scheduler

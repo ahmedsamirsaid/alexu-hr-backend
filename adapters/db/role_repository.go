@@ -19,7 +19,7 @@ func NewRoleRepository() *RoleRepository {
 
 func (r *RoleRepository) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Role, error) {
 	query := `
-		SELECT id, uid, name, description, is_system, created_at, updated_at
+		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
 		WHERE id = ?`
 
@@ -28,7 +28,7 @@ func (r *RoleRepository) GetByID(ctx context.Context, q ports.Querier, id int64)
 
 func (r *RoleRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Role, error) {
 	query := `
-		SELECT id, uid, name, description, is_system, created_at, updated_at
+		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
 		WHERE uid = ?`
 
@@ -37,7 +37,7 @@ func (r *RoleRepository) GetByUID(ctx context.Context, q ports.Querier, uid stri
 
 func (r *RoleRepository) GetByName(ctx context.Context, q ports.Querier, name string) (*domain.Role, error) {
 	query := `
-		SELECT id, uid, name, description, is_system, created_at, updated_at
+		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
 		WHERE name = ?`
 
@@ -46,15 +46,15 @@ func (r *RoleRepository) GetByName(ctx context.Context, q ports.Querier, name st
 
 func (r *RoleRepository) Create(ctx context.Context, q ports.Querier, role *domain.Role) error {
 	query := `
-		INSERT INTO roles (uid, name, description, is_system, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`
+		INSERT INTO roles (uid, name, description, scope_type, is_system, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
 	role.CreatedAt = now
 	role.UpdatedAt = now
 
 	result, err := q.ExecContext(ctx, query,
-		role.UID, role.Name, role.Description, role.IsSystem,
+		role.UID, role.Name, role.Description, role.ScopeType, role.IsSystem,
 		role.CreatedAt, role.UpdatedAt)
 	if err != nil {
 		slog.Error("role_repository.Create.exec_query", "error", err, "uid", role.UID)
@@ -74,13 +74,13 @@ func (r *RoleRepository) Create(ctx context.Context, q ports.Querier, role *doma
 func (r *RoleRepository) Update(ctx context.Context, q ports.Querier, role *domain.Role) error {
 	query := `
 		UPDATE roles
-		SET name = ?, description = ?, updated_at = ?
+		SET name = ?, description = ?, scope_type = ?, updated_at = ?
 		WHERE id = ?`
 
 	role.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
-		role.Name, role.Description, role.UpdatedAt, role.ID)
+		role.Name, role.Description, role.ScopeType, role.UpdatedAt, role.ID)
 	if err != nil {
 		slog.Error("role_repository.Update.exec_query", "error", err, "uid", role.UID)
 	}
@@ -90,7 +90,7 @@ func (r *RoleRepository) Update(ctx context.Context, q ports.Querier, role *doma
 
 func (r *RoleRepository) List(ctx context.Context, q ports.Querier) ([]*domain.Role, error) {
 	query := `
-		SELECT id, uid, name, description, is_system, created_at, updated_at
+		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
 		ORDER BY name ASC`
 
@@ -130,7 +130,7 @@ func (r *RoleRepository) Delete(ctx context.Context, q ports.Querier, id int64) 
 
 func (r *RoleRepository) GetRolesForUser(ctx context.Context, q ports.Querier, userID int64) ([]*domain.Role, error) {
 	query := `
-		SELECT r.id, r.uid, r.name, r.description, r.is_system, r.created_at, r.updated_at
+		SELECT r.id, r.uid, r.name, r.description, r.scope_type, r.is_system, r.created_at, r.updated_at
 		FROM roles r
 		JOIN user_roles ur ON r.id = ur.role_id
 		WHERE ur.user_id = ?
@@ -301,10 +301,11 @@ func (r *RoleRepository) IsUserAuthorizedApprover(ctx context.Context, q ports.Q
 
 func (r *RoleRepository) scanRole(row *sql.Row) (*domain.Role, error) {
 	var role domain.Role
+	var scopeType sql.NullString
 	var createdAt, updatedAt domain.Time
 	var isSystem int
 	err := row.Scan(
-		&role.ID, &role.UID, &role.Name, &role.Description, &isSystem,
+		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &isSystem,
 		&createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -314,6 +315,10 @@ func (r *RoleRepository) scanRole(row *sql.Row) (*domain.Role, error) {
 		return nil, err
 	}
 	role.IsSystem = isSystem == 1
+	role.ScopeType = domain.NormalizeRoleScopeType(scopeType.String)
+	if role.ScopeType == "" {
+		role.ScopeType = domain.RoleScopeGlobal
+	}
 	role.CreatedAt = createdAt.Time
 	role.UpdatedAt = updatedAt.Time
 	return &role, nil
@@ -321,15 +326,20 @@ func (r *RoleRepository) scanRole(row *sql.Row) (*domain.Role, error) {
 
 func (r *RoleRepository) scanRoleRow(rows *sql.Rows) (*domain.Role, error) {
 	var role domain.Role
+	var scopeType sql.NullString
 	var createdAt, updatedAt domain.Time
 	var isSystem int
 	err := rows.Scan(
-		&role.ID, &role.UID, &role.Name, &role.Description, &isSystem,
+		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &isSystem,
 		&createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
 	role.IsSystem = isSystem == 1
+	role.ScopeType = domain.NormalizeRoleScopeType(scopeType.String)
+	if role.ScopeType == "" {
+		role.ScopeType = domain.RoleScopeGlobal
+	}
 	role.CreatedAt = createdAt.Time
 	role.UpdatedAt = updatedAt.Time
 	return &role, nil
@@ -365,9 +375,7 @@ func (r *RoleRepository) GetManagedDepartmentUIDs(ctx context.Context, q ports.Q
 	query := `
 		SELECT DISTINCT ur.department_uid
 		FROM user_roles ur
-		JOIN roles r ON ur.role_id = r.id
 		WHERE ur.user_id = ?
-		  AND r.uid = 'role_department_manager'
 		  AND ur.department_uid IS NOT NULL
 		ORDER BY ur.department_uid ASC`
 

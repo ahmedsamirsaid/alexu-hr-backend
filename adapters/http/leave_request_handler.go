@@ -296,12 +296,7 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Get current user to find employee UID
-	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
-		return
-	}
+	var err error
 
 	page := 1
 	pageSize := 20
@@ -317,11 +312,24 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	employeeUID := *currentUser.EmployeeUID
 	input := usecases.ListLeaveRequestsInput{
-		EmployeeUID: &employeeUID,
-		Limit:       pageSize,
-		Offset:      (page - 1) * pageSize,
+		Limit:  pageSize,
+		Offset: (page - 1) * pageSize,
+	}
+
+	if !claims.HasPermission("*") {
+		if claims.IsDepartmentScope() {
+			input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
+		} else if claims.IsSelfScope() {
+			currentUser, currentUserErr := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+			if currentUserErr != nil || currentUser.EmployeeUID == nil {
+				writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+				return
+			}
+
+			employeeUID := *currentUser.EmployeeUID
+			input.EmployeeUID = &employeeUID
+		}
 	}
 
 	if status := r.URL.Query().Get("status"); status != "" {
@@ -425,11 +433,18 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 		resp.LeaveTypeNameAR = output.LeaveType.NameAR
 	}
 
-	if !claims.HasPermission("leave:record") {
-		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-		if err != nil || currentUser.EmployeeUID == nil || *currentUser.EmployeeUID != output.LeaveRequest.EmployeeUID {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view your own leave requests")
-			return
+	if !claims.HasPermission("*") {
+		if claims.IsDepartmentScope() {
+			if output.Employee == nil || output.Employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.Employee.DepartmentUID) {
+				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				return
+			}
+		} else if claims.IsSelfScope() {
+			currentUser, currentUserErr := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+			if currentUserErr != nil || currentUser.EmployeeUID == nil || *currentUser.EmployeeUID != output.LeaveRequest.EmployeeUID {
+				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				return
+			}
 		}
 	}
 

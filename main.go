@@ -142,7 +142,7 @@ func main() {
 		jwtService, cfg.DevOTPBypass, cfg.DevBypassOTP, cfg.RefreshTokenDays,
 	)
 	refreshTokenUC := usecases.NewRefreshTokenUseCase(
-		sqliteDB, userRepo, roleRepo, refreshTokenRepo, jwtService, cfg.RefreshTokenDays,
+		sqliteDB, userRepo, roleRepo, permissionRepo, refreshTokenRepo, jwtService, cfg.RefreshTokenDays,
 	)
 	logoutUC := usecases.NewLogoutUseCase(sqliteDB, refreshTokenRepo)
 	getCurrentUserUC := usecases.NewGetCurrentUserUseCase(sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo)
@@ -150,11 +150,12 @@ func main() {
 	listUsersUC := usecases.NewListUsersUseCase(sqliteDB, userRepo, roleRepo, employeeRepo)
 	createUserUC := usecases.NewCreateUserUseCase(sqliteDB, userRepo)
 	updateUserUC := usecases.NewUpdateUserUseCase(sqliteDB, userRepo)
-	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo)
+	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo, departmentRepo)
 	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo)
 
 	listRolesUC := usecases.NewListRolesUseCase(sqliteDB, roleRepo, permissionRepo)
 	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo)
+	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(sqliteDB, roleRepo)
 	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo)
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
@@ -257,7 +258,7 @@ func main() {
 	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
 	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC)
 	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
-	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, listPermissionsUC)
+	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, setRoleScopeUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
 	approvalFlowHandler := httpAdapter.NewApprovalFlowHandler(
 		listApprovalFlowsUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,

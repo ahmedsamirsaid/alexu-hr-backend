@@ -7,10 +7,15 @@ type LeaveRequest struct {
 	UID                string
 	EmployeeUID        string
 	LeaveTypeUID       string
+	SubLeaveTypeUID    *string
 	StartDate          time.Time
 	EndDate            time.Time
 	Days               int
 	Notes              *string
+	StudyDestination   *string
+	Assignment         *string
+	AssignmentCountry  *string
+	SpouseWorkCountry  *string
 	SubmittedAt        time.Time
 	DecidedAt          *time.Time
 	ApprovalRequestUID string
@@ -18,15 +23,31 @@ type LeaveRequest struct {
 	UpdatedAt          time.Time
 }
 
-func NewLeaveRequest(employeeUID, leaveTypeUID string, startDate, endDate time.Time, days int, notes *string, approvalRequestUID string) *LeaveRequest {
+func NewLeaveRequest(
+	employeeUID, leaveTypeUID string,
+	subLeaveTypeUID *string,
+	startDate, endDate time.Time,
+	days int,
+	notes *string,
+	studyDestination *string,
+	assignment *string,
+	assignmentCountry *string,
+	spouseWorkCountry *string,
+	approvalRequestUID string,
+) *LeaveRequest {
 	return &LeaveRequest{
 		UID:                GenerateUID("lrq"),
 		EmployeeUID:        employeeUID,
 		LeaveTypeUID:       leaveTypeUID,
+		SubLeaveTypeUID:    subLeaveTypeUID,
 		StartDate:          startDate,
 		EndDate:            endDate,
 		Days:               days,
 		Notes:              notes,
+		StudyDestination:   studyDestination,
+		Assignment:         assignment,
+		AssignmentCountry:  assignmentCountry,
+		SpouseWorkCountry:  spouseWorkCountry,
 		SubmittedAt:        time.Now(),
 		ApprovalRequestUID: approvalRequestUID,
 	}

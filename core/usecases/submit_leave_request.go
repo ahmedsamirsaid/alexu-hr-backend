@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -9,18 +10,45 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
+var (
+	ErrLeaveRequestDocumentsRequired    = errors.New("documents array is required when documents_attached is true")
+	ErrLeaveRequestDocumentsUnsupported = errors.New("document attachments are only supported for leave requests that require approval")
+)
+
 type SubmitLeaveRequestInput struct {
-	EmployeeUID  string
-	LeaveTypeUID string
-	StartDate    time.Time
-	EndDate      time.Time
-	Notes        *string
+	UserUID           string
+	EmployeeUID       string
+	LeaveTypeUID      string
+	SubLeaveTypeUID   *string
+	StartDate         time.Time
+	EndDate           time.Time
+	Notes             *string
+	StudyDestination  *string
+	Assignment        *string
+	AssignmentCountry *string
+	SpouseWorkCountry *string
+	DocumentsAttached bool
+	Documents         []SubmitLeaveRequestDocumentInput
+}
+
+type SubmitLeaveRequestDocumentInput struct {
+	FileName    string
+	ContentType string
+}
+
+type SubmitLeaveRequestDocumentOutput struct {
+	FileName  string `json:"fileName"`
+	URL       string `json:"url"`
+	Method    string `json:"method"`
+	Bucket    string `json:"bucket"`
+	ObjectKey string `json:"objectKey"`
 }
 
 type SubmitLeaveRequestOutput struct {
 	LeaveRequest    *domain.LeaveRequest
 	ApprovalRequest *domain.ApprovalRequest
 	LeaveRecord     *domain.LeaveRecord // Set if auto-approved (no approval flow)
+	Documents       []SubmitLeaveRequestDocumentOutput
 }
 
 type SubmitLeaveRequestUseCase struct {
@@ -34,7 +62,9 @@ type SubmitLeaveRequestUseCase struct {
 	approvalRequestRepo  ports.ApprovalRequestRepository
 	approvalActionRepo   ports.ApprovalActionRepository
 	approvalFlowStepRepo ports.ApprovalFlowStepRepository
+	leaveRequestDocRepo  ports.LeaveRequestDocumentRepository
 	workingDaysCalc      *WorkingDaysCalculator
+	documentUploadURLUC  *GenerateDocumentUploadURLUseCase
 	notificationService  ports.NotificationService
 	roleRepo             ports.RoleRepository
 }
@@ -50,7 +80,9 @@ func NewSubmitLeaveRequestUseCase(
 	approvalRequestRepo ports.ApprovalRequestRepository,
 	approvalActionRepo ports.ApprovalActionRepository,
 	approvalFlowStepRepo ports.ApprovalFlowStepRepository,
+	leaveRequestDocRepo ports.LeaveRequestDocumentRepository,
 	workingDaysCalc *WorkingDaysCalculator,
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
 	notificationService ports.NotificationService,
 	roleRepo ports.RoleRepository,
 ) *SubmitLeaveRequestUseCase {
@@ -65,7 +97,9 @@ func NewSubmitLeaveRequestUseCase(
 		approvalRequestRepo:  approvalRequestRepo,
 		approvalActionRepo:   approvalActionRepo,
 		approvalFlowStepRepo: approvalFlowStepRepo,
+		leaveRequestDocRepo:  leaveRequestDocRepo,
 		workingDaysCalc:      workingDaysCalc,
+		documentUploadURLUC:  documentUploadURLUC,
 		notificationService:  notificationService,
 		roleRepo:             roleRepo,
 	}
@@ -103,6 +137,19 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 	if leaveType == nil {
 		return nil, ErrLeaveTypeNotFound
+	}
+
+	if input.SubLeaveTypeUID != nil && *input.SubLeaveTypeUID != "" {
+		subLeaveType, err := uc.leaveTypeRepo.GetSubLeaveTypeByUID(ctx, tx, *input.SubLeaveTypeUID)
+		if err != nil {
+			return nil, err
+		}
+		if subLeaveType == nil {
+			return nil, ErrSubLeaveTypeNotFound
+		}
+		if subLeaveType.LeaveTypeUID != input.LeaveTypeUID {
+			return nil, ErrSubLeaveTypeDoesNotBelongToLeaveType
+		}
 	}
 
 	// Calculate working days
@@ -144,6 +191,10 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		return nil, ErrInsufficientBalance
 	}
 
+	if input.DocumentsAttached && len(input.Documents) == 0 {
+		return nil, ErrLeaveRequestDocumentsRequired
+	}
+
 	// Check if leave type has an approval flow
 	// If no approval flow, auto-approve by creating leave record directly
 	if !leaveType.RequiresApproval() {
@@ -163,6 +214,10 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 	input SubmitLeaveRequestInput,
 	totalWorkingDays int,
 ) (*SubmitLeaveRequestOutput, error) {
+	if input.DocumentsAttached {
+		return nil, ErrLeaveRequestDocumentsUnsupported
+	}
+
 	// Create leave record directly (no request/approval needed)
 	leaveRecord := domain.NewLeaveRecord(
 		employee.ID,
@@ -234,10 +289,15 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	leaveRequest := domain.NewLeaveRequest(
 		input.EmployeeUID,
 		input.LeaveTypeUID,
+		input.SubLeaveTypeUID,
 		input.StartDate,
 		input.EndDate,
 		totalWorkingDays,
 		input.Notes,
+		input.StudyDestination,
+		input.Assignment,
+		input.AssignmentCountry,
+		input.SpouseWorkCountry,
 		approvalRequest.UID,
 	)
 	if err := uc.leaveRequestRepo.Create(ctx, tx, leaveRequest); err != nil {
@@ -253,6 +313,11 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
+		return nil, err
+	}
+
+	documents, err := uc.createLeaveRequestDocuments(ctx, tx, leaveRequest.UID, input)
+	if err != nil {
 		return nil, err
 	}
 
@@ -277,7 +342,46 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	return &SubmitLeaveRequestOutput{
 		LeaveRequest:    leaveRequest,
 		ApprovalRequest: approvalRequest,
+		Documents:       documents,
 	}, nil
+}
+
+func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(
+	ctx context.Context,
+	tx ports.Tx,
+	leaveRequestUID string,
+	input SubmitLeaveRequestInput,
+) ([]SubmitLeaveRequestDocumentOutput, error) {
+	if !input.DocumentsAttached {
+		return nil, nil
+	}
+
+	outputs := make([]SubmitLeaveRequestDocumentOutput, 0, len(input.Documents))
+	for _, document := range input.Documents {
+		presigned, err := uc.documentUploadURLUC.Execute(ctx, GenerateDocumentUploadURLInput{
+			UserUID:     input.UserUID,
+			FileName:    document.FileName,
+			ContentType: document.ContentType,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		doc := domain.NewLeaveRequestDocument(leaveRequestUID, document.FileName, presigned.ObjectKey)
+		if err := uc.leaveRequestDocRepo.Create(ctx, tx, doc); err != nil {
+			return nil, err
+		}
+
+		outputs = append(outputs, SubmitLeaveRequestDocumentOutput{
+			FileName:  document.FileName,
+			URL:       presigned.URL,
+			Method:    presigned.Method,
+			Bucket:    presigned.Bucket,
+			ObjectKey: presigned.ObjectKey,
+		})
+	}
+
+	return outputs, nil
 }
 
 func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeName, requestUID string) {

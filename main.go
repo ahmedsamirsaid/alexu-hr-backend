@@ -4,24 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
 	"github.com/banumusa/backend/adapters/notifications/fcm"
 	"github.com/banumusa/backend/adapters/notifications/noop"
 	"github.com/banumusa/backend/adapters/scheduler"
+	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -38,13 +38,12 @@ func main() {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
 	}
-	
-	
+
 	minioService, err := minioAdapter.NewService(minioAdapter.Config{
-	Endpoint:  cfg.MinIOEndpoint,
-	AccessKey: cfg.MinIOAccessKey,
-	SecretKey: cfg.MinIOSecretKey,
-	UseSSL:    cfg.MinIOUseSSL,
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		UseSSL:    cfg.MinIOUseSSL,
 	})
 	if err != nil {
 		slog.Error("main.main.init_minio", "error", err)
@@ -79,6 +78,7 @@ func main() {
 	approvalRequestRepo := db.NewApprovalRequestRepository()
 	approvalActionRepo := db.NewApprovalActionRepository()
 	leaveRequestRepo := db.NewLeaveRequestRepository()
+	leaveRequestDocumentRepo := db.NewLeaveRequestDocumentRepository()
 
 	deviceTokenRepo := db.NewDeviceTokenRepository()
 	attendanceReminderRepo := db.NewAttendanceReminderRepository()
@@ -159,6 +159,7 @@ func main() {
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
 	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
+	getApprovalFlowUC := usecases.NewGetApprovalFlowUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
@@ -174,22 +175,33 @@ func main() {
 	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
 
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
+	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
 	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIOUploadExpiryMinutes,
+	)
+	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIODownloadExpiryMinutes,
+	)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
 		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
-		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, workingDaysCalc,
+		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc, generateDocumentUploadURLUC,
 		notificationService, roleRepo,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo,
 	)
-	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo)
+	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo,
+		sqliteDB, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo, generateDocumentDownloadURLUC,
 	)
 
 	listPendingApprovalsUC := usecases.NewListPendingApprovalsUseCase(
@@ -260,7 +272,7 @@ func main() {
 	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
 	approvalFlowHandler := httpAdapter.NewApprovalFlowHandler(
-		listApprovalFlowsUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
+		listApprovalFlowsUC, getApprovalFlowUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
 		createApprovalFlowStepUC, updateApprovalFlowStepUC, deleteApprovalFlowStepUC,
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
@@ -283,7 +295,7 @@ func main() {
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,
 	)
-	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, listSubLeaveTypesUC, toggleLeaveTypeUC)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
 	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
@@ -297,17 +309,6 @@ func main() {
 		updateAttendanceLogUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
-	)
-	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIOUploadExpiryMinutes,
-	)
-
-	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIODownloadExpiryMinutes,
 	)
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,
@@ -334,7 +335,7 @@ func main() {
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
-		DocumentHandler: documentHandler,
+		DocumentHandler:         documentHandler,
 	})
 
 	var sched *scheduler.Scheduler

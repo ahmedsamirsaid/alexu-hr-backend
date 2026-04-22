@@ -24,7 +24,7 @@ type RouterConfig struct {
 	DebugHandler            *DebugHandler
 	JWTService              *JWTService
 	AuthEnabled             bool
-	DocumentHandler *DocumentHandler
+	DocumentHandler         *DocumentHandler
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -69,6 +69,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/permissions", RequirePermission("roles:read")(http.HandlerFunc(cfg.RoleHandler.ListPermissions)))
 
 	protectedMux.Handle("GET /api/v1/admin/approval-flows", RequirePermission("approval-flows:read")(http.HandlerFunc(cfg.ApprovalFlowHandler.ListApprovalFlows)))
+	protectedMux.Handle("GET /api/v1/admin/approval-flows/{uid}", RequirePermission("approval-flows:read")(http.HandlerFunc(cfg.ApprovalFlowHandler.GetApprovalFlow)))
 	protectedMux.Handle("POST /api/v1/admin/approval-flows", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.CreateApprovalFlow)))
 	protectedMux.Handle("PATCH /api/v1/admin/approval-flows/{uid}", RequirePermission("approval-flows:write")(http.HandlerFunc(cfg.ApprovalFlowHandler.UpdateApprovalFlow)))
 	protectedMux.Handle("GET /api/v1/admin/approval-flows/{uid}/steps", RequirePermission("approval-flows:read")(http.HandlerFunc(cfg.ApprovalFlowHandler.ListApprovalFlowSteps)))
@@ -90,6 +91,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}/active", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.ToggleLeaveType)))
+	protectedMux.Handle("GET /api/v1/leave-types/{uid}/sub-leave-types", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveTypeHandler.ListSubLeaveTypes)))
 	protectedMux.Handle("GET /api/v1/admin/weekend-config", RequirePermission("departments:read")(http.HandlerFunc(cfg.WeekendHandler.ListWeekendDays)))
 	protectedMux.Handle("GET /api/v1/admin/holidays", RequirePermission("departments:read")(http.HandlerFunc(cfg.HolidayHandler.ListHolidays)))
 	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("departments:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))

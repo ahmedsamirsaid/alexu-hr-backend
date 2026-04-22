@@ -235,6 +235,16 @@ components:
         leaveTypeNameAr:
           type: string
           example: "إجازة سنوية"
+        subLeaveTypeUid:
+          type: string
+          nullable: true
+          example: "slt_001"
+        subLeaveTypeNameEn:
+          type: string
+          example: "3 months with 75% pay"
+        subLeaveTypeNameAr:
+          type: string
+          example: "3 أشهر بأجر 75%"
         startDate:
           type: string
           format: date
@@ -268,6 +278,22 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    SubLeaveType:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "slt_001"
+        leaveTypeUid:
+          type: string
+          example: "lt_special"
+        nameEn:
+          type: string
+          example: "3 months with 75% pay"
+        nameAr:
+          type: string
+          example: "3 أشهر بأجر 75%"
 
     PendingApproval:
       type: object
@@ -422,6 +448,14 @@ components:
         isActive:
           type: boolean
           example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T10:30:00Z"
 
     ApprovalFlowStep:
       type: object
@@ -429,6 +463,9 @@ components:
         uid:
           type: string
           example: "afs_001"
+        flowUid:
+          type: string
+          example: "af_001"
         stepOrder:
           type: integer
           example: 1
@@ -438,6 +475,14 @@ components:
         roleName:
           type: string
           example: "approver"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-23T10:30:00Z"
 
     LeaveType:
       type: object
@@ -1657,6 +1702,14 @@ paths:
                 leaveTypeUid:
                   type: string
                   example: "lt_annual"
+                subLeaveTypeUid:
+                  type: string
+                  nullable: true
+                  example: "slt_001"
+                sub_leave_type_uid:
+                  type: string
+                  nullable: true
+                  example: "slt_001"
                 startDate:
                   type: string
                   format: date
@@ -2366,6 +2419,37 @@ paths:
                 $ref: "#/components/schemas/ApprovalFlow"
 
   /api/v1/admin/approval-flows/{uid}:
+    get:
+      tags: [Approval Flows]
+      summary: Get approval flow details
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "af_001"
+      responses:
+        "200":
+          description: Approval flow details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flow:
+                    $ref: "#/components/schemas/ApprovalFlow"
+                  steps:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ApprovalFlowStep"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
     patch:
       tags: [Approval Flows]
       summary: Update approval flow
@@ -2563,6 +2647,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LeaveType"
+
+  /api/v1/leave-types/{uid}/sub-leave-types:
+    get:
+      tags: [Leave Types]
+      summary: List sub leave types for a leave type
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "lt_special"
+      responses:
+        "200":
+          description: Sub leave types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subLeaveTypes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SubLeaveType"
+        "404":
+          description: Leave type not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   # ─── SHIFTS ─────────────────────────────────────────────────────────────────
 

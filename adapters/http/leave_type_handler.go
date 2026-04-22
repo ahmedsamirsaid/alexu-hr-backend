@@ -11,17 +11,20 @@ import (
 
 // LeaveTypeHandler handles leave type HTTP requests (admin).
 type LeaveTypeHandler struct {
-	listLeaveTypesUC   *usecases.ListLeaveTypesUseCase
-	toggleLeaveTypeUC  *usecases.ToggleLeaveTypeUseCase
+	listLeaveTypesUC    *usecases.ListLeaveTypesUseCase
+	listSubLeaveTypesUC *usecases.ListSubLeaveTypesUseCase
+	toggleLeaveTypeUC   *usecases.ToggleLeaveTypeUseCase
 }
 
 func NewLeaveTypeHandler(
 	listLeaveTypesUC *usecases.ListLeaveTypesUseCase,
+	listSubLeaveTypesUC *usecases.ListSubLeaveTypesUseCase,
 	toggleLeaveTypeUC *usecases.ToggleLeaveTypeUseCase,
 ) *LeaveTypeHandler {
 	return &LeaveTypeHandler{
-		listLeaveTypesUC:  listLeaveTypesUC,
-		toggleLeaveTypeUC: toggleLeaveTypeUC,
+		listLeaveTypesUC:    listLeaveTypesUC,
+		listSubLeaveTypesUC: listSubLeaveTypesUC,
+		toggleLeaveTypeUC:   toggleLeaveTypeUC,
 	}
 }
 
@@ -43,6 +46,17 @@ type LeaveTypeResponse struct {
 
 type ListLeaveTypesResponse struct {
 	LeaveTypes []LeaveTypeResponse `json:"leaveTypes"`
+}
+
+type SubLeaveTypeResponse struct {
+	UID          string `json:"uid"`
+	LeaveTypeUID string `json:"leaveTypeUid"`
+	NameEN       string `json:"nameEn"`
+	NameAR       string `json:"nameAr"`
+}
+
+type ListSubLeaveTypesResponse struct {
+	SubLeaveTypes []SubLeaveTypeResponse `json:"subLeaveTypes"`
 }
 
 // Leave Type requests
@@ -126,4 +140,37 @@ func (h *LeaveTypeHandler) ToggleLeaveType(w http.ResponseWriter, r *http.Reques
 		CreatedAt:             output.LeaveType.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:             output.LeaveType.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	})
+}
+
+// ListSubLeaveTypes handles GET /api/v1/leave-types/{uid}/sub-leave-types
+func (h *LeaveTypeHandler) ListSubLeaveTypes(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	output, err := h.listSubLeaveTypesUC.Execute(r.Context(), uid)
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		if errors.Is(err, usecases.ErrLeaveTypeNotFound) {
+			statusCode = http.StatusNotFound
+		} else {
+			slog.Error("leave_type_handler.ListSubLeaveTypes.execute_usecase", "error", err, "leave_type_uid", uid)
+		}
+		writeError(w, statusCode, err.Error())
+		return
+	}
+
+	subLeaveTypes := make([]SubLeaveTypeResponse, 0, len(output.SubLeaveTypes))
+	for _, item := range output.SubLeaveTypes {
+		subLeaveTypes = append(subLeaveTypes, SubLeaveTypeResponse{
+			UID:          item.UID,
+			LeaveTypeUID: item.LeaveTypeUID,
+			NameEN:       item.NameEN,
+			NameAR:       item.NameAR,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, ListSubLeaveTypesResponse{SubLeaveTypes: subLeaveTypes})
 }

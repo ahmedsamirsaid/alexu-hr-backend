@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -37,6 +38,7 @@ type SubmitLeaveRequestUseCase struct {
 	workingDaysCalc      *WorkingDaysCalculator
 	notificationService  ports.NotificationService
 	roleRepo             ports.RoleRepository
+	auditor              audit.Auditor
 }
 
 func NewSubmitLeaveRequestUseCase(
@@ -53,6 +55,7 @@ func NewSubmitLeaveRequestUseCase(
 	workingDaysCalc *WorkingDaysCalculator,
 	notificationService ports.NotificationService,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *SubmitLeaveRequestUseCase {
 	return &SubmitLeaveRequestUseCase{
 		db:                   db,
@@ -68,6 +71,7 @@ func NewSubmitLeaveRequestUseCase(
 		workingDaysCalc:      workingDaysCalc,
 		notificationService:  notificationService,
 		roleRepo:             roleRepo,
+		auditor:              auditor,
 	}
 }
 
@@ -243,6 +247,12 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	if err := uc.leaveRequestRepo.Create(ctx, tx, leaveRequest); err != nil {
 		return nil, err
 	}
+
+	// Audit log for leave request submission
+	defer uc.auditor.Actor(input.EmployeeUID).
+		Did(audit.ActionSubmit).
+		On(audit.EntityLeaveRequest, leaveRequest.UID).
+		Save(ctx)
 
 	// Record submit action
 	submitAction := domain.NewApprovalAction(

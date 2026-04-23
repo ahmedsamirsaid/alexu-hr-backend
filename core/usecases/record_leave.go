@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -20,12 +21,13 @@ var (
 )
 
 type RecordLeaveInput struct {
-	EmployeeUID  string
-	LeaveTypeUID string
-	StartDate    time.Time
-	EndDate      time.Time
-	RecordedBy   *int64
-	Notes        *string
+	EmployeeUID     string
+	LeaveTypeUID    string
+	StartDate       time.Time
+	EndDate         time.Time
+	RecordedBy      *int64
+	RecordedByUID   *string // Employee UID of the actor recording the leave (for audit)
+	Notes           *string
 }
 
 type RecordLeaveOutput struct {
@@ -41,6 +43,7 @@ type RecordLeaveUseCase struct {
 	balanceTxRepo    ports.LeaveBalanceTransactionRepository
 	workingDaysCalc  *WorkingDaysCalculator
 	leaveSync        ports.LeaveSyncPort
+	auditor          audit.Auditor
 }
 
 func NewRecordLeaveUseCase(
@@ -52,6 +55,7 @@ func NewRecordLeaveUseCase(
 	balanceTxRepo ports.LeaveBalanceTransactionRepository,
 	workingDaysCalc *WorkingDaysCalculator,
 	leaveSync ports.LeaveSyncPort,
+	auditor audit.Auditor,
 ) *RecordLeaveUseCase {
 	return &RecordLeaveUseCase{
 		db:               db,
@@ -62,12 +66,22 @@ func NewRecordLeaveUseCase(
 		balanceTxRepo:    balanceTxRepo,
 		workingDaysCalc:  workingDaysCalc,
 		leaveSync:        leaveSync,
+		auditor:          auditor,
 	}
 }
 
 func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInput) (*RecordLeaveOutput, error) {
 	if input.EndDate.Before(input.StartDate) {
 		return nil, ErrInvalidDateRange
+	}
+
+	// Determine actor UID for audit logging
+	// Use RecordedByUID if provided, otherwise try to extract from context
+	actorUID := ""
+	if input.RecordedByUID != nil {
+		actorUID = *input.RecordedByUID
+	} else {
+		actorUID = audit.ActorFromContext(ctx)
 	}
 
 	tx, err := uc.db.BeginTx(ctx, nil)
@@ -146,9 +160,32 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 			return nil, err
 		}
 
+		// Capture old balance before deduction
+		oldUsedDays := balance.UsedDays
+		oldRemainingDays := remaining
+
 		balance.UsedDays += workingDays
 		if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 			return nil, err
+		}
+
+		// Audit log for balance deduction (only if we have an actor)
+		if actorUID != "" {
+			defer uc.auditor.Actor(actorUID).
+				Did(audit.ActionDeductBalance).
+				On(audit.EntityLeaveBalance, balance.UID).
+				WithMeta("employee_uid", input.EmployeeUID).
+				WithMeta("leave_type_uid", input.LeaveTypeUID).
+				WithMeta("leave_type_name", leaveType.NameAR).
+				WithMeta("deduction_amount", workingDays).
+				WithMeta("old_used_days", oldUsedDays).
+				WithMeta("new_used_days", balance.UsedDays).
+				WithMeta("old_remaining_days", oldRemainingDays).
+				WithMeta("new_remaining_days", balance.TotalDays-balance.UsedDays).
+				WithMeta("start_date", period.Start.Format("2006-01-02")).
+				WithMeta("end_date", period.End.Format("2006-01-02")).
+				WithMeta("year", period.Year).
+				Save(ctx)
 		}
 
 		balanceTx := domain.NewLeaveBalanceTransaction(

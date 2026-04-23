@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -20,15 +21,18 @@ type CreateUserOutput struct {
 type CreateUserUseCase struct {
 	db       ports.DB
 	userRepo ports.UserRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateUserUseCase(
 	db ports.DB,
 	userRepo ports.UserRepository,
+	auditor audit.Auditor,
 ) *CreateUserUseCase {
 	return &CreateUserUseCase{
 		db:       db,
 		userRepo: userRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -54,6 +58,9 @@ func (uc *CreateUserUseCase) Execute(ctx context.Context, input CreateUserInput)
 	if err := uc.userRepo.Create(ctx, uc.db, user); err != nil {
 		return nil, err
 	}
+
+	// Audit log after successful creation
+	defer uc.auditor.From(ctx).Did(audit.ActionCreate).On(audit.EntityUser, user.UID).Save(ctx)
 
 	return &CreateUserOutput{
 		UID: user.UID,

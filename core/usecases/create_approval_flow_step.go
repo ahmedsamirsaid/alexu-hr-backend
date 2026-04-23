@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -22,6 +23,7 @@ type CreateApprovalFlowStepUseCase struct {
 	flowRepo ports.ApprovalFlowRepository
 	stepRepo ports.ApprovalFlowStepRepository
 	roleRepo ports.RoleRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateApprovalFlowStepUseCase(
@@ -29,12 +31,14 @@ func NewCreateApprovalFlowStepUseCase(
 	flowRepo ports.ApprovalFlowRepository,
 	stepRepo ports.ApprovalFlowStepRepository,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *CreateApprovalFlowStepUseCase {
 	return &CreateApprovalFlowStepUseCase{
 		db:       db,
 		flowRepo: flowRepo,
 		stepRepo: stepRepo,
 		roleRepo: roleRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -77,6 +81,14 @@ func (uc *CreateApprovalFlowStepUseCase) Execute(ctx context.Context, input Crea
 	if err := uc.stepRepo.Create(ctx, tx, step); err != nil {
 		return nil, err
 	}
+
+	// Audit log after successful creation with step details
+	defer uc.auditor.From(ctx).Did(audit.ActionAddStep).On(audit.EntityApprovalFlowStep, step.UID).
+		WithMeta("approval_flow_uid", input.ApprovalFlowUID).
+		WithMeta("step_order", input.StepOrder).
+		WithMeta("role_uid", input.RoleUID).
+		WithMeta("role_name", role.Name).
+		Save(ctx)
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

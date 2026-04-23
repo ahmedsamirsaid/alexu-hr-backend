@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/xuri/excelize/v2"
@@ -61,6 +62,7 @@ type ImportEmployeesUseCase struct {
 	employeeRepo ports.EmployeeRepository
 	userRepo     ports.UserRepository
 	roleRepo     ports.RoleRepository
+	auditor      audit.Auditor
 }
 
 // NewImportEmployeesUseCase creates a new import use case.
@@ -69,12 +71,14 @@ func NewImportEmployeesUseCase(
 	employeeRepo ports.EmployeeRepository,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *ImportEmployeesUseCase {
 	return &ImportEmployeesUseCase{
 		db:           db,
 		employeeRepo: employeeRepo,
 		userRepo:     userRepo,
 		roleRepo:     roleRepo,
+		auditor:      auditor,
 	}
 }
 
@@ -201,6 +205,14 @@ func (uc *ImportEmployeesUseCase) Execute(ctx context.Context, input ImportEmplo
 		var employeeUID string
 		if existingEmp != nil {
 			// Update existing employee
+			oldName := existingEmp.Name
+			oldMobile := existingEmp.Mobile
+			oldEmail := ""
+			if existingEmp.Email != nil {
+				oldEmail = *existingEmp.Email
+			}
+			oldStatus := existingEmp.Status
+
 			existingEmp.Name = emp.employee.Name
 			existingEmp.Mobile = emp.employee.Mobile
 			existingEmp.Email = emp.employee.Email
@@ -209,12 +221,42 @@ func (uc *ImportEmployeesUseCase) Execute(ctx context.Context, input ImportEmplo
 				return nil, fmt.Errorf("failed to update employee at row %d: %w", emp.row, err)
 			}
 			employeeUID = existingEmp.UID
+
+			// Audit log for employee update with field changes
+			newEmail := ""
+			if emp.employee.Email != nil {
+				newEmail = *emp.employee.Email
+			}
+			go uc.auditor.Actor("system_import").
+				Did(audit.ActionUpdate).
+				On(audit.EntityEmployee, employeeUID).
+				WithMeta("old_name", oldName).
+				WithMeta("new_name", emp.employee.Name).
+				WithMeta("old_mobile", oldMobile).
+				WithMeta("new_mobile", emp.employee.Mobile).
+				WithMeta("old_email", oldEmail).
+				WithMeta("new_email", newEmail).
+				WithMeta("old_status", oldStatus).
+				WithMeta("new_status", emp.employee.Status).
+				WithMeta("import_row", emp.row).
+				Save(ctx)
 		} else {
 			// Create new employee
 			if err := uc.employeeRepo.Create(ctx, tx, emp.employee); err != nil {
 				return nil, fmt.Errorf("failed to create employee at row %d: %w", emp.row, err)
 			}
 			employeeUID = emp.employee.UID
+
+			// Audit log for employee creation
+			go uc.auditor.Actor("system_import").
+				Did(audit.ActionCreate).
+				On(audit.EntityEmployee, employeeUID).
+				WithMeta("name", emp.employee.Name).
+				WithMeta("mobile", emp.employee.Mobile).
+				WithMeta("government_id", emp.employee.GovernmentID).
+				WithMeta("university_id", emp.employee.UniversityID).
+				WithMeta("import_row", emp.row).
+				Save(ctx)
 		}
 
 		// Check if user already exists for this employee

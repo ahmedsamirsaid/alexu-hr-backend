@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/banumusa/backend/adapters/db"
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -21,15 +22,18 @@ type ToggleLeaveTypeOutput struct {
 type ToggleLeaveTypeUseCase struct {
 	db            ports.DB
 	leaveTypeRepo ports.LeaveTypeRepository
+	auditor       audit.Auditor
 }
 
 func NewToggleLeaveTypeUseCase(
 	db ports.DB,
 	leaveTypeRepo ports.LeaveTypeRepository,
+	auditor audit.Auditor,
 ) *ToggleLeaveTypeUseCase {
 	return &ToggleLeaveTypeUseCase{
 		db:            db,
 		leaveTypeRepo: leaveTypeRepo,
+		auditor:       auditor,
 	}
 }
 
@@ -46,6 +50,15 @@ func (uc *ToggleLeaveTypeUseCase) Execute(ctx context.Context, input ToggleLeave
 	if err != nil {
 		return nil, err
 	}
+
+	// Audit log after successful toggle
+	action := audit.ActionActivate
+	if !input.IsActive {
+		action = audit.ActionDeactivate
+	}
+	defer uc.auditor.From(ctx).Did(action).On(audit.EntityLeaveType, input.UID).
+		WithMeta("is_active", input.IsActive).
+		Save(ctx)
 
 	return &ToggleLeaveTypeOutput{LeaveType: leaveType}, nil
 }

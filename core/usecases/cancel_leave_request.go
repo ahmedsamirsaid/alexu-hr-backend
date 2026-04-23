@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -17,6 +18,7 @@ type CancelLeaveRequestUseCase struct {
 	leaveRequestRepo    ports.LeaveRequestRepository
 	approvalRequestRepo ports.ApprovalRequestRepository
 	approvalActionRepo  ports.ApprovalActionRepository
+	auditor             audit.Auditor
 }
 
 func NewCancelLeaveRequestUseCase(
@@ -24,12 +26,14 @@ func NewCancelLeaveRequestUseCase(
 	leaveRequestRepo ports.LeaveRequestRepository,
 	approvalRequestRepo ports.ApprovalRequestRepository,
 	approvalActionRepo ports.ApprovalActionRepository,
+	auditor audit.Auditor,
 ) *CancelLeaveRequestUseCase {
 	return &CancelLeaveRequestUseCase{
 		db:                  db,
 		leaveRequestRepo:    leaveRequestRepo,
 		approvalRequestRepo: approvalRequestRepo,
 		approvalActionRepo:  approvalActionRepo,
+		auditor:             auditor,
 	}
 }
 
@@ -47,6 +51,12 @@ func (uc *CancelLeaveRequestUseCase) Execute(ctx context.Context, input CancelLe
 	if leaveRequest == nil {
 		return ErrLeaveRequestNotFound
 	}
+
+	// Audit log will fire after successful cancellation
+	defer uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionCancel).
+		On(audit.EntityLeaveRequest, leaveRequest.UID).
+		Save(ctx)
 
 	// Check if requester is the owner
 	if leaveRequest.EmployeeUID != input.ActorEmployeeUID {

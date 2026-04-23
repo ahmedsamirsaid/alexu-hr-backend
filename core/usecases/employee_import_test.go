@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -193,7 +194,7 @@ func newTestImportUseCase(db *mockDB, empRepo *mockEmployeeRepoForImport, userRe
 			},
 		}
 	}
-	return usecases.NewImportEmployeesUseCase(db, empRepo, userRepo, roleRepo)
+	return usecases.NewImportEmployeesUseCase(db, empRepo, userRepo, roleRepo, audit.Noop())
 }
 
 func (m *mockEmployeeRepoForImport) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Employee, error) {
@@ -539,7 +540,7 @@ func TestImportEmployees_CreatesUsersWithEmployeeRole(t *testing.T) {
 		assignedRoles: make(map[int64][]int64),
 	}
 
-	uc := usecases.NewImportEmployeesUseCase(db, empRepo, userRepo, roleRepo)
+	uc := usecases.NewImportEmployeesUseCase(db, empRepo, userRepo, roleRepo, audit.Noop())
 
 	input := usecases.ImportEmployeesInput{
 		File:     buf,

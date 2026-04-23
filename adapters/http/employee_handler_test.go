@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -329,7 +330,7 @@ func TestImportEmployees_Integration_Success(t *testing.T) {
 	repo := &mockEmployeeRepo{}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -375,7 +376,7 @@ func TestImportEmployees_Integration_ValidationErrors(t *testing.T) {
 	repo := &mockEmployeeRepo{}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -420,7 +421,7 @@ func TestExportEmployees_Integration_Excel(t *testing.T) {
 	repo := &mockEmployeeRepo{employees: createTestEmployees()}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -458,7 +459,7 @@ func TestExportEmployees_Integration_ExcelWithFilters(t *testing.T) {
 	repo := &mockEmployeeRepo{employees: createTestEmployees()}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -481,7 +482,7 @@ func TestExportEmployees_Integration_PDF(t *testing.T) {
 	repo := &mockEmployeeRepo{employees: createTestEmployees()}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -515,7 +516,7 @@ func TestExportEmployees_Integration_PDFWithFilters(t *testing.T) {
 	repo := &mockEmployeeRepo{employees: createTestEmployees()}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -538,7 +539,7 @@ func TestDownloadTemplate_Integration(t *testing.T) {
 	repo := &mockEmployeeRepo{}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -587,7 +588,7 @@ func TestImportEmployees_Integration_InvalidFileType(t *testing.T) {
 	repo := &mockEmployeeRepo{}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()
@@ -618,7 +619,7 @@ func TestImportEmployees_Integration_MissingFile(t *testing.T) {
 	repo := &mockEmployeeRepo{}
 
 	listUC := usecases.NewListEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
-	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo())
+	importUC := usecases.NewImportEmployeesUseCase(db, repo, &mockUserRepo{}, defaultMockRoleRepo(), audit.Noop())
 	exportUC := usecases.NewExportEmployeesUseCase(db, repo)
 	exportPDFUC := usecases.NewExportEmployeesPDFUseCase(db, repo, "")
 	templateUC := usecases.NewGenerateImportTemplateUseCase()

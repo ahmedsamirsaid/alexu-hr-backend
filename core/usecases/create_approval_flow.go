@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -21,15 +22,18 @@ type CreateApprovalFlowOutput struct {
 type CreateApprovalFlowUseCase struct {
 	db       ports.DB
 	flowRepo ports.ApprovalFlowRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateApprovalFlowUseCase(
 	db ports.DB,
 	flowRepo ports.ApprovalFlowRepository,
+	auditor audit.Auditor,
 ) *CreateApprovalFlowUseCase {
 	return &CreateApprovalFlowUseCase{
 		db:       db,
 		flowRepo: flowRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -54,6 +58,9 @@ func (uc *CreateApprovalFlowUseCase) Execute(ctx context.Context, input CreateAp
 	if err := uc.flowRepo.Create(ctx, tx, flow); err != nil {
 		return nil, err
 	}
+
+	// Audit log after successful creation
+	defer uc.auditor.From(ctx).Did(audit.ActionCreate).On(audit.EntityApprovalFlow, flow.UID).Save(ctx)
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

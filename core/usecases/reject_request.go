@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -30,6 +31,7 @@ type RejectRequestUseCase struct {
 	notificationService  ports.NotificationService
 	leaveTypeRepo        ports.LeaveTypeRepository
 	userRepo             ports.UserRepository
+	auditor              audit.Auditor
 }
 
 func NewRejectRequestUseCase(
@@ -43,6 +45,7 @@ func NewRejectRequestUseCase(
 	notificationService ports.NotificationService,
 	leaveTypeRepo ports.LeaveTypeRepository,
 	userRepo ports.UserRepository,
+	auditor audit.Auditor,
 ) *RejectRequestUseCase {
 	return &RejectRequestUseCase{
 		db:                   db,
@@ -55,10 +58,18 @@ func NewRejectRequestUseCase(
 		notificationService:  notificationService,
 		leaveTypeRepo:        leaveTypeRepo,
 		userRepo:             userRepo,
+		auditor:              auditor,
 	}
 }
 
 func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequestInput) (*RejectRequestOutput, error) {
+	// Audit log will fire after successful rejection
+	defer uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionReject).
+		On(audit.EntityLeaveRequest, input.ApprovalRequestUID).
+		WithMeta("reason", input.Comments).
+		Save(ctx)
+
 	tx, err := uc.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

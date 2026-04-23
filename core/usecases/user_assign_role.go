@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -19,6 +20,7 @@ type AssignRoleUseCase struct {
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
 	deptRepo ports.DepartmentRepository
+	auditor  audit.Auditor
 }
 
 func NewAssignRoleUseCase(
@@ -26,12 +28,14 @@ func NewAssignRoleUseCase(
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
 	deptRepo ports.DepartmentRepository,
+	auditor audit.Auditor,
 ) *AssignRoleUseCase {
 	return &AssignRoleUseCase{
 		db:       db,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
 		deptRepo: deptRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -73,7 +77,13 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 		}
 	}
 
+	// Audit log after successful role assignment
+	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionAssign).On(audit.EntityUser, input.UserUID).
+		WithMeta("role_uid", role.UID).
+		WithMeta("role_name", role.Name)
+
 	if departmentUIDInput == "" {
+		defer auditBuilder.Save(ctx)
 		return uc.roleRepo.AssignRoleToUser(ctx, uc.db, user.ID, role.ID)
 	}
 
@@ -86,6 +96,9 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 	}
 
 	departmentUID := department.UID
+	auditBuilder.WithMeta("department_uid", departmentUID)
+	defer auditBuilder.Save(ctx)
+	
 	return uc.roleRepo.AssignRoleToUserWithDepartment(ctx, uc.db, user.ID, role.ID, &departmentUID)
 }
 
@@ -98,17 +111,20 @@ type RemoveRoleUseCase struct {
 	db       ports.DB
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
+	auditor  audit.Auditor
 }
 
 func NewRemoveRoleUseCase(
 	db ports.DB,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *RemoveRoleUseCase {
 	return &RemoveRoleUseCase{
 		db:       db,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -128,6 +144,12 @@ func (uc *RemoveRoleUseCase) Execute(ctx context.Context, input RemoveRoleInput)
 	if role == nil {
 		return ErrRoleNotFound
 	}
+
+	// Audit log after successful role removal
+	defer uc.auditor.From(ctx).Did(audit.ActionUnassign).On(audit.EntityUser, input.UserUID).
+		WithMeta("role_uid", role.UID).
+		WithMeta("role_name", role.Name).
+		Save(ctx)
 
 	return uc.roleRepo.RemoveRoleFromUser(ctx, uc.db, user.ID, role.ID)
 }

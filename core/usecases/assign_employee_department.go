@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 )
 
@@ -16,17 +17,20 @@ type AssignEmployeeDepartmentUseCase struct {
 	db       ports.DB
 	empRepo  ports.EmployeeRepository
 	deptRepo ports.DepartmentRepository
+	auditor  audit.Auditor
 }
 
 func NewAssignEmployeeDepartmentUseCase(
 	db ports.DB,
 	empRepo ports.EmployeeRepository,
 	deptRepo ports.DepartmentRepository,
+	auditor audit.Auditor,
 ) *AssignEmployeeDepartmentUseCase {
 	return &AssignEmployeeDepartmentUseCase{
 		db:       db,
 		empRepo:  empRepo,
 		deptRepo: deptRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -51,6 +55,14 @@ func (uc *AssignEmployeeDepartmentUseCase) Execute(ctx context.Context, input As
 	if !department.IsActive {
 		return ErrDepartmentInactive
 	}
+
+	// Audit log with department information
+	defer uc.auditor.From(ctx).
+		Did("assign_department").
+		On(audit.EntityEmployee, input.EmployeeUID).
+		WithMeta("department_uid", input.DepartmentUID).
+		WithMeta("department_name", department.NameEN).
+		Save(ctx)
 
 	// Update employee's department
 	employee.DepartmentUID = &input.DepartmentUID

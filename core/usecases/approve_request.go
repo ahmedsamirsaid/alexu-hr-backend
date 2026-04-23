@@ -3,7 +3,7 @@ package usecases
 import (
 	"context"
 	"log/slog"
-
+    "github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -34,6 +34,7 @@ type ApproveRequestUseCase struct {
 	roleRepo             ports.RoleRepository
 	notificationService  ports.NotificationService
 	userRepo             ports.UserRepository
+	auditor              audit.Auditor
 }
 
 func NewApproveRequestUseCase(
@@ -50,6 +51,7 @@ func NewApproveRequestUseCase(
 	roleRepo ports.RoleRepository,
 	notificationService ports.NotificationService,
 	userRepo ports.UserRepository,
+	auditor audit.Auditor,
 ) *ApproveRequestUseCase {
 	return &ApproveRequestUseCase{
 		db:                   db,
@@ -65,10 +67,16 @@ func NewApproveRequestUseCase(
 		roleRepo:             roleRepo,
 		notificationService:  notificationService,
 		userRepo:             userRepo,
+		auditor:              auditor,
 	}
 }
 
 func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveRequestInput) (*ApproveRequestOutput, error) {
+	defer uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionApprove).
+		On(audit.EntityApprovalRequest, input.ApprovalRequestUID).
+		WithMeta("comments", input.Comments).
+		Save(ctx)
 	tx, err := uc.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -169,6 +177,8 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		}
 
 		// Re-check balance at approval time
+		oldUsedDays := balance.UsedDays
+		oldRemainingDays := balance.TotalDays - balance.UsedDays
 		remaining := balance.TotalDays - balance.UsedDays
 		if leaveRequest.Days > remaining {
 			// Reject due to insufficient balance at approval time
@@ -203,6 +213,24 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 			return nil, err
 		}
+
+		// Audit log for balance deduction
+		defer uc.auditor.Actor(input.ActorEmployeeUID).
+			Did(audit.ActionDeductBalance).
+			On(audit.EntityLeaveBalance, balance.UID).
+			WithMeta("employee_uid", approvalRequest.RequesterUID).
+			WithMeta("leave_type_uid", leaveRequest.LeaveTypeUID).
+			WithMeta("leave_type_name", leaveType.NameAR).
+			WithMeta("deduction_amount", leaveRequest.Days).
+			WithMeta("old_used_days", oldUsedDays).
+			WithMeta("new_used_days", balance.UsedDays).
+			WithMeta("old_remaining_days", oldRemainingDays).
+			WithMeta("new_remaining_days", balance.TotalDays-balance.UsedDays).
+			WithMeta("start_date", leaveRequest.StartDate.Format("2006-01-02")).
+			WithMeta("end_date", leaveRequest.EndDate.Format("2006-01-02")).
+			WithMeta("year", year).
+			WithMeta("leave_request_uid", leaveRequest.UID).
+			Save(ctx)
 
 		// Record balance transaction
 		balanceTx := domain.NewLeaveBalanceTransaction(

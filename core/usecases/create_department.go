@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -24,15 +25,18 @@ type CreateDepartmentOutput struct {
 type CreateDepartmentUseCase struct {
 	db       ports.DB
 	deptRepo ports.DepartmentRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateDepartmentUseCase(
 	db ports.DB,
 	deptRepo ports.DepartmentRepository,
+	auditor audit.Auditor,
 ) *CreateDepartmentUseCase {
 	return &CreateDepartmentUseCase{
 		db:       db,
 		deptRepo: deptRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -48,6 +52,12 @@ func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, input CreateDepa
 
 	department := domain.NewDepartment(input.Code, input.NameEN, input.NameAR)
 	department.DefaultShiftUID = input.DefaultShiftUID
+
+	// Audit log
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityDepartment, department.UID).
+		Save(ctx)
 
 	if err := uc.deptRepo.Create(ctx, uc.db, department); err != nil {
 		return nil, err

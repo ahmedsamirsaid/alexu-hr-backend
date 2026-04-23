@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -52,6 +53,7 @@ type CreateAttendanceLogUseCase struct {
 	recordRepo   ports.AttendanceRecordRepository
 	employeeRepo ports.EmployeeRepository
 	deviceRepo   ports.AttendanceDeviceRepository
+	auditor      audit.Auditor
 }
 
 func NewCreateAttendanceLogUseCase(
@@ -59,12 +61,14 @@ func NewCreateAttendanceLogUseCase(
 	recordRepo ports.AttendanceRecordRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
+	auditor audit.Auditor,
 ) *CreateAttendanceLogUseCase {
 	return &CreateAttendanceLogUseCase{
 		db:           db,
 		recordRepo:   recordRepo,
 		employeeRepo: employeeRepo,
 		deviceRepo:   deviceRepo,
+		auditor:      auditor,
 	}
 }
 
@@ -73,6 +77,12 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	if err != nil {
 		return nil, err
 	}
+
+	// Audit log will fire after successful creation
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityAttendanceRecord, record.UID).
+		Save(ctx)
 
 	existingRecords, err := uc.recordRepo.ListByDate(ctx, uc.db, record.PunchedAt, &record.EmployeeUID)
 	if err != nil {
@@ -171,6 +181,7 @@ type UpdateAttendanceLogUseCase struct {
 	recordRepo   ports.AttendanceRecordRepository
 	employeeRepo ports.EmployeeRepository
 	deviceRepo   ports.AttendanceDeviceRepository
+	auditor      audit.Auditor
 }
 
 func NewUpdateAttendanceLogUseCase(
@@ -178,12 +189,14 @@ func NewUpdateAttendanceLogUseCase(
 	recordRepo ports.AttendanceRecordRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
+	auditor audit.Auditor,
 ) *UpdateAttendanceLogUseCase {
 	return &UpdateAttendanceLogUseCase{
 		db:           db,
 		recordRepo:   recordRepo,
 		employeeRepo: employeeRepo,
 		deviceRepo:   deviceRepo,
+		auditor:      auditor,
 	}
 }
 
@@ -201,10 +214,27 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 		return nil, ErrAttendanceLogNotFound
 	}
 
+	// Capture old values for audit metadata
+	oldDeviceUID := existing.DeviceUID
+	oldPunchedAt := existing.PunchedAt
+	oldPunchType := existing.PunchType
+
 	record, err := uc.buildUpdatedRecord(ctx, existing, input.DeviceUID, input.PunchedAt, input.PunchType)
 	if err != nil {
 		return nil, err
 	}
+
+	// Audit log will fire after successful update with field changes
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionUpdate).
+		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("old_device_uid", oldDeviceUID).
+		WithMeta("new_device_uid", record.DeviceUID).
+		WithMeta("old_punched_at", oldPunchedAt.Format(time.RFC3339)).
+		WithMeta("new_punched_at", record.PunchedAt.Format(time.RFC3339)).
+		WithMeta("old_punch_type", string(oldPunchType)).
+		WithMeta("new_punch_type", string(record.PunchType)).
+		Save(ctx)
 
 	if err := uc.recordRepo.Update(ctx, uc.db, record); err != nil {
 		if isAttendanceRecordConflictError(err) {

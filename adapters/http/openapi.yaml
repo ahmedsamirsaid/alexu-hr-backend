@@ -3891,3 +3891,202 @@ paths:
                   message:
                     type: string
                     example: "Device token unregistered"
+
+  # ─── AUDIT ───────────────────────────────────────────────────────────────────
+
+  /api/v1/audit/entity/{entityType}/{entityUID}:
+    get:
+      tags: [Audit]
+      summary: Get audit trail for an entity
+      description: |
+        Retrieves the complete audit history for a specific entity.
+        Returns all audit events ordered by occurrence time (newest first).
+        Requires `audit:read` permission.
+      parameters:
+        - name: entityType
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "attendance_record"
+          description: |
+            Type of entity to retrieve audit trail for.
+            Valid values: attendance_record, leave_request, leave_record, approval_request,
+            employee, user, department, role, approval_flow, approval_flow_step, leave_type,
+            shift, attendance_device, leave_balance
+        - name: entityUID
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "atr_001"
+          description: Unique identifier of the entity
+      responses:
+        "200":
+          description: Audit trail retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                          example: "aud_xyz789"
+                        actorUid:
+                          type: string
+                          example: "emp_admin_001"
+                        action:
+                          type: string
+                          example: "update"
+                          description: |
+                            Action performed. Common values: create, update, delete, approve, reject,
+                            cancel, submit, assign_role, remove_role, assign_department, remove_department,
+                            adjust_balance, deduct_balance, add_step, update_step, delete_step
+                        entityType:
+                          type: string
+                          example: "attendance_record"
+                        entityUid:
+                          type: string
+                          example: "atr_001"
+                        meta:
+                          type: string
+                          nullable: true
+                          example: '{"old_check_in":"2024-01-15T08:00:00Z","new_check_in":"2024-01-15T08:05:00Z"}'
+                          description: JSON string containing action-specific metadata (field changes, comments, etc.)
+                        occurredAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T10:30:00Z"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T10:30:01Z"
+        "400":
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/audit/actor/{actorUID}:
+    get:
+      tags: [Audit]
+      summary: Get audit events by actor
+      description: |
+        Retrieves all audit events performed by a specific actor (employee).
+        Returns paginated results ordered by occurrence time (newest first).
+        Requires `audit:read` permission.
+      parameters:
+        - name: actorUID
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_admin_001"
+          description: Unique identifier of the actor (employee UID)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          example: 1
+          description: Page number (1-indexed)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+          example: 20
+          description: Number of events per page (1-100)
+      responses:
+        "200":
+          description: Actor audit events retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                          example: "aud_abc123"
+                        actorUid:
+                          type: string
+                          example: "emp_admin_001"
+                        action:
+                          type: string
+                          example: "approve"
+                          description: |
+                            Action performed. Common values: create, update, delete, approve, reject,
+                            cancel, submit, assign_role, remove_role, assign_department, remove_department,
+                            adjust_balance, deduct_balance, add_step, update_step, delete_step
+                        entityType:
+                          type: string
+                          example: "leave_request"
+                        entityUid:
+                          type: string
+                          example: "lr_456"
+                        meta:
+                          type: string
+                          nullable: true
+                          example: '{"comments":"Approved for medical reasons"}'
+                          description: JSON string containing action-specific metadata (field changes, comments, etc.)
+                        occurredAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T14:20:00Z"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T14:20:01Z"
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 20
+                  hasNextPage:
+                    type: boolean
+                    example: false
+        "400":
+          description: Invalid request parameters (invalid page, page_size out of range)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

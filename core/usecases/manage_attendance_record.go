@@ -82,6 +82,10 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("device_uid", record.DeviceUID).
+		WithMeta("punched_at", record.PunchedAt.Format(time.RFC3339)).
+		WithMeta("punch_type", string(record.PunchType)).
 		Save(ctx)
 
 	existingRecords, err := uc.recordRepo.ListByDate(ctx, uc.db, record.PunchedAt, &record.EmployeeUID)

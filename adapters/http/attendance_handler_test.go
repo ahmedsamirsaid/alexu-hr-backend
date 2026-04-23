@@ -835,7 +835,7 @@ func TestAttendanceHandlerCreateLog(t *testing.T) {
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo, nil)
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
@@ -886,7 +886,7 @@ func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDat
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo,nil)
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
@@ -920,7 +920,7 @@ func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeChe
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo, nil)
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_out"}`
@@ -964,7 +964,7 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	updateUC := usecases.NewUpdateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo)
+	updateUC := usecases.NewUpdateAttendanceLogUseCase(nil, recordRepo, employeeRepo, deviceRepo, nil)
 	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil)
 
 	body := `{"deviceUid":"dev_1","punchedAt":"2026-04-10T17:30:00Z","punchType":"check_out"}`

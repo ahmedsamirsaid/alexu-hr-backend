@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"github.com/banumusa/backend/core/audit"
 )
 
 type contextKey string
@@ -52,6 +53,11 @@ func AuthMiddleware(jwtService *JWTService, authEnabled bool) func(http.Handler)
 			}
 
 			ctx := context.WithValue(r.Context(), ClaimsContextKey, claims)
+			actorUID := claims.UserUID
+			if claims.EmployeeUID != nil && *claims.EmployeeUID != "" {
+				actorUID = *claims.EmployeeUID
+			}
+			ctx = audit.WithActor(ctx, actorUID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

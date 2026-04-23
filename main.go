@@ -17,6 +17,7 @@ import (
 	"github.com/banumusa/backend/adapters/notifications/fcm"
 	"github.com/banumusa/backend/adapters/notifications/noop"
 	"github.com/banumusa/backend/adapters/scheduler"
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
@@ -86,7 +87,8 @@ func main() {
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
-
+	auditLogRepo := db.NewAuditLogRepository()
+	auditor := audit.NewAuditor(sqliteDB, auditLogRepo)
 	var notificationService ports.NotificationService
 	if cfg.FCMEnabled {
 		fcmService, err := fcm.NewFCMNotificationService(context.Background(), fcm.Config{
@@ -109,7 +111,7 @@ func main() {
 	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayDefinitionRepo)
 
 	recordLeaveUC := usecases.NewRecordLeaveUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo, workingDaysCalc, leaveSync,
+		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo, workingDaysCalc, leaveSync, auditor,
 	)
 	getBalanceUC := usecases.NewGetBalanceUseCase(sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo)
 	listLeaveRecordsUC := usecases.NewListLeaveRecordsUseCase(sqliteDB, employeeRepo, leaveTypeRepo, leaveRecordRepo)
@@ -119,12 +121,12 @@ func main() {
 
 	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo)
 	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
-	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
+	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
 	exportEmployeesUC := usecases.NewExportEmployeesUseCase(sqliteDB, employeeRepo)
 	exportEmployeesPDFUC := usecases.NewExportEmployeesPDFUseCase(sqliteDB, employeeRepo, cfg.FontPath)
 	generateTemplateUC := usecases.NewGenerateImportTemplateUseCase()
-	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(sqliteDB, employeeRepo, departmentRepo)
-	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(sqliteDB, employeeRepo)
+	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(sqliteDB, employeeRepo, departmentRepo, auditor)
+	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(sqliteDB, employeeRepo, auditor)
 	listShiftsUC := usecases.NewListShiftsUseCase(sqliteDB, shiftRepo)
 	getShiftUC := usecases.NewGetShiftUseCase(sqliteDB, shiftRepo)
 	createShiftUC := usecases.NewCreateShiftUseCase(sqliteDB, shiftRepo)
@@ -148,34 +150,34 @@ func main() {
 	getCurrentUserUC := usecases.NewGetCurrentUserUseCase(sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo)
 
 	listUsersUC := usecases.NewListUsersUseCase(sqliteDB, userRepo, roleRepo, employeeRepo)
-	createUserUC := usecases.NewCreateUserUseCase(sqliteDB, userRepo)
-	updateUserUC := usecases.NewUpdateUserUseCase(sqliteDB, userRepo)
-	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo, departmentRepo)
-	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo)
+	createUserUC := usecases.NewCreateUserUseCase(sqliteDB, userRepo, auditor)
+	updateUserUC := usecases.NewUpdateUserUseCase(sqliteDB, userRepo, auditor)
+	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo, departmentRepo, auditor)
+	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo, auditor)
 
 	listRolesUC := usecases.NewListRolesUseCase(sqliteDB, roleRepo, permissionRepo)
 	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo)
 	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(sqliteDB, roleRepo)
-	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo)
+	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo, auditor)
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
 	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
-	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
-	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
+	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo, auditor)
+	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo, auditor)
 	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
-	createApprovalFlowStepUC := usecases.NewCreateApprovalFlowStepUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
-	updateApprovalFlowStepUC := usecases.NewUpdateApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, roleRepo)
-	deleteApprovalFlowStepUC := usecases.NewDeleteApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo)
+	createApprovalFlowStepUC := usecases.NewCreateApprovalFlowStepUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo, auditor)
+	updateApprovalFlowStepUC := usecases.NewUpdateApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, roleRepo, auditor)
+	deleteApprovalFlowStepUC := usecases.NewDeleteApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, auditor)
 
 	listDepartmentsUC := usecases.NewListDepartmentsUseCase(sqliteDB, departmentRepo)
 	getDepartmentUC := usecases.NewGetDepartmentUseCase(sqliteDB, departmentRepo, roleRepo, employeeRepo)
-	createDepartmentUC := usecases.NewCreateDepartmentUseCase(sqliteDB, departmentRepo)
-	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(sqliteDB, departmentRepo)
-	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo)
-	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
+	createDepartmentUC := usecases.NewCreateDepartmentUseCase(sqliteDB, departmentRepo, auditor)
+	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(sqliteDB, departmentRepo, auditor)
+	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo, employeeRepo, auditor)
+	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo, userRepo, employeeRepo, auditor)
 
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo, auditor)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
 	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
@@ -183,10 +185,10 @@ func main() {
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
 		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
 		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, workingDaysCalc,
-		notificationService, roleRepo,
+		notificationService, roleRepo, auditor,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo,
+		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, auditor,
 	)
 	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
@@ -199,11 +201,11 @@ func main() {
 	approveRequestUC := usecases.NewApproveRequestUseCase(
 		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo,
 		leaveRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo,
-		notificationService, userRepo,
+		notificationService, userRepo, auditor,
 	)
 	rejectRequestUC := usecases.NewRejectRequestUseCase(
 		sqliteDB, employeeRepo, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
-		roleRepo, notificationService, leaveTypeRepo, userRepo,
+		roleRepo, notificationService, leaveTypeRepo, userRepo, auditor,
 	)
 	getApprovalHistoryUC := usecases.NewGetApprovalHistoryUseCase(
 		sqliteDB, approvalRequestRepo, approvalActionRepo, employeeRepo,
@@ -231,8 +233,8 @@ func main() {
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
-	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
+	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
@@ -299,6 +301,12 @@ func main() {
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
 	)
+
+	// Audit use cases
+	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo)
+	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
+	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC)
+
 	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
 		minioService,
 		cfg.MinIODocumentsBucket,
@@ -332,10 +340,11 @@ func main() {
 		HolidayHandler:          holidayHandler,
 		ShiftHandler:            shiftHandler,
 		AttendanceHandler:       attendanceHandler,
+		AuditHandler:            auditHandler,
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
-		DocumentHandler: documentHandler,
+		DocumentHandler:         documentHandler,
 	})
 
 	var sched *scheduler.Scheduler

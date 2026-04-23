@@ -2,6 +2,7 @@ package http
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -132,6 +133,28 @@ func (c *JWTClaims) HasPermission(code string) bool {
 	return false
 }
 
+func (c *JWTClaims) HasRole(role string) bool {
+	if c == nil {
+		return false
+	}
+	target := normalizeRoleKey(role)
+	for _, assignedRole := range c.Roles {
+		if normalizeRoleKey(assignedRole) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *JWTClaims) HasAnyRole(roles ...string) bool {
+	for _, role := range roles {
+		if c.HasRole(role) {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *JWTClaims) IsGlobalScope() bool {
 	if c == nil {
 		return false
@@ -160,6 +183,15 @@ func (c *JWTClaims) HasDepartmentAccess(departmentUID string) bool {
 		}
 	}
 	return false
+}
+
+func normalizeRoleKey(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	normalized = strings.Trim(normalized, "_")
+	normalized = strings.TrimPrefix(normalized, "role_")
+	return normalized
 }
 
 // HasWebPortalAccess returns true if user has any role other than "Employee".

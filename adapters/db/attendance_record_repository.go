@@ -324,7 +324,35 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 					AND ar2.punch_type IN ('check_out', 'unknown')
 				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
 				LIMIT 1
-			) AS check_out_device_uid
+			) AS check_out_device_uid,
+			(
+				EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar1.uid
+						FROM attendance_records ar1
+						WHERE ar1.employee_uid = ar.employee_uid
+							AND date(ar1.punched_at) = date(ar.punched_at)
+							AND ar1.punch_type IN ('check_in', 'unknown')
+						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						LIMIT 1
+					)
+				)
+				OR EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar2.uid
+						FROM attendance_records ar2
+						WHERE ar2.employee_uid = ar.employee_uid
+							AND date(ar2.punched_at) = date(ar.punched_at)
+							AND ar2.punch_type IN ('check_out', 'unknown')
+						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						LIMIT 1
+					)
+				)
+			) AS has_edit_history
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		WHERE e.department_uid = ?`
@@ -430,7 +458,35 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 					AND ar2.punch_type IN ('check_out', 'unknown')
 				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
 				LIMIT 1
-			) AS check_out_device_uid
+			) AS check_out_device_uid,
+			(
+				EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar1.uid
+						FROM attendance_records ar1
+						WHERE ar1.employee_uid = ar.employee_uid
+							AND date(ar1.punched_at) = date(ar.punched_at)
+							AND ar1.punch_type IN ('check_in', 'unknown')
+						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						LIMIT 1
+					)
+				)
+				OR EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar2.uid
+						FROM attendance_records ar2
+						WHERE ar2.employee_uid = ar.employee_uid
+							AND date(ar2.punched_at) = date(ar.punched_at)
+							AND ar2.punch_type IN ('check_out', 'unknown')
+						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						LIMIT 1
+					)
+				)
+			) AS has_edit_history
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		WHERE ar.employee_uid = ?`
@@ -536,7 +592,35 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 					AND ar2.punch_type IN ('check_out', 'unknown')
 				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
 				LIMIT 1
-			) AS check_out_device_uid
+			) AS check_out_device_uid,
+			(
+				EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar1.uid
+						FROM attendance_records ar1
+						WHERE ar1.employee_uid = ar.employee_uid
+							AND date(ar1.punched_at) = date(ar.punched_at)
+							AND ar1.punch_type IN ('check_in', 'unknown')
+						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						LIMIT 1
+					)
+				)
+				OR EXISTS (
+					SELECT 1
+					FROM attendance_edit_history aeh
+					WHERE aeh.attendance_record_uid = (
+						SELECT ar2.uid
+						FROM attendance_records ar2
+						WHERE ar2.employee_uid = ar.employee_uid
+							AND date(ar2.punched_at) = date(ar.punched_at)
+							AND ar2.punch_type IN ('check_out', 'unknown')
+						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						LIMIT 1
+					)
+				)
+			) AS has_edit_history
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		WHERE 1 = 1`
@@ -714,8 +798,9 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		var checkInDeviceUID sql.NullString
 		var checkOutDevice sql.NullString
 		var checkOutDeviceUID sql.NullString
+		var hasEditHistory bool
 
-		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn, &checkInLogUID, &checkOut, &checkOutLogUID, &checkInDevice, &checkInDeviceUID, &checkOutDevice, &checkOutDeviceUID); err != nil {
+		if err := rows.Scan(&dateValue, &employeeUID, &employeeName, &departmentUID, &checkIn, &checkInLogUID, &checkOut, &checkOutLogUID, &checkInDevice, &checkInDeviceUID, &checkOutDevice, &checkOutDeviceUID, &hasEditHistory); err != nil {
 			slog.Error(logKey+".scan_row", "error", err, idKey, idValue)
 			return nil, err
 		}
@@ -731,10 +816,11 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		}
 
 		group := &ports.DailyAttendanceGroup{
-			Date:          dateParsed,
-			EmployeeUID:   employeeUID,
-			EmployeeName:  employeeName,
-			DepartmentUID: departmentUIDPtr,
+			Date:           dateParsed,
+			EmployeeUID:    employeeUID,
+			EmployeeName:   employeeName,
+			DepartmentUID:  departmentUIDPtr,
+			HasEditHistory: hasEditHistory,
 		}
 
 		if checkIn.Valid {

@@ -27,6 +27,7 @@ type DailyAttendanceGroup struct {
 	CheckInDeviceUID  *string
 	CheckOutDevice    *string
 	CheckOutDeviceUID *string
+	HasEditHistory    bool
 }
 
 type DepartmentAttendanceLogsFilter struct {

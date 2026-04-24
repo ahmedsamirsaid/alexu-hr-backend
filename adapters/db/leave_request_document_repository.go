@@ -62,3 +62,35 @@ func (r *LeaveRequestDocumentRepository) ListByLeaveRequestUID(ctx context.Conte
 
 	return docs, nil
 }
+
+func (r *LeaveRequestDocumentRepository) GetByLeaveRequestUIDAndFileName(ctx context.Context, q ports.Querier, leaveRequestUID, fileName string) (*domain.LeaveRequestDocument, error) {
+	query := `
+		SELECT leave_request_uid, file_name, object_key
+		FROM leave_request_documents
+		WHERE leave_request_uid = ? AND file_name = ?`
+
+	row := q.QueryRowContext(ctx, query, leaveRequestUID, fileName)
+	doc := &domain.LeaveRequestDocument{}
+	if err := row.Scan(&doc.LeaveRequestUID, &doc.FileName, &doc.ObjectKey); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		slog.Error("leave_request_document_repository.GetByLeaveRequestUIDAndFileName.scan", "error", err, "leave_request_uid", leaveRequestUID, "file_name", fileName)
+		return nil, err
+	}
+
+	return doc, nil
+}
+
+func (r *LeaveRequestDocumentRepository) UpdateObjectKey(ctx context.Context, q ports.Querier, leaveRequestUID, fileName, objectKey string) error {
+	query := `
+		UPDATE leave_request_documents
+		SET object_key = ?
+		WHERE leave_request_uid = ? AND file_name = ?`
+
+	_, err := q.ExecContext(ctx, query, objectKey, leaveRequestUID, fileName)
+	if err != nil {
+		slog.Error("leave_request_document_repository.UpdateObjectKey.exec_query", "error", err, "leave_request_uid", leaveRequestUID, "file_name", fileName)
+	}
+	return err
+}

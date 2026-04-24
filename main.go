@@ -192,12 +192,15 @@ func main() {
 	)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
+		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
 		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc, generateDocumentUploadURLUC,
 		notificationService, roleRepo,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo,
+	)
+	updateRejectedLeaveRequestUC := usecases.NewUpdateRejectedLeaveRequestUseCase(
+		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC,
 	)
 	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
@@ -276,7 +279,7 @@ func main() {
 		createApprovalFlowStepUC, updateApprovalFlowStepUC, deleteApprovalFlowStepUC,
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
-		submitLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
+		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
 		listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(

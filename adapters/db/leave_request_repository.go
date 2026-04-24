@@ -81,12 +81,16 @@ func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, re
 func (r *LeaveRequestRepository) Update(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
 	query := `
 		UPDATE leave_requests
-		SET decided_at = ?, updated_at = ?
+		SET leave_type_uid = ?, sub_leave_type_uid = ?, start_date = ?, end_date = ?, days = ?, notes = ?,
+		    study_destination = ?, assignment = ?, assignment_country = ?, spouse_work_country = ?,
+		    decided_at = ?, updated_at = ?
 		WHERE id = ?`
 
 	request.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
+		request.LeaveTypeUID, request.SubLeaveTypeUID, request.StartDate, request.EndDate, request.Days, request.Notes,
+		request.StudyDestination, request.Assignment, request.AssignmentCountry, request.SpouseWorkCountry,
 		request.DecidedAt, request.UpdatedAt, request.ID)
 	if err != nil {
 		slog.Error("leave_request_repository.Update.exec_query", "error", err, "id", request.ID, "uid", request.UID)

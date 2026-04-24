@@ -220,6 +220,9 @@ components:
         uid:
           type: string
           example: "req_001"
+        approvalRequestUid:
+          type: string
+          example: "apr_001"
         employeeUid:
           type: string
           example: "emp_xyz789"
@@ -301,6 +304,9 @@ components:
         uid:
           type: string
           example: "req_001"
+        leaveRequestUid:
+          type: string
+          example: "lrq_001"
         requesterUid:
           type: string
           example: "emp_xyz789"
@@ -1796,6 +1802,66 @@ paths:
                 $ref: "#/components/schemas/LeaveRequest"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      tags: [Leave Requests]
+      summary: Edit a rejected leave request
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "req_001"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                leaveTypeUid:
+                  type: string
+                  example: "lt_annual"
+                subLeaveTypeUid:
+                  type: string
+                  nullable: true
+                  example: "slt_001"
+                startDate:
+                  type: string
+                  format: date
+                  example: "2024-06-10"
+                endDate:
+                  type: string
+                  format: date
+                  example: "2024-06-12"
+                notes:
+                  type: string
+                  example: "Updated request"
+                documents:
+                  type: array
+                  items:
+                    type: object
+                    required: [fileName, contentType]
+                    properties:
+                      fileName:
+                        type: string
+                        example: "medical-report.pdf"
+                      contentType:
+                        type: string
+                        example: "application/pdf"
+      responses:
+        "200":
+          description: Leave request updated and re-opened for approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveRequest"
+        "404":
+          description: Leave request or document not found
           content:
             application/json:
               schema:

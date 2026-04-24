@@ -128,7 +128,7 @@ VALUES
     (
         'slt_00000000000000000000000000000021',
         'ltype_00000000000000000000000000000009',
-        'Participation in an Olympic Games دورة',
+        'Participation in an Olympic Games',
         'المشاركة في دورة ألعاب أوليمبية'
     ),
     (

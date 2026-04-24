@@ -144,7 +144,8 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type assignRoleRequest struct {
-	RoleUID string `json:"roleUid"`
+	RoleUID       string  `json:"roleUid"`
+	DepartmentUID *string `json:"departmentUid,omitempty"`
 }
 
 func (h *UserHandler) AssignRole(w http.ResponseWriter, r *http.Request) {
@@ -167,8 +168,9 @@ func (h *UserHandler) AssignRole(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.assignRoleUC.Execute(r.Context(), usecases.AssignRoleInput{
-		UserUID: userUID,
-		RoleUID: req.RoleUID,
+		UserUID:       userUID,
+		RoleUID:       req.RoleUID,
+		DepartmentUID: req.DepartmentUID,
 	})
 	if err != nil {
 		switch {
@@ -176,6 +178,12 @@ func (h *UserHandler) AssignRole(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, "user_not_found", "User not found")
 		case errors.Is(err, usecases.ErrRoleNotFound):
 			writeJSONError(w, http.StatusNotFound, "role_not_found", "Role not found")
+		case errors.Is(err, usecases.ErrRoleScopeRequired):
+			writeJSONError(w, http.StatusBadRequest, "role_scope_required", "This role requires department scope")
+		case errors.Is(err, usecases.ErrRoleScopeConflict):
+			writeJSONError(w, http.StatusBadRequest, "role_scope_conflict", "This role does not allow department scope")
+		case errors.Is(err, usecases.ErrInvalidRoleScopeType):
+			writeJSONError(w, http.StatusBadRequest, "invalid_role_scope_type", "Role scope type must be one of: global, department, self")
 		default:
 			slog.Error("user_handler.AssignRole.execute_usecase", "error", err)
 			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to assign role")

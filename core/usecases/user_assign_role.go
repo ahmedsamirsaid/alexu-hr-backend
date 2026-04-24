@@ -2,30 +2,36 @@ package usecases
 
 import (
 	"context"
+	"strings"
 
+	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
 
 type AssignRoleInput struct {
-	UserUID string
-	RoleUID string
+	UserUID       string
+	RoleUID       string
+	DepartmentUID *string
 }
 
 type AssignRoleUseCase struct {
 	db       ports.DB
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
+	deptRepo ports.DepartmentRepository
 }
 
 func NewAssignRoleUseCase(
 	db ports.DB,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	deptRepo ports.DepartmentRepository,
 ) *AssignRoleUseCase {
 	return &AssignRoleUseCase{
 		db:       db,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
+		deptRepo: deptRepo,
 	}
 }
 
@@ -46,7 +52,41 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 		return ErrRoleNotFound
 	}
 
-	return uc.roleRepo.AssignRoleToUser(ctx, uc.db, user.ID, role.ID)
+	normalizedScopeType := domain.NormalizeRoleScopeType(role.ScopeType)
+	if normalizedScopeType == "" {
+		return ErrInvalidRoleScopeType
+	}
+
+	departmentUIDInput := ""
+	if input.DepartmentUID != nil {
+		departmentUIDInput = strings.TrimSpace(*input.DepartmentUID)
+	}
+
+	switch normalizedScopeType {
+	case domain.RoleScopeDepartment:
+		if departmentUIDInput == "" {
+			return ErrRoleScopeRequired
+		}
+	case domain.RoleScopeGlobal, domain.RoleScopeSelf:
+		if departmentUIDInput != "" {
+			return ErrRoleScopeConflict
+		}
+	}
+
+	if departmentUIDInput == "" {
+		return uc.roleRepo.AssignRoleToUser(ctx, uc.db, user.ID, role.ID)
+	}
+
+	department, err := uc.deptRepo.GetByUID(ctx, uc.db, departmentUIDInput)
+	if err != nil {
+		return err
+	}
+	if department == nil {
+		return ErrDepartmentNotFound
+	}
+
+	departmentUID := department.UID
+	return uc.roleRepo.AssignRoleToUserWithDepartment(ctx, uc.db, user.ID, role.ID, &departmentUID)
 }
 
 type RemoveRoleInput struct {

@@ -16,6 +16,7 @@ type GetCurrentUserOutput struct {
 	Phone       string         `json:"phone"`
 	EmployeeUID *string        `json:"employeeUid"`
 	IsActive    bool           `json:"isActive"`
+	AccessScope string         `json:"accessScope"`
 	Roles       []RoleOutput   `json:"roles"`
 	Permissions []string       `json:"permissions"`
 	Employee    *EmployeeBasic `json:"employee,omitempty"`
@@ -98,6 +99,7 @@ func (uc *GetCurrentUserUseCase) Execute(ctx context.Context, input GetCurrentUs
 		Phone:       user.Phone,
 		EmployeeUID: user.EmployeeUID,
 		IsActive:    user.IsActive,
+		AccessScope: determineAccessScope(user.Roles),
 		Roles:       make([]RoleOutput, len(roles)),
 		Permissions: uc.collectPermissions(user),
 	}

@@ -10,6 +10,8 @@ import (
 type LeaveRequestListFilter struct {
 	Status      *domain.ApprovalRequestStatus
 	EmployeeUID *string
+	// DepartmentUIDs limits results to requests whose employee belongs to one of these departments when non-nil.
+	DepartmentUIDs []string
 }
 
 type LeaveRequestRepository interface {

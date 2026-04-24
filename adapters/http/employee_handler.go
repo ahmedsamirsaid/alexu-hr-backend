@@ -112,6 +112,13 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if isSelfScopedClaims(claims) {
+		if claims.EmployeeUID == nil || *claims.EmployeeUID != output.UID {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return
+		}
+	}
+
 	if isScopedDepartmentClaims(claims) {
 		if output.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.DepartmentUID) {
 			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
@@ -151,6 +158,21 @@ func (h *EmployeeHandler) ListEmployees(w http.ResponseWriter, r *http.Request) 
 		slog.Error("employee_handler.ListEmployees.execute_usecase", "error", err)
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	if isSelfScopedClaims(claims) {
+		if claims.EmployeeUID == nil {
+			writeJSON(w, http.StatusOK, EmployeeListResponse{Employees: []EmployeeListItemResponse{}})
+			return
+		}
+
+		filtered := output.Employees[:0]
+		for _, emp := range output.Employees {
+			if emp.UID == *claims.EmployeeUID {
+				filtered = append(filtered, emp)
+			}
+		}
+		output.Employees = filtered
 	}
 
 	employees := make([]EmployeeListItemResponse, 0, len(output.Employees))
@@ -458,7 +480,11 @@ func isXLSXFile(filename string) bool {
 }
 
 func isScopedDepartmentClaims(claims *JWTClaims) bool {
-	return claims != nil && !claims.HasPermission("*") && len(claims.ManagedDepartmentUIDs) > 0
+	return claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope()
+}
+
+func isSelfScopedClaims(claims *JWTClaims) bool {
+	return claims != nil && !claims.HasPermission("*") && claims.IsSelfScope()
 }
 
 func writeFileResponse(w http.ResponseWriter, data []byte, filename, contentType string) {

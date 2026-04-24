@@ -8,10 +8,11 @@ import (
 )
 
 type ListLeaveRequestsInput struct {
-	EmployeeUID *string
-	Status      *domain.ApprovalRequestStatus
-	Limit       int
-	Offset      int
+	EmployeeUID           *string
+	ManagedDepartmentUIDs []string
+	Status                *domain.ApprovalRequestStatus
+	Limit                 int
+	Offset                int
 }
 
 type LeaveRequestWithStatus struct {
@@ -51,6 +52,10 @@ func (uc *ListLeaveRequestsUseCase) Execute(ctx context.Context, input ListLeave
 	filter := ports.LeaveRequestListFilter{
 		EmployeeUID: input.EmployeeUID,
 		Status:      input.Status,
+	}
+
+	if input.EmployeeUID == nil && input.ManagedDepartmentUIDs != nil {
+		filter.DepartmentUIDs = append([]string(nil), input.ManagedDepartmentUIDs...)
 	}
 
 	requests, err := uc.leaveRequestRepo.List(ctx, uc.db, filter, input.Limit, input.Offset)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -174,6 +175,8 @@ func (r *LeaveRequestRepository) List(ctx context.Context, q ports.Querier, filt
 		args = append(args, *filter.EmployeeUID)
 	}
 
+	query, args = applyLeaveRequestDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	query += ` ORDER BY lr.submitted_at DESC LIMIT ? OFFSET ?`
 	args = append(args, limit, offset)
 
@@ -199,12 +202,38 @@ func (r *LeaveRequestRepository) Count(ctx context.Context, q ports.Querier, fil
 		args = append(args, *filter.EmployeeUID)
 	}
 
+	query, args = applyLeaveRequestDepartmentScope(query, args, filter.DepartmentUIDs)
+
 	var count int
 	err := q.QueryRowContext(ctx, query, args...).Scan(&count)
 	if err != nil {
 		slog.Error("leave_request_repository.Count.scan_row", "error", err)
 	}
 	return count, err
+}
+
+func applyLeaveRequestDepartmentScope(query string, args []any, departmentUIDs []string) (string, []any) {
+	if departmentUIDs == nil {
+		return query, args
+	}
+
+	if len(departmentUIDs) == 0 {
+		return query + ` AND 1=0`, args
+	}
+
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(departmentUIDs)), ",")
+	query += ` AND EXISTS (
+		SELECT 1
+		FROM employees e
+		WHERE e.uid = lr.employee_uid
+		  AND e.department_uid IN (` + placeholders + `)
+	)`
+
+	for _, departmentUID := range departmentUIDs {
+		args = append(args, departmentUID)
+	}
+
+	return query, args
 }
 
 func (r *LeaveRequestRepository) queryLeaveRequests(ctx context.Context, q ports.Querier, query string, args ...any) ([]*domain.LeaveRequest, error) {

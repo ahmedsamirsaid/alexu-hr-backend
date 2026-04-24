@@ -31,8 +31,13 @@ func NewDashboardHandler(getStatsUC *usecases.GetDashboardStatsUseCase) *Dashboa
 // GetStats handles GET /api/v1/dashboard/stats
 func (h *DashboardHandler) GetStats(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
+	if claims != nil && !claims.HasPermission("*") && claims.IsSelfScope() {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to dashboard is not permitted for self scope")
+		return
+	}
+
 	input := usecases.GetDashboardStatsInput{}
-	if claims != nil && !claims.HasPermission("*") {
+	if claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope() {
 		input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
 	}
 

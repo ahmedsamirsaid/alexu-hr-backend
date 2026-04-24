@@ -14,6 +14,7 @@ type RoleListItem struct {
 	UID         string           `json:"uid"`
 	Name        string           `json:"name"`
 	Description string           `json:"description"`
+	ScopeType   string           `json:"scopeType"`
 	IsSystem    bool             `json:"isSystem"`
 	Permissions []PermissionItem `json:"permissions"`
 }
@@ -74,6 +75,7 @@ func (uc *ListRolesUseCase) Execute(ctx context.Context) (*ListRolesOutput, erro
 			UID:         role.UID,
 			Name:        role.Name,
 			Description: role.Description,
+			ScopeType:   role.ScopeType,
 			IsSystem:    role.IsSystem,
 			Permissions: perms,
 		}

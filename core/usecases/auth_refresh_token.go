@@ -20,6 +20,7 @@ type RefreshTokenUseCase struct {
 	db               ports.DB
 	userRepo         ports.UserRepository
 	roleRepo         ports.RoleRepository
+	permissionRepo   ports.PermissionRepository
 	refreshTokenRepo ports.RefreshTokenRepository
 	jwtService       JWTService
 	refreshTokenDays int
@@ -29,6 +30,7 @@ func NewRefreshTokenUseCase(
 	db ports.DB,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	permissionRepo ports.PermissionRepository,
 	refreshTokenRepo ports.RefreshTokenRepository,
 	jwtService JWTService,
 	refreshTokenDays int,
@@ -37,6 +39,7 @@ func NewRefreshTokenUseCase(
 		db:               db,
 		userRepo:         userRepo,
 		roleRepo:         roleRepo,
+		permissionRepo:   permissionRepo,
 		refreshTokenRepo: refreshTokenRepo,
 		jwtService:       jwtService,
 		refreshTokenDays: refreshTokenDays,
@@ -81,10 +84,30 @@ func (uc *RefreshTokenUseCase) Execute(ctx context.Context, input RefreshTokenIn
 	if err != nil {
 		return nil, err
 	}
+	roleIDs := make([]int64, len(roles))
+	for i, r := range roles {
+		roleIDs[i] = r.ID
+	}
+	permsByRole, err := uc.permissionRepo.GetPermissionsForRoles(ctx, tx, roleIDs)
+	if err != nil {
+		return nil, err
+	}
+
 	user.Roles = make([]domain.Role, len(roles))
 	for i, r := range roles {
+		perms := permsByRole[r.ID]
+		r.Permissions = make([]domain.Permission, len(perms))
+		for j, p := range perms {
+			r.Permissions[j] = *p
+		}
 		user.Roles[i] = *r
 	}
+
+	managedDepartmentUIDs, err := uc.roleRepo.GetManagedDepartmentUIDs(ctx, tx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	user.ManagedDepartmentUIDs = managedDepartmentUIDs
 
 	// Generate new tokens
 	accessToken, err := uc.jwtService.GenerateAccessToken(user)

@@ -196,8 +196,9 @@ func TestAutoRejectExpiredRequestsUseCase_Execute(t *testing.T) {
 			},
 			approvalRequests: map[string]*domain.ApprovalRequest{
 				"areq_001": {
-					UID:    "areq_001",
-					Status: domain.ApprovalRequestStatusPending,
+					UID:          "areq_001",
+					RequesterUID: "emp_001",
+					Status:       domain.ApprovalRequestStatusPending,
 				},
 			},
 			expectedRejected: 1,
@@ -206,8 +207,8 @@ func TestAutoRejectExpiredRequestsUseCase_Execute(t *testing.T) {
 					t.Errorf("expected 1 action, got %d", len(actions))
 					return
 				}
-				if actions[0].ActorUID != usecases.SystemActorUID {
-					t.Errorf("expected actor_uid 'system', got %s", actions[0].ActorUID)
+				if actions[0].ActorUID != "emp_001" {
+					t.Errorf("expected actor_uid 'emp_001', got %s", actions[0].ActorUID)
 				}
 				if actions[0].Action != domain.ApprovalActionTypeReject {
 					t.Errorf("expected action 'reject', got %s", actions[0].Action)
@@ -243,12 +244,14 @@ func TestAutoRejectExpiredRequestsUseCase_Execute(t *testing.T) {
 			},
 			approvalRequests: map[string]*domain.ApprovalRequest{
 				"areq_001": {
-					UID:    "areq_001",
-					Status: domain.ApprovalRequestStatusPending,
+					UID:          "areq_001",
+					RequesterUID: "emp_001",
+					Status:       domain.ApprovalRequestStatusPending,
 				},
 				"areq_002": {
-					UID:    "areq_002",
-					Status: domain.ApprovalRequestStatusPending,
+					UID:          "areq_002",
+					RequesterUID: "emp_001",
+					Status:       domain.ApprovalRequestStatusPending,
 				},
 			},
 			expectedRejected: 2,
@@ -266,8 +269,9 @@ func TestAutoRejectExpiredRequestsUseCase_Execute(t *testing.T) {
 			},
 			approvalRequests: map[string]*domain.ApprovalRequest{
 				"areq_001": {
-					UID:    "areq_001",
-					Status: domain.ApprovalRequestStatusApproved, // Already approved
+					UID:          "areq_001",
+					RequesterUID: "emp_001",
+					Status:       domain.ApprovalRequestStatusApproved, // Already approved
 				},
 			},
 			expectedRejected: 0, // Should not count as rejected since it was already approved

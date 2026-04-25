@@ -4,25 +4,26 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/banumusa/backend/adapters/db"
-	httpAdapter "github.com/banumusa/backend/adapters/http"
-	"github.com/banumusa/backend/adapters/legacy"
-	"github.com/banumusa/backend/adapters/notifications/fcm"
-	"github.com/banumusa/backend/adapters/notifications/noop"
-	"github.com/banumusa/backend/adapters/scheduler"
-	"github.com/banumusa/backend/core/audit"
-	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
-	"github.com/banumusa/backend/core/ports"
-	"github.com/banumusa/backend/core/usecases"
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlite"
-	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/banumusa/backend/adapters/db"
+	httpAdapter "github.com/banumusa/backend/adapters/http"
+	"github.com/banumusa/backend/adapters/legacy"
+	"github.com/banumusa/backend/adapters/notifications/fcm"
+	"github.com/banumusa/backend/adapters/notifications/noop"
+	"github.com/banumusa/backend/adapters/scheduler"
+	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
+	"github.com/banumusa/backend/core/audit"
+	"github.com/banumusa/backend/core/ports"
+	"github.com/banumusa/backend/core/usecases"
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
@@ -85,7 +86,6 @@ func main() {
 	attendanceReminderRepo := db.NewAttendanceReminderRepository()
 
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
-	attendanceEditHistoryRepo := db.NewAttendanceEditHistoryRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
 	auditLogRepo := db.NewAuditLogRepository()
@@ -197,9 +197,9 @@ func main() {
 	)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
-		sqliteDB,userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
-		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, workingDaysCalc,
-		notificationService, roleRepo, auditor,
+		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
+		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc,
+		generateDocumentUploadURLUC, notificationService, roleRepo, auditor,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, auditor,
@@ -250,8 +250,9 @@ func main() {
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceEditHistoryRepo, attendanceDeviceRepo, auditor)
-	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceEditHistoryRepo, attendanceDeviceRepo, auditor)
+	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
@@ -325,17 +326,6 @@ func main() {
 	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
 	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC)
 
-	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIOUploadExpiryMinutes,
-	)
-
-	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIODownloadExpiryMinutes,
-	)
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,
 		generateDocumentDownloadURLUC,

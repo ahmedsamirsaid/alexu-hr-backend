@@ -328,8 +328,8 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -341,8 +341,8 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid
@@ -462,8 +462,8 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -475,8 +475,8 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid
@@ -596,8 +596,8 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -609,8 +609,8 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid

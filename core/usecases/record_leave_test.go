@@ -110,8 +110,9 @@ func (m *mockEmployeeRepo) Count(ctx context.Context, q ports.Querier) (int, err
 }
 
 type mockLeaveTypeRepo struct {
-	leaveType *domain.LeaveType
+	leaveType *domain.LeaveTypeRe
 }
+
 
 func (m *mockLeaveTypeRepo) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveType, error) {
 	return m.leaveType, nil

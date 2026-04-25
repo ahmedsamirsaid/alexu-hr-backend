@@ -4,24 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
 	"github.com/banumusa/backend/adapters/notifications/fcm"
 	"github.com/banumusa/backend/adapters/notifications/noop"
 	"github.com/banumusa/backend/adapters/scheduler"
+	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -38,13 +38,12 @@ func main() {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
 	}
-	
-	
+
 	minioService, err := minioAdapter.NewService(minioAdapter.Config{
-	Endpoint:  cfg.MinIOEndpoint,
-	AccessKey: cfg.MinIOAccessKey,
-	SecretKey: cfg.MinIOSecretKey,
-	UseSSL:    cfg.MinIOUseSSL,
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		UseSSL:    cfg.MinIOUseSSL,
 	})
 	if err != nil {
 		slog.Error("main.main.init_minio", "error", err)
@@ -221,6 +220,8 @@ func main() {
 	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
+	departmentAttendanceReportUC := usecases.NewGetDepartmentAttendanceReportUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, weekendRepo, holidayDefinitionRepo)
+	exportDepartmentAttendanceReportUC := usecases.NewExportDepartmentAttendanceReportUseCase(departmentAttendanceReportUC)
 
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
@@ -298,6 +299,10 @@ func main() {
 		updateAttendanceLogUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
+		httpAdapter.AttendanceReportDependencies{
+			GetDepartmentReportUC:    departmentAttendanceReportUC,
+			ExportDepartmentReportUC: exportDepartmentAttendanceReportUC,
+		},
 	)
 	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
 		minioService,
@@ -335,7 +340,7 @@ func main() {
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
-		DocumentHandler: documentHandler,
+		DocumentHandler:         documentHandler,
 	})
 
 	var sched *scheduler.Scheduler

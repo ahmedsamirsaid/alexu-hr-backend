@@ -86,7 +86,6 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 		return nil, ErrApprovalFlowStepNotFound
 	}
 
-	// Get the requester to check their department
 	requester, err := uc.employeeRepo.GetByUID(ctx, tx, approvalRequest.RequesterUID)
 	if err != nil {
 		return nil, err

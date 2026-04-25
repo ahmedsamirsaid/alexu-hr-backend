@@ -78,6 +78,7 @@ func main() {
 	approvalRequestRepo := db.NewApprovalRequestRepository()
 	approvalActionRepo := db.NewApprovalActionRepository()
 	leaveRequestRepo := db.NewLeaveRequestRepository()
+	leaveRequestDocumentRepo := db.NewLeaveRequestDocumentRepository()
 
 	deviceTokenRepo := db.NewDeviceTokenRepository()
 	attendanceReminderRepo := db.NewAttendanceReminderRepository()
@@ -160,6 +161,7 @@ func main() {
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
 	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
+	getApprovalFlowUC := usecases.NewGetApprovalFlowUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
@@ -175,22 +177,36 @@ func main() {
 	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
 
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
+	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
 	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIOUploadExpiryMinutes,
+	)
+	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIODownloadExpiryMinutes,
+	)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
-		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, workingDaysCalc,
+		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
+		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc, generateDocumentUploadURLUC,
 		notificationService, roleRepo,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo,
 	)
-	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo)
+	updateRejectedLeaveRequestUC := usecases.NewUpdateRejectedLeaveRequestUseCase(
+		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC,
+	)
+	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo,
+		sqliteDB, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo, generateDocumentDownloadURLUC,
 	)
 
 	listPendingApprovalsUC := usecases.NewListPendingApprovalsUseCase(
@@ -262,11 +278,11 @@ func main() {
 	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, setRoleScopeUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
 	approvalFlowHandler := httpAdapter.NewApprovalFlowHandler(
-		listApprovalFlowsUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
+		listApprovalFlowsUC, getApprovalFlowUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
 		createApprovalFlowStepUC, updateApprovalFlowStepUC, deleteApprovalFlowStepUC,
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
-		submitLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
+		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
 		listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
@@ -285,7 +301,7 @@ func main() {
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,
 	)
-	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, listSubLeaveTypesUC, toggleLeaveTypeUC)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
 	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
@@ -300,17 +316,6 @@ func main() {
 		getAttendanceLogHistoryUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
-	)
-	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIOUploadExpiryMinutes,
-	)
-
-	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIODownloadExpiryMinutes,
 	)
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,

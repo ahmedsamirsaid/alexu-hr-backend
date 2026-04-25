@@ -23,11 +23,11 @@ func TestLeaveRequestRepository_FindExpiredPending(t *testing.T) {
 	approvalFlow := seedApprovalFlow(t, tdb)
 
 	tests := []struct {
-		name           string
-		graceDays      int
-		setupRequests  func() // creates leave requests with different statuses/dates
-		expectedCount  int
-		expectedUIDs   []string
+		name          string
+		graceDays     int
+		setupRequests func() // creates leave requests with different statuses/dates
+		expectedCount int
+		expectedUIDs  []string
 	}{
 		{
 			name:      "finds expired pending requests beyond grace period",
@@ -109,6 +109,62 @@ func TestLeaveRequestRepository_FindExpiredPending(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLeaveRequestRepository_CreateAndGetByUID_WithSubLeaveType(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	ctx := context.Background()
+	repo := NewLeaveRequestRepository()
+
+	employee := tdb.SeedEmployee("Test Employee")
+	leaveType := tdb.SeedLeaveType("SPECIAL", "Special Leave", "إجازة خاصة", 10)
+	subLeaveType := tdb.SeedSubLeaveType(leaveType.UID, "Type A", "النوع أ")
+	approvalFlow := seedApprovalFlow(t, tdb)
+
+	approvalRequestUID := domain.GenerateUID("apr")
+	now := time.Now()
+	_, err := tdb.db.ExecContext(ctx, `
+		INSERT INTO approval_requests (uid, requester_uid, approval_flow_uid, status, current_step, max_step, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		approvalRequestUID, employee.UID, approvalFlow.UID, "pending", 1, 1, now, now)
+	if err != nil {
+		t.Fatalf("failed to seed approval request: %v", err)
+	}
+
+	request := domain.NewLeaveRequest(
+		employee.UID,
+		leaveType.UID,
+		&subLeaveType.UID,
+		time.Now(),
+		time.Now().AddDate(0, 0, 1),
+		2,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		approvalRequestUID,
+	)
+
+	if err := repo.Create(ctx, tdb.SQLiteDB, request); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	found, err := repo.GetByUID(ctx, tdb.SQLiteDB, request.UID)
+	if err != nil {
+		t.Fatalf("GetByUID() error = %v", err)
+	}
+	if found == nil {
+		t.Fatal("GetByUID() returned nil")
+	}
+	if found.SubLeaveTypeUID == nil {
+		t.Fatal("GetByUID() subLeaveTypeUID is nil")
+	}
+	if *found.SubLeaveTypeUID != subLeaveType.UID {
+		t.Fatalf("GetByUID() subLeaveTypeUID = %s, want %s", *found.SubLeaveTypeUID, subLeaveType.UID)
 	}
 }
 

@@ -48,6 +48,15 @@ func (r *LeaveTypeRepository) GetByCode(ctx context.Context, q ports.Querier, co
 	return r.scanLeaveType(q.QueryRowContext(ctx, query, code))
 }
 
+func (r *LeaveTypeRepository) GetSubLeaveTypeByUID(ctx context.Context, q ports.Querier, uid string) (*domain.SubLeaveType, error) {
+	query := `
+		SELECT id, uid, leave_type_uid, name_en, name_ar, created_at, updated_at
+		FROM sub_leave_types
+		WHERE uid = ?`
+
+	return r.scanSubLeaveType(q.QueryRowContext(ctx, query, uid))
+}
+
 func (r *LeaveTypeRepository) List(ctx context.Context, q ports.Querier, activeOnly bool) ([]*domain.LeaveType, error) {
 	query := `
 		SELECT id, uid, code, name_en, name_ar, default_balance, max_consecutive,
@@ -79,6 +88,38 @@ func (r *LeaveTypeRepository) List(ctx context.Context, q ports.Querier, activeO
 
 	if err := rows.Err(); err != nil {
 		slog.Error("leave_type_repository.List.rows_iteration", "error", err)
+		return nil, err
+	}
+
+	return types, nil
+}
+
+func (r *LeaveTypeRepository) ListSubLeaveTypesByLeaveTypeUID(ctx context.Context, q ports.Querier, leaveTypeUID string) ([]*domain.SubLeaveType, error) {
+	query := `
+		SELECT id, uid, leave_type_uid, name_en, name_ar, created_at, updated_at
+		FROM sub_leave_types
+		WHERE leave_type_uid = ?
+		ORDER BY id`
+
+	rows, err := q.QueryContext(ctx, query, leaveTypeUID)
+	if err != nil {
+		slog.Error("leave_type_repository.ListSubLeaveTypesByLeaveTypeUID.query", "error", err, "leave_type_uid", leaveTypeUID)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var types []*domain.SubLeaveType
+	for rows.Next() {
+		subLeaveType, err := r.scanSubLeaveTypeRow(rows)
+		if err != nil {
+			slog.Error("leave_type_repository.ListSubLeaveTypesByLeaveTypeUID.scan_row", "error", err, "leave_type_uid", leaveTypeUID)
+			return nil, err
+		}
+		types = append(types, subLeaveType)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("leave_type_repository.ListSubLeaveTypesByLeaveTypeUID.rows_iteration", "error", err, "leave_type_uid", leaveTypeUID)
 		return nil, err
 	}
 
@@ -141,4 +182,38 @@ func (r *LeaveTypeRepository) scanLeaveTypeRow(rows *sql.Rows) (*domain.LeaveTyp
 	lt.CreatedAt = createdAt.Time
 	lt.UpdatedAt = updatedAt.Time
 	return &lt, nil
+}
+
+func (r *LeaveTypeRepository) scanSubLeaveType(row *sql.Row) (*domain.SubLeaveType, error) {
+	var subLeaveType domain.SubLeaveType
+	var createdAt, updatedAt domain.Time
+	err := row.Scan(
+		&subLeaveType.ID, &subLeaveType.UID, &subLeaveType.LeaveTypeUID, &subLeaveType.NameEN, &subLeaveType.NameAR,
+		&createdAt, &updatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		slog.Error("leave_type_repository.scanSubLeaveType.scan_row", "error", err)
+		return nil, err
+	}
+	subLeaveType.CreatedAt = createdAt.Time
+	subLeaveType.UpdatedAt = updatedAt.Time
+	return &subLeaveType, nil
+}
+
+func (r *LeaveTypeRepository) scanSubLeaveTypeRow(rows *sql.Rows) (*domain.SubLeaveType, error) {
+	var subLeaveType domain.SubLeaveType
+	var createdAt, updatedAt domain.Time
+	err := rows.Scan(
+		&subLeaveType.ID, &subLeaveType.UID, &subLeaveType.LeaveTypeUID, &subLeaveType.NameEN, &subLeaveType.NameAR,
+		&createdAt, &updatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	subLeaveType.CreatedAt = createdAt.Time
+	subLeaveType.UpdatedAt = updatedAt.Time
+	return &subLeaveType, nil
 }

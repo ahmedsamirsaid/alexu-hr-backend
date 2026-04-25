@@ -8,8 +8,6 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
-const SystemActorUID = "system"
-
 type AutoRejectExpiredRequestsOutput struct {
 	RejectedCount int
 }
@@ -96,7 +94,7 @@ func (uc *AutoRejectExpiredRequestsUseCase) rejectRequest(ctx context.Context, l
 		approvalRequest.UID,
 		domain.ApprovalActionTypeReject,
 		nil, // no step order for system action
-		SystemActorUID,
+		approvalRequest.RequesterUID,
 		&comments,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, action); err != nil {

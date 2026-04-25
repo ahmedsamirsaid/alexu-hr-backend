@@ -1,0 +1,42 @@
+// Example: how to add audit logging to ApproveRequestUseCase with two small changes.
+//
+// CHANGE 1 — add `auditor audit.Auditor` field to the struct.
+// CHANGE 2 — add one defer line at the top of Execute().
+//
+// Everything else in the original file stays EXACTLY the same.
+
+/*
+
+// ── CHANGE 1: add the field ──────────────────────────────────────────────────
+
+import "github.com/banumusa/backend/core/audit"
+
+type ApproveRequestUseCase struct {
+    // … all existing fields …
+    auditor audit.Auditor  // ← add this
+}
+
+func NewApproveRequestUseCase(
+    // … all existing params …
+    auditor audit.Auditor,  // ← add this
+) *ApproveRequestUseCase {
+    return &ApproveRequestUseCase{
+        // … all existing assignments …
+        auditor: auditor,   // ← add this
+    }
+}
+
+// ── CHANGE 2: one defer at the top of Execute() ──────────────────────────────
+
+func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveRequestInput) (*ApproveRequestOutput, error) {
+    // 🔍 AOP audit — who approved which request and when
+    defer uc.auditor.Actor(input.ActorEmployeeUID).
+        Did(audit.ActionApprove).
+        On(audit.EntityApprovalRequest, input.ApprovalRequestUID).
+        WithMeta("comments", input.Comments).
+        Save(ctx)
+
+    // … rest of the method is UNCHANGED …
+}
+
+*/

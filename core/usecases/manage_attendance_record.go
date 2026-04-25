@@ -26,13 +26,17 @@ type CreateAttendanceLogInput struct {
 	DeviceUID   string
 	PunchedAt   time.Time
 	PunchType   string
+	EditedByUID string
+	Reason      *string
 }
 
 type UpdateAttendanceLogInput struct {
-	UID       string
-	DeviceUID string
-	PunchedAt time.Time
-	PunchType string
+	UID         string
+	DeviceUID   string
+	PunchedAt   time.Time
+	PunchType   string
+	EditedByUID string
+	Reason      *string
 }
 
 type AttendanceLogOutput struct {
@@ -48,23 +52,26 @@ type AttendanceLogOutput struct {
 }
 
 type CreateAttendanceLogUseCase struct {
-	db           ports.DB
-	recordRepo   ports.AttendanceRecordRepository
-	employeeRepo ports.EmployeeRepository
-	deviceRepo   ports.AttendanceDeviceRepository
+	db              ports.DB
+	recordRepo      ports.AttendanceRecordRepository
+	editHistoryRepo ports.AttendanceEditHistoryRepository
+	employeeRepo    ports.EmployeeRepository
+	deviceRepo      ports.AttendanceDeviceRepository
 }
 
 func NewCreateAttendanceLogUseCase(
 	db ports.DB,
 	recordRepo ports.AttendanceRecordRepository,
+	editHistoryRepo ports.AttendanceEditHistoryRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
 ) *CreateAttendanceLogUseCase {
 	return &CreateAttendanceLogUseCase{
-		db:           db,
-		recordRepo:   recordRepo,
-		employeeRepo: employeeRepo,
-		deviceRepo:   deviceRepo,
+		db:              db,
+		recordRepo:      recordRepo,
+		editHistoryRepo: editHistoryRepo,
+		employeeRepo:    employeeRepo,
+		deviceRepo:      deviceRepo,
 	}
 }
 
@@ -74,7 +81,13 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 		return nil, err
 	}
 
-	existingRecords, err := uc.recordRepo.ListByDate(ctx, uc.db, record.PunchedAt, &record.EmployeeUID)
+	tx, err := uc.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	existingRecords, err := uc.recordRepo.ListByDate(ctx, tx, record.PunchedAt, &record.EmployeeUID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +102,7 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 		}
 	}
 
-	created, err := uc.recordRepo.Create(ctx, uc.db, record)
+	created, err := uc.recordRepo.Create(ctx, tx, record)
 	if err != nil {
 		if isAttendanceRecordConflictError(err) {
 			return nil, ErrAttendanceLogConflict
@@ -98,6 +111,17 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	}
 	if !created {
 		return nil, ErrAttendanceLogConflict
+	}
+
+	editReason := normalizeOptionalString(input.Reason)
+	history := domain.NewAttendanceEditHistory(record.UID, "created_manually", strings.TrimSpace(input.EditedByUID), nil, nil, editReason)
+	history.CreatedAt = record.CreatedAt
+	if err := uc.editHistoryRepo.Create(ctx, tx, history); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return buildAttendanceLogOutput(record), nil
@@ -167,23 +191,26 @@ func (uc *CreateAttendanceLogUseCase) buildRecord(ctx context.Context, employeeU
 }
 
 type UpdateAttendanceLogUseCase struct {
-	db           ports.DB
-	recordRepo   ports.AttendanceRecordRepository
-	employeeRepo ports.EmployeeRepository
-	deviceRepo   ports.AttendanceDeviceRepository
+	db              ports.DB
+	recordRepo      ports.AttendanceRecordRepository
+	editHistoryRepo ports.AttendanceEditHistoryRepository
+	employeeRepo    ports.EmployeeRepository
+	deviceRepo      ports.AttendanceDeviceRepository
 }
 
 func NewUpdateAttendanceLogUseCase(
 	db ports.DB,
 	recordRepo ports.AttendanceRecordRepository,
+	editHistoryRepo ports.AttendanceEditHistoryRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
 ) *UpdateAttendanceLogUseCase {
 	return &UpdateAttendanceLogUseCase{
-		db:           db,
-		recordRepo:   recordRepo,
-		employeeRepo: employeeRepo,
-		deviceRepo:   deviceRepo,
+		db:              db,
+		recordRepo:      recordRepo,
+		editHistoryRepo: editHistoryRepo,
+		employeeRepo:    employeeRepo,
+		deviceRepo:      deviceRepo,
 	}
 }
 
@@ -193,7 +220,13 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 		return nil, ErrAttendanceLogNotFound
 	}
 
-	existing, err := uc.recordRepo.GetByUID(ctx, uc.db, input.UID)
+	tx, err := uc.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	existing, err := uc.recordRepo.GetByUID(ctx, tx, input.UID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,15 +234,27 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 		return nil, ErrAttendanceLogNotFound
 	}
 
+	before := *existing
 	record, err := uc.buildUpdatedRecord(ctx, existing, input.DeviceUID, input.PunchedAt, input.PunchType)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.recordRepo.Update(ctx, uc.db, record); err != nil {
+	if err := uc.recordRepo.Update(ctx, tx, record); err != nil {
 		if isAttendanceRecordConflictError(err) {
 			return nil, ErrAttendanceLogConflict
 		}
+		return nil, err
+	}
+
+	historyItems := buildAttendanceUpdateHistory(&before, record, strings.TrimSpace(input.EditedByUID), normalizeOptionalString(input.Reason))
+	for _, history := range historyItems {
+		if err := uc.editHistoryRepo.Create(ctx, tx, history); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
@@ -257,6 +302,52 @@ func parseAttendancePunchType(value string) (domain.AttendancePunchType, error) 
 	default:
 		return "", ErrAttendanceLogPunchTypeInvalid
 	}
+}
+
+func buildAttendanceUpdateHistory(before, after *domain.AttendanceRecord, editedByUID string, reason *string) []*domain.AttendanceEditHistory {
+	entries := make([]*domain.AttendanceEditHistory, 0, 3)
+	editedAt := after.UpdatedAt
+
+	if before.DeviceUID != after.DeviceUID {
+		entry := domain.NewAttendanceEditHistory(after.UID, "device_uid", editedByUID, stringPtr(before.DeviceUID), stringPtr(after.DeviceUID), reason)
+		entry.CreatedAt = editedAt
+		entries = append(entries, entry)
+	}
+
+	if !before.PunchedAt.Equal(after.PunchedAt) {
+		entry := domain.NewAttendanceEditHistory(after.UID, "punched_at", editedByUID, stringPtr(before.PunchedAt.Format(time.RFC3339)), stringPtr(after.PunchedAt.Format(time.RFC3339)), reason)
+		entry.CreatedAt = editedAt
+		entries = append(entries, entry)
+	}
+
+	if before.PunchType != after.PunchType {
+		entry := domain.NewAttendanceEditHistory(after.UID, "punch_type", editedByUID, stringPtr(string(before.PunchType)), stringPtr(string(after.PunchType)), reason)
+		entry.CreatedAt = editedAt
+		entries = append(entries, entry)
+	}
+
+	if len(entries) == 0 {
+		entry := domain.NewAttendanceEditHistory(after.UID, "updated_manually", editedByUID, nil, nil, reason)
+		entry.CreatedAt = editedAt
+		entries = append(entries, entry)
+	}
+
+	return entries
+}
+
+func normalizeOptionalString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func buildAttendanceLogOutput(record *domain.AttendanceRecord) *AttendanceLogOutput {

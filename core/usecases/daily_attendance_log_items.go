@@ -29,6 +29,7 @@ func buildDailyAttendanceLogItems(ctx context.Context, db ports.DB, employeeRepo
 			CheckInDeviceUID:  group.CheckInDeviceUID,
 			CheckOutDevice:    group.CheckOutDevice,
 			CheckOutDeviceUID: group.CheckOutDeviceUID,
+			HasEditHistory:    group.HasEditHistory,
 			GraceMinutes:      shift.GraceMinutes,
 		}
 

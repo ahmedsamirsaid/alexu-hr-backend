@@ -4,24 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
 	"github.com/banumusa/backend/adapters/notifications/fcm"
 	"github.com/banumusa/backend/adapters/notifications/noop"
 	"github.com/banumusa/backend/adapters/scheduler"
+	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -38,13 +38,12 @@ func main() {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
 	}
-	
-	
+
 	minioService, err := minioAdapter.NewService(minioAdapter.Config{
-	Endpoint:  cfg.MinIOEndpoint,
-	AccessKey: cfg.MinIOAccessKey,
-	SecretKey: cfg.MinIOSecretKey,
-	UseSSL:    cfg.MinIOUseSSL,
+		Endpoint:  cfg.MinIOEndpoint,
+		AccessKey: cfg.MinIOAccessKey,
+		SecretKey: cfg.MinIOSecretKey,
+		UseSSL:    cfg.MinIOUseSSL,
 	})
 	if err != nil {
 		slog.Error("main.main.init_minio", "error", err)
@@ -84,6 +83,7 @@ func main() {
 	attendanceReminderRepo := db.NewAttendanceReminderRepository()
 
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
+	attendanceEditHistoryRepo := db.NewAttendanceEditHistoryRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
 
@@ -231,8 +231,9 @@ func main() {
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
-	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
+	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo, attendanceDeviceRepo)
+	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo, attendanceDeviceRepo)
+	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo)
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
@@ -296,6 +297,7 @@ func main() {
 		listDailyEmployeeAttendanceLogsUC,
 		createAttendanceLogUC,
 		updateAttendanceLogUC,
+		getAttendanceLogHistoryUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
 	)
@@ -335,7 +337,7 @@ func main() {
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
-		DocumentHandler: documentHandler,
+		DocumentHandler:         documentHandler,
 	})
 
 	var sched *scheduler.Scheduler

@@ -830,18 +830,37 @@ components:
           type: string
           nullable: true
           example: "08:04:00"
+        checkInLogUid:
+          type: string
+          nullable: true
+          example: "atr_001"
         checkOut:
           type: string
           nullable: true
           example: "16:03:00"
+        checkOutLogUid:
+          type: string
+          nullable: true
+          example: "atr_002"
         checkInDevice:
           type: string
           nullable: true
           example: "Main Gate Reader"
+        checkInDeviceUid:
+          type: string
+          nullable: true
+          example: "adev_001"
         checkOutDevice:
           type: string
           nullable: true
           example: "Main Gate Reader"
+        checkOutDeviceUid:
+          type: string
+          nullable: true
+          example: "adev_001"
+        hasEditHistory:
+          type: boolean
+          example: true
         workedHours:
           type: number
           format: float
@@ -1160,6 +1179,10 @@ components:
           type: string
           enum: [check_in, check_out, break_start, break_end, unknown]
           example: check_in
+        reason:
+          type: string
+          nullable: true
+          example: Correcting a missed punch from yesterday
 
     UpdateAttendanceLogRequest:
       type: object
@@ -1176,6 +1199,10 @@ components:
           type: string
           enum: [check_in, check_out, break_start, break_end, unknown]
           example: check_out
+        reason:
+          type: string
+          nullable: true
+          example: Corrected device and checkout time after review
 
     AttendanceLogMutationResponse:
       type: object
@@ -1211,6 +1238,60 @@ components:
           type: string
           format: date-time
           example: "2026-04-20T17:00:00Z"
+
+    AttendanceLogHistoryItem:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "aeh_001"
+        fieldChanged:
+          type: string
+          example: "punched_at"
+        oldValue:
+          type: string
+          nullable: true
+          example: "2026-04-20T08:00:00Z"
+        newValue:
+          type: string
+          nullable: true
+          example: "2026-04-20T08:15:00Z"
+        reason:
+          type: string
+          nullable: true
+          example: "Adjusted after reviewing the device logs"
+        editedByUid:
+          type: string
+          example: "usr_001"
+        editedByName:
+          type: string
+          example: "Mina Adel"
+        editedByPhone:
+          type: string
+          nullable: true
+          example: "+201000000000"
+        editedAt:
+          type: string
+          format: date-time
+          example: "2026-04-20T08:20:00Z"
+
+    AttendanceLogHistoryResponse:
+      type: object
+      properties:
+        attendanceLogUid:
+          type: string
+          example: "atr_001"
+        employeeUid:
+          type: string
+          example: "emp_xyz789"
+        departmentUid:
+          type: string
+          nullable: true
+          example: "dept_it"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceLogHistoryItem"
 
     SendTestPushRequest:
       type: object
@@ -3426,7 +3507,7 @@ paths:
   /api/v1/attendance/logs:
     post:
       tags: [Attendance]
-      summary: Create attendance log
+      summary: Create attendance log manually
       requestBody:
         required: true
         content:
@@ -3452,6 +3533,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: Only IT Managers and Admins can manually create attendance logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           description: Duplicate/conflicting attendance log
           content:
@@ -3462,7 +3549,7 @@ paths:
   /api/v1/attendance/logs/{uid}:
     patch:
       tags: [Attendance]
-      summary: Update attendance log
+      summary: Update attendance log manually
       parameters:
         - name: uid
           in: path
@@ -3495,8 +3582,45 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "403":
+          description: Only IT Managers and Admins can manually update attendance logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           description: Duplicate/conflicting attendance log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/attendance/logs/{uid}/history:
+    get:
+      tags: [Attendance]
+      summary: Get audit history for an attendance log
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "atr_001"
+      responses:
+        "200":
+          description: Attendance log edit history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceLogHistoryResponse"
+        "403":
+          description: Access to the attendance log is not permitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Attendance log not found
           content:
             application/json:
               schema:

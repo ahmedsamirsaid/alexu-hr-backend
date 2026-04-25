@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 )
 
@@ -29,12 +30,13 @@ type UpdateAttendanceDeviceOutput struct {
 }
 
 type UpdateAttendanceDeviceUseCase struct {
-	db   ports.DB
-	repo ports.AttendanceDeviceRepository
+	db      ports.DB
+	repo    ports.AttendanceDeviceRepository
+	auditor audit.Auditor
 }
 
-func NewUpdateAttendanceDeviceUseCase(db ports.DB, repo ports.AttendanceDeviceRepository) *UpdateAttendanceDeviceUseCase {
-	return &UpdateAttendanceDeviceUseCase{db: db, repo: repo}
+func NewUpdateAttendanceDeviceUseCase(db ports.DB, repo ports.AttendanceDeviceRepository, auditor audit.Auditor) *UpdateAttendanceDeviceUseCase {
+	return &UpdateAttendanceDeviceUseCase{db: db, repo: repo, auditor: auditor}
 }
 
 func (uc *UpdateAttendanceDeviceUseCase) Execute(ctx context.Context, input UpdateAttendanceDeviceInput) (*UpdateAttendanceDeviceOutput, error) {
@@ -74,6 +76,26 @@ func (uc *UpdateAttendanceDeviceUseCase) Execute(ctx context.Context, input Upda
 	if conflict != nil && conflict.UID != input.UID {
 		return nil, ErrDeviceAddressExists
 	}
+
+	// Build audit metadata with field changes
+	auditBuilder := uc.auditor.From(ctx).
+		Did(audit.ActionUpdate).
+		On(audit.EntityAttendanceDevice, input.UID)
+
+	if existing.IP != input.IP {
+		auditBuilder.WithMeta("old_ip", existing.IP).WithMeta("new_ip", input.IP)
+	}
+	if existing.Port != input.Port {
+		auditBuilder.WithMeta("old_port", existing.Port).WithMeta("new_port", input.Port)
+	}
+	if existing.Name != input.Name {
+		auditBuilder.WithMeta("old_name", existing.Name).WithMeta("new_name", input.Name)
+	}
+	if existing.Location != input.Location {
+		auditBuilder.WithMeta("old_location", existing.Location).WithMeta("new_location", input.Location)
+	}
+
+	defer auditBuilder.Save(ctx)
 
 	existing.IP = input.IP
 	existing.Port = input.Port

@@ -94,6 +94,51 @@ func (r *AuditLogRepository) ListByActor(ctx context.Context, q ports.Querier, a
 	return r.scanRows(rows)
 }
 
+// ListAll returns paginated audit entries with optional filters, newest first.
+func (r *AuditLogRepository) ListAll(ctx context.Context, q ports.Querier, filters ports.AuditLogFilters, p ports.ListParams) ([]*domain.AuditLog, error) {
+	p = p.Normalize(20, 100, "occurred_at", ports.SortOrderDesc)
+
+	query := `
+		SELECT id, uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at
+		FROM audit_logs
+		WHERE 1=1`
+
+	args := []interface{}{}
+
+	// Apply filters
+	if filters.EntityType != "" {
+		query += " AND entity_type = ?"
+		args = append(args, filters.EntityType)
+	}
+
+	if filters.ActorUID != "" {
+		query += " AND actor_uid = ?"
+		args = append(args, filters.ActorUID)
+	}
+
+	if filters.SearchText != "" {
+		searchPattern := "%" + filters.SearchText + "%"
+		query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+		args = append(args, searchPattern, searchPattern, searchPattern)
+	}
+
+	query += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+	args = append(args, p.PageSize, p.Offset())
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("audit_log_repository.ListAll.query",
+			"error", err,
+			"entity_type", filters.EntityType,
+			"actor_uid", filters.ActorUID,
+			"search_text", filters.SearchText,
+		)
+		return nil, err
+	}
+	defer rows.Close()
+	return r.scanRows(rows)
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

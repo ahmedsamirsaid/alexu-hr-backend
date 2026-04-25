@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -31,17 +32,20 @@ type CreateManualHolidayUseCase struct {
 	db             ports.DB
 	holidayDefRepo ports.HolidayDefinitionRepository
 	weekendRepo    ports.WeekendConfigRepository
+	auditor        audit.Auditor
 }
 
 func NewCreateManualHolidayUseCase(
 	db ports.DB,
 	holidayDefRepo ports.HolidayDefinitionRepository,
 	weekendRepo ports.WeekendConfigRepository,
+	auditor audit.Auditor,
 ) *CreateManualHolidayUseCase {
 	return &CreateManualHolidayUseCase{
 		db:             db,
 		holidayDefRepo: holidayDefRepo,
 		weekendRepo:    weekendRepo,
+		auditor:        auditor,
 	}
 }
 
@@ -99,6 +103,16 @@ func (uc *CreateManualHolidayUseCase) Execute(ctx context.Context, input CreateM
 		Date:     dateOnly,
 		IsManual: true,
 	}
+	
+	// Audit log will fire after successful transaction commit
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityHoliday, definition.UID).
+		WithMeta("date", definition.Date.Format("2006-01-02")).
+		WithMeta("name_en", definition.NameEN).
+		WithMeta("name_ar", definition.NameAR).
+		Save(ctx)
+	
 	if err := uc.holidayDefRepo.Create(ctx, tx, definition); err != nil {
 		return nil, err
 	}

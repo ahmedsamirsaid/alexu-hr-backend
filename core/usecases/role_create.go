@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -20,15 +21,18 @@ type CreateRoleOutput struct {
 type CreateRoleUseCase struct {
 	db       ports.DB
 	roleRepo ports.RoleRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateRoleUseCase(
 	db ports.DB,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *CreateRoleUseCase {
 	return &CreateRoleUseCase{
 		db:       db,
 		roleRepo: roleRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -48,6 +52,14 @@ func (uc *CreateRoleUseCase) Execute(ctx context.Context, input CreateRoleInput)
 	}
 
 	role := domain.NewRole(input.Name, input.Description, normalizedScopeType)
+
+	// Audit log will fire after successful role creation
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityRole, role.UID).
+		WithMeta("name", role.Name).
+		WithMeta("scope_type", role.ScopeType).
+		Save(ctx)
 
 	if err := uc.roleRepo.Create(ctx, uc.db, role); err != nil {
 		return nil, err

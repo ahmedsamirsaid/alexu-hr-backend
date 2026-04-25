@@ -4389,3 +4389,131 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /api/v1/audit/logs:
+    get:
+      tags: [Audit]
+      summary: List all audit logs with filters
+      description: |
+        Retrieves all audit logs with optional filtering capabilities.
+        Returns paginated results ordered by occurrence time (newest first).
+        Requires `audit:read` permission.
+        
+        This endpoint allows filtering by:
+        - Entity type (category)
+        - Actor UID (who performed the action)
+        - Free text search across entity_uid, action, and metadata
+      parameters:
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+          example: "leave_request"
+          description: |
+            Filter by entity type. Valid values: attendance_record, leave_request, leave_balance,
+            employee, user, role, department, attendance_device, holiday, approval_flow, leave_type
+        - name: actor_uid
+          in: query
+          schema:
+            type: string
+          example: "emp_admin_001"
+          description: Filter by actor UID (employee who performed the action)
+        - name: search
+          in: query
+          schema:
+            type: string
+          example: "approved"
+          description: Free text search across entity_uid, action, and metadata fields
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          example: 1
+          description: Page number (1-indexed)
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+          example: 50
+          description: Number of events per page (1-100)
+      responses:
+        "200":
+          description: Audit logs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        uid:
+                          type: string
+                          example: "aud_xyz789"
+                        actorUid:
+                          type: string
+                          example: "emp_admin_001"
+                        action:
+                          type: string
+                          example: "update"
+                          description: |
+                            Action performed. Common values: create, update, delete, approve, reject,
+                            cancel, submit, assign_role, remove_role, assign_department, remove_department,
+                            adjust_balance, deduct_balance, add_step, update_step, delete_step, activate, deactivate
+                        entityType:
+                          type: string
+                          example: "leave_request"
+                          description: |
+                            Type of entity. Common values: attendance_record, leave_request, leave_balance,
+                            employee, user, role, department, attendance_device, holiday, approval_flow, leave_type
+                        entityUid:
+                          type: string
+                          example: "lr_456"
+                        meta:
+                          type: string
+                          nullable: true
+                          example: '{"old_status":"pending","new_status":"approved","comments":"Approved for medical reasons"}'
+                          description: JSON string containing action-specific metadata (field changes, comments, etc.)
+                        occurredAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T14:20:00Z"
+                        createdAt:
+                          type: string
+                          format: date-time
+                          example: "2024-01-15T14:20:01Z"
+                  page:
+                    type: integer
+                    example: 1
+                  pageSize:
+                    type: integer
+                    example: 50
+                  hasNextPage:
+                    type: boolean
+                    example: true
+                    description: Indicates if there are more pages available
+        "400":
+          description: Invalid request parameters (invalid page, page_size out of range)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Insufficient permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"

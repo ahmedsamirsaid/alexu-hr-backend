@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -15,15 +16,18 @@ type SetRoleScopeInput struct {
 type SetRoleScopeUseCase struct {
 	db       ports.DB
 	roleRepo ports.RoleRepository
+	auditor  audit.Auditor
 }
 
 func NewSetRoleScopeUseCase(
 	db ports.DB,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *SetRoleScopeUseCase {
 	return &SetRoleScopeUseCase{
 		db:       db,
 		roleRepo: roleRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -44,6 +48,17 @@ func (uc *SetRoleScopeUseCase) Execute(ctx context.Context, input SetRoleScopeIn
 	if normalizedScopeType == "" {
 		return ErrInvalidRoleScopeType
 	}
+
+	// Capture old scope type for audit
+	oldScopeType := role.ScopeType
+
+	// Audit log will fire after successful scope update
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionUpdate).
+		On(audit.EntityRole, input.RoleUID).
+		WithMeta("old_scope_type", oldScopeType).
+		WithMeta("new_scope_type", normalizedScopeType).
+		Save(ctx)
 
 	role.ScopeType = normalizedScopeType
 	return uc.roleRepo.Update(ctx, uc.db, role)

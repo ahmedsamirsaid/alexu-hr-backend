@@ -76,6 +76,7 @@ const (
 	EntityShift            = "shift"
 	EntityAttendanceDevice = "attendance_device"
 	EntityLeaveBalance     = "leave_balance"
+	EntityHoliday          = "holiday"
 )
 
 // ---------------------------------------------------------------------------

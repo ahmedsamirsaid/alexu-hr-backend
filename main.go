@@ -157,8 +157,8 @@ func main() {
 	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo, auditor)
 
 	listRolesUC := usecases.NewListRolesUseCase(sqliteDB, roleRepo, permissionRepo)
-	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo)
-	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(sqliteDB, roleRepo)
+	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo, auditor)
+	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(sqliteDB, roleRepo, auditor)
 	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo, auditor)
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
@@ -184,7 +184,7 @@ func main() {
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo, auditor)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
-	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo, auditor)
 	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
 		minioService,
 		cfg.MinIODocumentsBucket,
@@ -205,7 +205,7 @@ func main() {
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, auditor,
 	)
 	updateRejectedLeaveRequestUC := usecases.NewUpdateRejectedLeaveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC,
+		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC, auditor,
 	)
 	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
@@ -241,12 +241,12 @@ func main() {
 	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
 
-	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
 	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
-	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
-	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
-	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
+	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
+	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
+	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
@@ -324,7 +324,8 @@ func main() {
 	// Audit use cases
 	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo)
 	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
-	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC)
+	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB)
+	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC)
 
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,

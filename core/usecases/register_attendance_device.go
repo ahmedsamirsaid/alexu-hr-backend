@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -33,12 +34,13 @@ type RegisterAttendanceDeviceOutput struct {
 }
 
 type RegisterAttendanceDeviceUseCase struct {
-	db   ports.DB
-	repo ports.AttendanceDeviceRepository
+	db      ports.DB
+	repo    ports.AttendanceDeviceRepository
+	auditor audit.Auditor
 }
 
-func NewRegisterAttendanceDeviceUseCase(db ports.DB, repo ports.AttendanceDeviceRepository) *RegisterAttendanceDeviceUseCase {
-	return &RegisterAttendanceDeviceUseCase{db: db, repo: repo}
+func NewRegisterAttendanceDeviceUseCase(db ports.DB, repo ports.AttendanceDeviceRepository, auditor audit.Auditor) *RegisterAttendanceDeviceUseCase {
+	return &RegisterAttendanceDeviceUseCase{db: db, repo: repo, auditor: auditor}
 }
 
 func (uc *RegisterAttendanceDeviceUseCase) Execute(ctx context.Context, input RegisterAttendanceDeviceInput) (*RegisterAttendanceDeviceOutput, error) {
@@ -80,6 +82,18 @@ func (uc *RegisterAttendanceDeviceUseCase) Execute(ctx context.Context, input Re
 	}
 
 	device := domain.NewAttendanceDevice(input.IP, input.Port, input.Name, input.Location, input.SerialNumber)
+	
+	// Audit log will fire after successful device registration
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityAttendanceDevice, device.UID).
+		WithMeta("ip", device.IP).
+		WithMeta("port", device.Port).
+		WithMeta("serial_number", device.SerialNumber).
+		WithMeta("name", device.Name).
+		WithMeta("location", device.Location).
+		Save(ctx)
+	
 	if err := uc.repo.Create(ctx, uc.db, device); err != nil {
 		return nil, err
 	}

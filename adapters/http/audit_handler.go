@@ -13,16 +13,19 @@ import (
 type AuditHandler struct {
 	getTrailUC       *usecases.GetAuditTrailUseCase
 	getActorEventsUC *usecases.GetActorAuditEventsUseCase
+	listAllLogsUC    *usecases.ListAllAuditLogsUseCase
 }
 
 // NewAuditHandler creates a new audit handler.
 func NewAuditHandler(
 	getTrailUC *usecases.GetAuditTrailUseCase,
 	getActorEventsUC *usecases.GetActorAuditEventsUseCase,
+	listAllLogsUC *usecases.ListAllAuditLogsUseCase,
 ) *AuditHandler {
 	return &AuditHandler{
 		getTrailUC:       getTrailUC,
 		getActorEventsUC: getActorEventsUC,
+		listAllLogsUC:    listAllLogsUC,
 	}
 }
 
@@ -156,6 +159,76 @@ func (h *AuditHandler) GetActorAuditEvents(w http.ResponseWriter, r *http.Reques
 			Meta:       event.Meta,
 			OccurredAt: event.OccurredAt.Format(time.RFC3339),
 			CreatedAt:  event.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, ActorAuditEventsResponse{
+		Events:      events,
+		Page:        output.Page,
+		PageSize:    output.PageSize,
+		HasNextPage: output.HasNextPage,
+	})
+}
+
+// ListAllAuditLogs handles GET /api/v1/audit/logs
+func (h *AuditHandler) ListAllAuditLogs(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	entityType := r.URL.Query().Get("entity_type")
+	actorUID := r.URL.Query().Get("actor_uid")
+	searchText := r.URL.Query().Get("search")
+
+	page := 1
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		var err error
+		page, err = strconv.Atoi(pageStr)
+		if err != nil || page < 1 {
+			writeError(w, http.StatusBadRequest, "invalid page parameter")
+			return
+		}
+	}
+
+	pageSize := 50 // default page size
+	if pageSizeStr := r.URL.Query().Get("page_size"); pageSizeStr != "" {
+		var err error
+		pageSize, err = strconv.Atoi(pageSizeStr)
+		if err != nil || pageSize < 1 || pageSize > 100 {
+			writeError(w, http.StatusBadRequest, "page_size must be between 1 and 100")
+			return
+		}
+	}
+
+	input := usecases.ListAllAuditLogsInput{
+		EntityType: entityType,
+		ActorUID:   actorUID,
+		SearchText: searchText,
+		Page:       page,
+		PageSize:   pageSize,
+	}
+
+	output, err := h.listAllLogsUC.Execute(r.Context(), input)
+	if err != nil {
+		slog.Error("audit_handler.ListAllAuditLogs.execute_usecase",
+			"error", err,
+			"entity_type", entityType,
+			"actor_uid", actorUID,
+			"search_text", searchText,
+		)
+		writeError(w, http.StatusInternalServerError, "failed to retrieve audit logs")
+		return
+	}
+
+	// Transform DTOs to response format
+	events := make([]AuditEventResponse, 0, len(output.Events))
+	for _, event := range output.Events {
+		events = append(events, AuditEventResponse{
+			UID:        event.UID,
+			ActorUID:   event.ActorUID,
+			Action:     event.Action,
+			EntityType: event.EntityType,
+			EntityUID:  event.EntityUID,
+			Meta:       event.Meta,
+			OccurredAt: event.OccurredAt,
+			CreatedAt:  event.CreatedAt,
 		})
 	}
 

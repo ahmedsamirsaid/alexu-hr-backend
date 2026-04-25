@@ -134,6 +134,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs/stats/monthly", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetMonthlyStats)))
 
 	// Audit endpoints
+	protectedMux.Handle("GET /api/v1/audit/logs", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.ListAllAuditLogs)))
 	protectedMux.Handle("GET /api/v1/audit/entity/{entityType}/{entityUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetAuditTrail)))
 	protectedMux.Handle("GET /api/v1/audit/actor/{actorUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetActorAuditEvents)))
 

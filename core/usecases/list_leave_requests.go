@@ -18,6 +18,8 @@ type ListLeaveRequestsInput struct {
 type LeaveRequestWithStatus struct {
 	LeaveRequest    *domain.LeaveRequest
 	ApprovalRequest *domain.ApprovalRequest
+	LeaveType       *domain.LeaveType
+	SubLeaveType    *domain.SubLeaveType
 }
 
 type ListLeaveRequestsOutput struct {
@@ -29,17 +31,20 @@ type ListLeaveRequestsUseCase struct {
 	db                  ports.DB
 	leaveRequestRepo    ports.LeaveRequestRepository
 	approvalRequestRepo ports.ApprovalRequestRepository
+	leaveTypeRepo       ports.LeaveTypeRepository
 }
 
 func NewListLeaveRequestsUseCase(
 	db ports.DB,
 	leaveRequestRepo ports.LeaveRequestRepository,
 	approvalRequestRepo ports.ApprovalRequestRepository,
+	leaveTypeRepo ports.LeaveTypeRepository,
 ) *ListLeaveRequestsUseCase {
 	return &ListLeaveRequestsUseCase{
 		db:                  db,
 		leaveRequestRepo:    leaveRequestRepo,
 		approvalRequestRepo: approvalRequestRepo,
+		leaveTypeRepo:       leaveTypeRepo,
 	}
 }
 
@@ -70,9 +75,25 @@ func (uc *ListLeaveRequestsUseCase) Execute(ctx context.Context, input ListLeave
 		if err != nil {
 			return nil, err
 		}
+
+		leaveType, err := uc.leaveTypeRepo.GetByUID(ctx, uc.db, lr.LeaveTypeUID)
+		if err != nil {
+			return nil, err
+		}
+
+		var subLeaveType *domain.SubLeaveType
+		if lr.SubLeaveTypeUID != nil && *lr.SubLeaveTypeUID != "" {
+			subLeaveType, err = uc.leaveTypeRepo.GetSubLeaveTypeByUID(ctx, uc.db, *lr.SubLeaveTypeUID)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		result[i] = &LeaveRequestWithStatus{
 			LeaveRequest:    lr,
 			ApprovalRequest: approvalRequest,
+			LeaveType:       leaveType,
+			SubLeaveType:    subLeaveType,
 		}
 	}
 

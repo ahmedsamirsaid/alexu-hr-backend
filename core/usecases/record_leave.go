@@ -11,13 +11,15 @@ import (
 )
 
 var (
-	ErrEmployeeNotFound        = errors.New("employee not found")
-	ErrLeaveTypeNotFound       = errors.New("leave type not found")
-	ErrInsufficientBalance     = errors.New("insufficient leave balance")
-	ErrExceedsConsecutiveDays  = errors.New("exceeds maximum consecutive days")
-	ErrRecordingDeadlinePassed = errors.New("recording deadline has passed")
-	ErrInvalidDateRange        = errors.New("invalid date range")
-	ErrNoWorkingDays           = errors.New("no working days")
+	ErrEmployeeNotFound                     = errors.New("employee not found")
+	ErrLeaveTypeNotFound                    = errors.New("leave type not found")
+	ErrSubLeaveTypeNotFound                 = errors.New("sub leave type not found")
+	ErrSubLeaveTypeDoesNotBelongToLeaveType = errors.New("sub leave type does not belong to leave type")
+	ErrInsufficientBalance                  = errors.New("insufficient leave balance")
+	ErrExceedsConsecutiveDays               = errors.New("exceeds maximum consecutive days")
+	ErrRecordingDeadlinePassed              = errors.New("recording deadline has passed")
+	ErrInvalidDateRange                     = errors.New("invalid date range")
+	ErrNoWorkingDays                        = errors.New("no working days")
 )
 
 type RecordLeaveInput struct {

@@ -21,6 +21,7 @@ type DailyAttendanceLogItem struct {
 	CheckInDeviceUID  *string
 	CheckOutDevice    *string
 	CheckOutDeviceUID *string
+	HasEditHistory    bool
 	WorkedHours       float64
 	LateArrival       bool
 	EarlyDeparture    bool

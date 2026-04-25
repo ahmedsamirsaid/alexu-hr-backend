@@ -66,7 +66,7 @@ func LoadConfig() *AppConfig {
 		AccessTokenMinutes: getEnvInt("BANU_MUSA_ACCESS_TOKEN_MINUTES", 60),
 		RefreshTokenDays:   getEnvInt("BANU_MUSA_REFRESH_TOKEN_DAYS", 90),
 		// FCM config
-		FCMEnabled:            getEnvBool("BANU_MUSA_FCM_ENABLED", true),
+		FCMEnabled:            getEnvBool("BANU_MUSA_FCM_ENABLED", false),
 		FCMServiceAccountPath: getEnv("BANU_MUSA_FCM_SERVICE_ACCOUNT_PATH", "./firebase/staging-banumusa-firebase-adminsdk-fbsvc-9f7f698d1d.json"),
 		// Scheduler config
 		SchedulerEnabled:       getEnvBool("BANU_MUSA_SCHEDULER_ENABLED", true),

@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -10,22 +11,50 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
+var (
+	ErrLeaveRequestDocumentsRequired    = errors.New("documents array is required when documents_attached is true")
+	ErrLeaveRequestDocumentsUnsupported = errors.New("document attachments are only supported for leave requests that require approval")
+)
+
 type SubmitLeaveRequestInput struct {
-	EmployeeUID  string
-	LeaveTypeUID string
-	StartDate    time.Time
-	EndDate      time.Time
-	Notes        *string
+	UserUID           string
+	EmployeeUID       string
+	LeaveTypeUID      string
+	SubLeaveTypeUID   *string
+	StartDate         time.Time
+	EndDate           time.Time
+	Notes             *string
+	StudyDestination  *string
+	Assignment        *string
+	AssignmentCountry *string
+	SpouseWorkCountry *string
+	DocumentsAttached bool
+	Documents         []SubmitLeaveRequestDocumentInput
+}
+
+type SubmitLeaveRequestDocumentInput struct {
+	FileName    string
+	ContentType string
+}
+
+type SubmitLeaveRequestDocumentOutput struct {
+	FileName  string `json:"fileName"`
+	URL       string `json:"url"`
+	Method    string `json:"method"`
+	Bucket    string `json:"bucket"`
+	ObjectKey string `json:"objectKey"`
 }
 
 type SubmitLeaveRequestOutput struct {
 	LeaveRequest    *domain.LeaveRequest
 	ApprovalRequest *domain.ApprovalRequest
 	LeaveRecord     *domain.LeaveRecord // Set if auto-approved (no approval flow)
+	Documents       []SubmitLeaveRequestDocumentOutput
 }
 
 type SubmitLeaveRequestUseCase struct {
 	db                   ports.DB
+	userRepo             ports.UserRepository
 	employeeRepo         ports.EmployeeRepository
 	leaveTypeRepo        ports.LeaveTypeRepository
 	leaveBalanceRepo     ports.LeaveBalanceRepository
@@ -35,7 +64,9 @@ type SubmitLeaveRequestUseCase struct {
 	approvalRequestRepo  ports.ApprovalRequestRepository
 	approvalActionRepo   ports.ApprovalActionRepository
 	approvalFlowStepRepo ports.ApprovalFlowStepRepository
+	leaveRequestDocRepo  ports.LeaveRequestDocumentRepository
 	workingDaysCalc      *WorkingDaysCalculator
+	documentUploadURLUC  *GenerateDocumentUploadURLUseCase
 	notificationService  ports.NotificationService
 	roleRepo             ports.RoleRepository
 	auditor              audit.Auditor
@@ -43,6 +74,7 @@ type SubmitLeaveRequestUseCase struct {
 
 func NewSubmitLeaveRequestUseCase(
 	db ports.DB,
+	userRepo ports.UserRepository,
 	employeeRepo ports.EmployeeRepository,
 	leaveTypeRepo ports.LeaveTypeRepository,
 	leaveBalanceRepo ports.LeaveBalanceRepository,
@@ -52,13 +84,16 @@ func NewSubmitLeaveRequestUseCase(
 	approvalRequestRepo ports.ApprovalRequestRepository,
 	approvalActionRepo ports.ApprovalActionRepository,
 	approvalFlowStepRepo ports.ApprovalFlowStepRepository,
+	leaveRequestDocRepo ports.LeaveRequestDocumentRepository,
 	workingDaysCalc *WorkingDaysCalculator,
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
 	notificationService ports.NotificationService,
 	roleRepo ports.RoleRepository,
 	auditor audit.Auditor,
 ) *SubmitLeaveRequestUseCase {
 	return &SubmitLeaveRequestUseCase{
 		db:                   db,
+		userRepo:             userRepo,
 		employeeRepo:         employeeRepo,
 		leaveTypeRepo:        leaveTypeRepo,
 		leaveBalanceRepo:     leaveBalanceRepo,
@@ -68,7 +103,9 @@ func NewSubmitLeaveRequestUseCase(
 		approvalRequestRepo:  approvalRequestRepo,
 		approvalActionRepo:   approvalActionRepo,
 		approvalFlowStepRepo: approvalFlowStepRepo,
+		leaveRequestDocRepo:  leaveRequestDocRepo,
 		workingDaysCalc:      workingDaysCalc,
+		documentUploadURLUC:  documentUploadURLUC,
 		notificationService:  notificationService,
 		roleRepo:             roleRepo,
 		auditor:              auditor,
@@ -107,6 +144,19 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 	if leaveType == nil {
 		return nil, ErrLeaveTypeNotFound
+	}
+
+	if input.SubLeaveTypeUID != nil && *input.SubLeaveTypeUID != "" {
+		subLeaveType, err := uc.leaveTypeRepo.GetSubLeaveTypeByUID(ctx, tx, *input.SubLeaveTypeUID)
+		if err != nil {
+			return nil, err
+		}
+		if subLeaveType == nil {
+			return nil, ErrSubLeaveTypeNotFound
+		}
+		if subLeaveType.LeaveTypeUID != input.LeaveTypeUID {
+			return nil, ErrSubLeaveTypeDoesNotBelongToLeaveType
+		}
 	}
 
 	// Calculate working days
@@ -148,6 +198,10 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		return nil, ErrInsufficientBalance
 	}
 
+	if input.DocumentsAttached && len(input.Documents) == 0 {
+		return nil, ErrLeaveRequestDocumentsRequired
+	}
+
 	// Check if leave type has an approval flow
 	// If no approval flow, auto-approve by creating leave record directly
 	if !leaveType.RequiresApproval() {
@@ -167,6 +221,10 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 	input SubmitLeaveRequestInput,
 	totalWorkingDays int,
 ) (*SubmitLeaveRequestOutput, error) {
+	if input.DocumentsAttached {
+		return nil, ErrLeaveRequestDocumentsUnsupported
+	}
+
 	// Create leave record directly (no request/approval needed)
 	leaveRecord := domain.NewLeaveRecord(
 		employee.ID,
@@ -219,17 +277,44 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	input SubmitLeaveRequestInput,
 	totalWorkingDays int,
 ) (*SubmitLeaveRequestOutput, error) {
-	// Count steps in the approval flow
-	maxStep, err := uc.approvalFlowStepRepo.CountByFlow(ctx, tx, *leaveType.ApprovalFlowUID)
+	requesterUser, err := uc.userRepo.GetByUID(ctx, tx, input.UserUID)
 	if err != nil {
 		return nil, err
 	}
+	if requesterUser == nil {
+		return nil, ErrUserNotFound
+	}
+
+	resolver := newApprovalChainResolver(uc.employeeRepo, uc.userRepo, uc.approvalFlowStepRepo, uc.roleRepo)
+	chain, err := resolver.resolveForSubmit(ctx, tx, *leaveType.ApprovalFlowUID, requesterUser.ID, employee)
+	if err != nil {
+		return nil, err
+	}
+	if len(chain.effectiveSteps) == 0 && chain.matchedFlowStep == nil {
+		return nil, ErrApprovalFlowHasNoSteps
+	}
+	if len(chain.effectiveSteps) == 0 && chain.matchedFlowStep != nil {
+		return uc.handleTopRoleAutoApprove(ctx, tx, employee, leaveType, balance, input, totalWorkingDays)
+	}
+
+	maxStep := len(chain.allSteps)
 	if maxStep == 0 {
 		return nil, ErrApprovalFlowHasNoSteps
 	}
 
+	currentStep := 1
+	if chain.matchedFlowStep != nil {
+		currentStep = chain.matchedFlowStep.StepOrder + 1
+	}
+
 	// Create approval request
-	approvalRequest := domain.NewApprovalRequest(*leaveType.ApprovalFlowUID, input.EmployeeUID, maxStep)
+	approvalRequest := domain.NewApprovalRequestWithState(
+		*leaveType.ApprovalFlowUID,
+		input.EmployeeUID,
+		currentStep,
+		maxStep,
+		domain.ApprovalRequestStatusPending,
+	)
 	if err := uc.approvalRequestRepo.Create(ctx, tx, approvalRequest); err != nil {
 		return nil, err
 	}
@@ -238,10 +323,15 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	leaveRequest := domain.NewLeaveRequest(
 		input.EmployeeUID,
 		input.LeaveTypeUID,
+		input.SubLeaveTypeUID,
 		input.StartDate,
 		input.EndDate,
 		totalWorkingDays,
 		input.Notes,
+		input.StudyDestination,
+		input.Assignment,
+		input.AssignmentCountry,
+		input.SpouseWorkCountry,
 		approvalRequest.UID,
 	)
 	if err := uc.leaveRequestRepo.Create(ctx, tx, leaveRequest); err != nil {
@@ -266,11 +356,15 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		return nil, err
 	}
 
-	// Get step 1 approvers for notification
+	documents, err := uc.createLeaveRequestDocuments(ctx, tx, leaveRequest.UID, input)
+	if err != nil {
+		return nil, err
+	}
+
+	// Notify approvers at the raw current step.
 	var step1RoleUID string
 	var departmentUID string
-	step1, err := uc.approvalFlowStepRepo.GetByFlowAndStep(ctx, tx, *leaveType.ApprovalFlowUID, 1)
-	if err == nil && step1 != nil {
+	if step1, err := uc.approvalFlowStepRepo.GetByFlowAndStep(ctx, tx, *leaveType.ApprovalFlowUID, approvalRequest.CurrentStep); err == nil && step1 != nil {
 		step1RoleUID = step1.RoleUID
 		departmentUID = *employee.DepartmentUID
 	}
@@ -287,7 +381,147 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	return &SubmitLeaveRequestOutput{
 		LeaveRequest:    leaveRequest,
 		ApprovalRequest: approvalRequest,
+		Documents:       documents,
 	}, nil
+}
+
+func (uc *SubmitLeaveRequestUseCase) handleTopRoleAutoApprove(
+	ctx context.Context,
+	tx ports.Tx,
+	employee *domain.Employee,
+	leaveType *domain.LeaveType,
+	balance *domain.LeaveBalance,
+	input SubmitLeaveRequestInput,
+	totalWorkingDays int,
+) (*SubmitLeaveRequestOutput, error) {
+	approvalRequest := domain.NewApprovalRequestWithState(
+		*leaveType.ApprovalFlowUID,
+		input.EmployeeUID,
+		0,
+		0,
+		domain.ApprovalRequestStatusApproved,
+	)
+	if err := uc.approvalRequestRepo.Create(ctx, tx, approvalRequest); err != nil {
+		return nil, err
+	}
+
+	leaveRequest := domain.NewLeaveRequest(
+		input.EmployeeUID,
+		input.LeaveTypeUID,
+		input.SubLeaveTypeUID,
+		input.StartDate,
+		input.EndDate,
+		totalWorkingDays,
+		input.Notes,
+		input.StudyDestination,
+		input.Assignment,
+		input.AssignmentCountry,
+		input.SpouseWorkCountry,
+		approvalRequest.UID,
+	)
+	if err := uc.leaveRequestRepo.Create(ctx, tx, leaveRequest); err != nil {
+		return nil, err
+	}
+	leaveRequest.SetDecided()
+	if err := uc.leaveRequestRepo.Update(ctx, tx, leaveRequest); err != nil {
+		return nil, err
+	}
+
+	submitAction := domain.NewApprovalAction(
+		approvalRequest.UID,
+		domain.ApprovalActionTypeSubmit,
+		nil,
+		input.EmployeeUID,
+		nil,
+	)
+	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
+		return nil, err
+	}
+
+	documents, err := uc.createLeaveRequestDocuments(ctx, tx, leaveRequest.UID, input)
+	if err != nil {
+		return nil, err
+	}
+
+	leaveRecord := domain.NewLeaveRecord(
+		employee.ID,
+		leaveType.ID,
+		input.StartDate,
+		input.EndDate,
+		totalWorkingDays,
+		&employee.ID,
+		input.Notes,
+		&leaveRequest.UID,
+	)
+	if err := uc.leaveRecordRepo.Create(ctx, tx, leaveRecord); err != nil {
+		return nil, err
+	}
+
+	balance.UsedDays += totalWorkingDays
+	if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
+		return nil, err
+	}
+
+	balanceTx := domain.NewLeaveBalanceTransaction(
+		balance.ID,
+		domain.TransactionTypeDeduct,
+		totalWorkingDays,
+		&leaveRecord.ID,
+		&employee.ID,
+		input.Notes,
+	)
+	if err := uc.balanceTxRepo.Create(ctx, tx, balanceTx); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &SubmitLeaveRequestOutput{
+		LeaveRequest:    leaveRequest,
+		ApprovalRequest: approvalRequest,
+		LeaveRecord:     leaveRecord,
+		Documents:       documents,
+	}, nil
+}
+
+func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(
+	ctx context.Context,
+	tx ports.Tx,
+	leaveRequestUID string,
+	input SubmitLeaveRequestInput,
+) ([]SubmitLeaveRequestDocumentOutput, error) {
+	if !input.DocumentsAttached {
+		return nil, nil
+	}
+
+	outputs := make([]SubmitLeaveRequestDocumentOutput, 0, len(input.Documents))
+	for _, document := range input.Documents {
+		presigned, err := uc.documentUploadURLUC.Execute(ctx, GenerateDocumentUploadURLInput{
+			UserUID:     input.UserUID,
+			FileName:    document.FileName,
+			ContentType: document.ContentType,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		doc := domain.NewLeaveRequestDocument(leaveRequestUID, document.FileName, presigned.ObjectKey)
+		if err := uc.leaveRequestDocRepo.Create(ctx, tx, doc); err != nil {
+			return nil, err
+		}
+
+		outputs = append(outputs, SubmitLeaveRequestDocumentOutput{
+			FileName:  document.FileName,
+			URL:       presigned.URL,
+			Method:    presigned.Method,
+			Bucket:    presigned.Bucket,
+			ObjectKey: presigned.ObjectKey,
+		})
+	}
+
+	return outputs, nil
 }
 
 func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeName, requestUID string) {

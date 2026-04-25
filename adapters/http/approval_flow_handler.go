@@ -11,17 +11,19 @@ import (
 
 // ApprovalFlowHandler handles approval flow HTTP requests (admin).
 type ApprovalFlowHandler struct {
-	listFlowsUC      *usecases.ListApprovalFlowsUseCase
-	createFlowUC     *usecases.CreateApprovalFlowUseCase
-	updateFlowUC     *usecases.UpdateApprovalFlowUseCase
-	listStepsUC      *usecases.ListApprovalFlowStepsUseCase
-	createStepUC     *usecases.CreateApprovalFlowStepUseCase
-	updateStepUC     *usecases.UpdateApprovalFlowStepUseCase
-	deleteStepUC     *usecases.DeleteApprovalFlowStepUseCase
+	listFlowsUC  *usecases.ListApprovalFlowsUseCase
+	getFlowUC    *usecases.GetApprovalFlowUseCase
+	createFlowUC *usecases.CreateApprovalFlowUseCase
+	updateFlowUC *usecases.UpdateApprovalFlowUseCase
+	listStepsUC  *usecases.ListApprovalFlowStepsUseCase
+	createStepUC *usecases.CreateApprovalFlowStepUseCase
+	updateStepUC *usecases.UpdateApprovalFlowStepUseCase
+	deleteStepUC *usecases.DeleteApprovalFlowStepUseCase
 }
 
 func NewApprovalFlowHandler(
 	listFlowsUC *usecases.ListApprovalFlowsUseCase,
+	getFlowUC *usecases.GetApprovalFlowUseCase,
 	createFlowUC *usecases.CreateApprovalFlowUseCase,
 	updateFlowUC *usecases.UpdateApprovalFlowUseCase,
 	listStepsUC *usecases.ListApprovalFlowStepsUseCase,
@@ -31,6 +33,7 @@ func NewApprovalFlowHandler(
 ) *ApprovalFlowHandler {
 	return &ApprovalFlowHandler{
 		listFlowsUC:  listFlowsUC,
+		getFlowUC:    getFlowUC,
 		createFlowUC: createFlowUC,
 		updateFlowUC: updateFlowUC,
 		listStepsUC:  listStepsUC,
@@ -55,6 +58,11 @@ type ApprovalFlowResponse struct {
 
 type ListApprovalFlowsResponse struct {
 	Flows []ApprovalFlowResponse `json:"flows"`
+}
+
+type GetApprovalFlowResponse struct {
+	Flow  ApprovalFlowResponse       `json:"flow"`
+	Steps []ApprovalFlowStepResponse `json:"steps"`
 }
 
 type ApprovalFlowStepResponse struct {
@@ -123,6 +131,54 @@ func (h *ApprovalFlowHandler) ListApprovalFlows(w http.ResponseWriter, r *http.R
 	}
 
 	writeJSON(w, http.StatusOK, ListApprovalFlowsResponse{Flows: flows})
+}
+
+// GetApprovalFlow handles GET /api/v1/admin/approval-flows/{uid}
+func (h *ApprovalFlowHandler) GetApprovalFlow(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	output, err := h.getFlowUC.Execute(r.Context(), uid)
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		if errors.Is(err, usecases.ErrApprovalFlowNotFound) {
+			statusCode = http.StatusNotFound
+		} else {
+			slog.Error("approval_flow_handler.GetApprovalFlow.execute_usecase", "error", err, "uid", uid)
+		}
+		writeError(w, statusCode, err.Error())
+		return
+	}
+
+	steps := make([]ApprovalFlowStepResponse, 0, len(output.Steps))
+	for _, item := range output.Steps {
+		steps = append(steps, ApprovalFlowStepResponse{
+			UID:       item.Step.UID,
+			FlowUID:   item.Step.ApprovalFlowUID,
+			StepOrder: item.Step.StepOrder,
+			RoleUID:   item.Step.RoleUID,
+			RoleName:  item.RoleName,
+			CreatedAt: item.Step.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt: item.Step.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, GetApprovalFlowResponse{
+		Flow: ApprovalFlowResponse{
+			UID:         output.Flow.UID,
+			Code:        output.Flow.Code,
+			NameEN:      output.Flow.NameEN,
+			NameAR:      output.Flow.NameAR,
+			Description: output.Flow.Description,
+			IsActive:    output.Flow.IsActive,
+			CreatedAt:   output.Flow.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt:   output.Flow.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		},
+		Steps: steps,
+	})
 }
 
 // CreateApprovalFlow handles POST /api/v1/admin/approval-flows

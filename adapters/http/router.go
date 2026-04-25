@@ -24,7 +24,7 @@ type RouterConfig struct {
 	DebugHandler            *DebugHandler
 	JWTService              *JWTService
 	AuthEnabled             bool
-	DocumentHandler *DocumentHandler
+	DocumentHandler         *DocumentHandler
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -110,6 +110,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDepartmentLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyDepartmentLogs)))
+	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/reports", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetDepartmentReport)))
+	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/reports/export", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ExportDepartmentReport)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListEmployeeLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyEmployeeLogs)))
 	protectedMux.Handle("POST /api/v1/attendance/logs", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.CreateLog)))

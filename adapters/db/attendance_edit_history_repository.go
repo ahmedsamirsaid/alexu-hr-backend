@@ -65,7 +65,8 @@ func (r *AttendanceEditHistoryRepository) ListByAttendanceRecordUID(ctx context.
 			aeh.edited_by_uid,
 			aeh.created_at,
 			COALESCE(editor_employee.name, editor_user.phone, aeh.edited_by_uid) AS edited_by_name,
-			editor_user.phone
+			editor_user.phone,
+			editor_user.employee_uid
 		FROM attendance_edit_history aeh
 		LEFT JOIN users editor_user ON editor_user.uid = aeh.edited_by_uid
 		LEFT JOIN employees editor_employee ON editor_employee.uid = editor_user.employee_uid
@@ -105,6 +106,7 @@ func (r *AttendanceEditHistoryRepository) scanHistoryRow(rows *sql.Rows) (*ports
 	var reason sql.NullString
 	var editedByName string
 	var editedByPhone sql.NullString
+	var editedByEmployeeUID sql.NullString
 
 	if err := rows.Scan(
 		&history.ID,
@@ -118,6 +120,7 @@ func (r *AttendanceEditHistoryRepository) scanHistoryRow(rows *sql.Rows) (*ports
 		&createdAt,
 		&editedByName,
 		&editedByPhone,
+		&editedByEmployeeUID,
 	); err != nil {
 		return nil, err
 	}
@@ -128,9 +131,10 @@ func (r *AttendanceEditHistoryRepository) scanHistoryRow(rows *sql.Rows) (*ports
 	history.Reason = nullableStringPtr(reason)
 
 	return &ports.AttendanceEditHistoryWithEditor{
-		History:       &history,
-		EditedByName:  editedByName,
-		EditedByPhone: nullableStringPtr(editedByPhone),
+		History:            &history,
+		EditedByName:       editedByName,
+		EditedByPhone:      nullableStringPtr(editedByPhone),
+		EditedByEmployeeUID: nullableStringPtr(editedByEmployeeUID),
 	}, nil
 }
 

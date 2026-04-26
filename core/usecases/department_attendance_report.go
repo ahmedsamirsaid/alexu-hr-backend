@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -41,7 +42,36 @@ type DepartmentAttendanceReportOutput struct {
 	TotalHeadcount         int
 	AverageAttendanceRate  float64
 	AveragePunctualityRate float64
+	OverviewTotalRecords   int
+	OverviewAttendanceRate float64
+	OverviewLateArrivalRate float64
+	OverviewMissingPunchRate float64
+	OverviewTotalExceptions int
+	OverviewBestAttendanceDay *DepartmentAttendanceOverviewDay
+	OverviewWorstAttendanceDay *DepartmentAttendanceOverviewDay
+	OverviewTopExceptions []DepartmentAttendanceOverviewException
+	OverviewDailyTrend []DepartmentAttendanceOverviewTrendPoint
 	Employees              []DepartmentAttendanceReportEmployee
+}
+
+type DepartmentAttendanceOverviewDay struct {
+	Date           time.Time
+	AttendanceRate float64
+}
+
+type DepartmentAttendanceOverviewException struct {
+	Type  domain.AttendanceExceptionType
+	Count int
+}
+
+type DepartmentAttendanceOverviewTrendPoint struct {
+	Date             time.Time
+	Records          int
+	AttendanceRate   float64
+	AbsenceRate      float64
+	LateArrivalRate  float64
+	MissingPunchRate float64
+	ExceptionsCount  int
 }
 
 type GetDepartmentAttendanceReportUseCase struct {
@@ -128,6 +158,23 @@ func (uc *GetDepartmentAttendanceReportUseCase) Execute(ctx context.Context, inp
 		return nil, err
 	}
 
+	overviewRecords, err := appendDepartmentAbsenceItems(
+		ctx,
+		uc.db,
+		nil,
+		uc.weekendRepo,
+		uc.holidayRepo,
+		append([]DailyAttendanceLogItem(nil), dailyItems...),
+		employees,
+		input.DepartmentUID,
+		filter,
+		start,
+		end,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, item := range dailyItems {
 		accumulator, ok := accumulators[item.EmployeeUID]
 		if !ok {
@@ -155,6 +202,17 @@ func (uc *GetDepartmentAttendanceReportUseCase) Execute(ctx context.Context, inp
 		TotalHeadcount: len(employees),
 		Employees:      make([]DepartmentAttendanceReportEmployee, 0, len(employees)),
 	}
+
+	overviewMetrics := buildDepartmentAttendanceOverviewMetrics(overviewRecords)
+	output.OverviewTotalRecords = overviewMetrics.TotalRecords
+	output.OverviewAttendanceRate = overviewMetrics.AttendanceRate
+	output.OverviewLateArrivalRate = overviewMetrics.LateArrivalRate
+	output.OverviewMissingPunchRate = overviewMetrics.MissingPunchRate
+	output.OverviewTotalExceptions = overviewMetrics.TotalExceptions
+	output.OverviewBestAttendanceDay = overviewMetrics.BestAttendanceDay
+	output.OverviewWorstAttendanceDay = overviewMetrics.WorstAttendanceDay
+	output.OverviewTopExceptions = overviewMetrics.TopExceptions
+	output.OverviewDailyTrend = overviewMetrics.DailyTrend
 
 	totalWorkingDays := 0
 	totalPresentDays := 0
@@ -478,35 +536,255 @@ func percentage(numerator, denominator int) float64 {
 	return (float64(numerator) / float64(denominator)) * 100
 }
 
+type departmentAttendanceOverviewMetrics struct {
+	TotalRecords      int
+	AttendanceRate    float64
+	LateArrivalRate   float64
+	MissingPunchRate  float64
+	TotalExceptions   int
+	BestAttendanceDay *DepartmentAttendanceOverviewDay
+	WorstAttendanceDay *DepartmentAttendanceOverviewDay
+	TopExceptions     []DepartmentAttendanceOverviewException
+	DailyTrend        []DepartmentAttendanceOverviewTrendPoint
+}
+
+type departmentAttendanceOverviewDayBucket struct {
+	Date           time.Time
+	Total          int
+	AttendanceDays int
+	LateArrivalDays int
+	MissingPunchDays int
+	ExceptionsCount int
+}
+
+func buildDepartmentAttendanceOverviewMetrics(records []DailyAttendanceLogItem) departmentAttendanceOverviewMetrics {
+	totalRecords := len(records)
+	if totalRecords == 0 {
+		return departmentAttendanceOverviewMetrics{}
+	}
+
+	attendanceDays := 0
+	lateArrivalDays := 0
+	missingPunchDays := 0
+	totalExceptions := 0
+	exceptionCounts := make(map[domain.AttendanceExceptionType]int)
+	dailyBuckets := make(map[string]*departmentAttendanceOverviewDayBucket)
+
+	for _, record := range records {
+		dateKey := normalizeDateOnly(record.Date).Format("2006-01-02")
+		bucket, ok := dailyBuckets[dateKey]
+		if !ok {
+			bucket = &departmentAttendanceOverviewDayBucket{Date: normalizeDateOnly(record.Date)}
+			dailyBuckets[dateKey] = bucket
+		}
+
+		hasAbsence := false
+		hasLateArrival := false
+		hasMissingPunch := false
+
+		for _, exceptionType := range record.Exceptions {
+			exceptionCounts[exceptionType]++
+			totalExceptions++
+
+			switch exceptionType {
+			case domain.AttendanceExceptionTypeAbsence:
+				hasAbsence = true
+			case domain.AttendanceExceptionTypeLateArrival:
+				hasLateArrival = true
+			case domain.AttendanceExceptionTypeMissedPunchIn, domain.AttendanceExceptionTypeMissedPunchOut:
+				hasMissingPunch = true
+			}
+		}
+
+		if !hasAbsence {
+			attendanceDays++
+			bucket.AttendanceDays++
+		}
+		if hasLateArrival {
+			lateArrivalDays++
+			bucket.LateArrivalDays++
+		}
+		if hasMissingPunch {
+			missingPunchDays++
+			bucket.MissingPunchDays++
+		}
+
+		bucket.ExceptionsCount += len(record.Exceptions)
+
+		bucket.Total++
+	}
+
+	dailyTrend := make([]DepartmentAttendanceOverviewDay, 0, len(dailyBuckets))
+	dailyTrendExport := make([]DepartmentAttendanceOverviewTrendPoint, 0, len(dailyBuckets))
+	for _, bucket := range dailyBuckets {
+		dailyTrend = append(dailyTrend, DepartmentAttendanceOverviewDay{
+			Date:           bucket.Date,
+			AttendanceRate: ratio(bucket.AttendanceDays, bucket.Total),
+		})
+		dailyTrendExport = append(dailyTrendExport, DepartmentAttendanceOverviewTrendPoint{
+			Date:             bucket.Date,
+			Records:          bucket.Total,
+			AttendanceRate:   ratio(bucket.AttendanceDays, bucket.Total),
+			AbsenceRate:      ratio(bucket.Total-bucket.AttendanceDays, bucket.Total),
+			LateArrivalRate:  ratio(bucket.LateArrivalDays, bucket.Total),
+			MissingPunchRate: ratio(bucket.MissingPunchDays, bucket.Total),
+			ExceptionsCount:  bucket.ExceptionsCount,
+		})
+	}
+	sort.Slice(dailyTrend, func(i, j int) bool {
+		return dailyTrend[i].Date.Before(dailyTrend[j].Date)
+	})
+	sort.Slice(dailyTrendExport, func(i, j int) bool {
+		return dailyTrendExport[i].Date.Before(dailyTrendExport[j].Date)
+	})
+
+	var bestAttendanceDay *DepartmentAttendanceOverviewDay
+	var worstAttendanceDay *DepartmentAttendanceOverviewDay
+	for i := range dailyTrend {
+		point := dailyTrend[i]
+		if bestAttendanceDay == nil || point.AttendanceRate > bestAttendanceDay.AttendanceRate {
+			copied := point
+			bestAttendanceDay = &copied
+		}
+		if worstAttendanceDay == nil || point.AttendanceRate < worstAttendanceDay.AttendanceRate {
+			copied := point
+			worstAttendanceDay = &copied
+		}
+	}
+
+	topExceptions := make([]DepartmentAttendanceOverviewException, 0, len(exceptionCounts))
+	for exceptionType, count := range exceptionCounts {
+		topExceptions = append(topExceptions, DepartmentAttendanceOverviewException{Type: exceptionType, Count: count})
+	}
+	sort.Slice(topExceptions, func(i, j int) bool {
+		if topExceptions[i].Count == topExceptions[j].Count {
+			return string(topExceptions[i].Type) < string(topExceptions[j].Type)
+		}
+		return topExceptions[i].Count > topExceptions[j].Count
+	})
+	if len(topExceptions) > 5 {
+		topExceptions = topExceptions[:5]
+	}
+
+	return departmentAttendanceOverviewMetrics{
+		TotalRecords:       totalRecords,
+		AttendanceRate:     ratio(attendanceDays, totalRecords),
+		LateArrivalRate:    ratio(lateArrivalDays, totalRecords),
+		MissingPunchRate:   ratio(missingPunchDays, totalRecords),
+		TotalExceptions:    totalExceptions,
+		BestAttendanceDay:  bestAttendanceDay,
+		WorstAttendanceDay: worstAttendanceDay,
+		TopExceptions:      topExceptions,
+		DailyTrend:         dailyTrendExport,
+	}
+}
+
+func ratio(numerator, denominator int) float64 {
+	if denominator == 0 {
+		return 0
+	}
+	return float64(numerator) / float64(denominator)
+}
+
 func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string, report *DepartmentAttendanceReportOutput) error {
 	summaryRows := [][]any{
-		{"Department UID", report.DepartmentUID},
+		{"Department attendance overview", ""},
 		{"Date Range", fmt.Sprintf("%s to %s", report.StartDate.Format("2006-01-02"), report.EndDate.Format("2006-01-02"))},
-		{"Total Headcount", report.TotalHeadcount},
-		{"Average Attendance Rate", report.AverageAttendanceRate},
-		{"Average Punctuality Rate", report.AveragePunctualityRate},
+		{"Attendance Rate", report.OverviewAttendanceRate},
+		{"Late Arrival Rate", report.OverviewLateArrivalRate},
+		{"Missing Punch Rate", report.OverviewMissingPunchRate},
+		{"Total Records", report.OverviewTotalRecords},
+		{"Records Analyzed", report.OverviewTotalRecords},
+		{"Days Covered", len(report.OverviewDailyTrend)},
+		{"Total Exceptions", report.OverviewTotalExceptions},
+		{"Best Attendance Day", formatOverviewDay(report.OverviewBestAttendanceDay)},
+		{"Worst Attendance Day", formatOverviewDay(report.OverviewWorstAttendanceDay)},
 	}
+
+	if len(report.OverviewTopExceptions) == 0 {
+		summaryRows = append(summaryRows, []any{"Top Exceptions", "-"})
+	} else {
+		for index, exception := range report.OverviewTopExceptions {
+			label := "Top Exceptions"
+			if index > 0 {
+				label = ""
+			}
+			summaryRows = append(summaryRows, []any{label, fmt.Sprintf("%s: %d", formatOverviewExceptionType(exception.Type), exception.Count)})
+		}
+	}
+
 	for rowIndex, row := range summaryRows {
 		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", rowIndex+1), &row); err != nil {
 			return err
 		}
 	}
 
+	trendTitleRow := len(summaryRows) + 2
+	trendTitle := []any{"Attendance Trend"}
+	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendTitleRow), &trendTitle); err != nil {
+		return err
+	}
+
+	trendHeaderRow := trendTitleRow + 1
+	trendHeaders := []any{
+		"Date",
+		"Attendance Rate",
+		"Absence Rate",
+		"Late Arrival Rate",
+		"Missing Punch Rate",
+		"Exceptions",
+		"Records",
+	}
+	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendHeaderRow), &trendHeaders); err != nil {
+		return err
+	}
+
+	trendDataStartRow := trendHeaderRow + 1
+	if len(report.OverviewDailyTrend) == 0 {
+		emptyTrend := []any{"No trend data"}
+		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendDataStartRow), &emptyTrend); err != nil {
+			return err
+		}
+	}
+	for index, point := range report.OverviewDailyTrend {
+		rowIndex := trendDataStartRow + index
+		row := []any{
+			point.Date.Format("2006-01-02"),
+			point.AttendanceRate,
+			point.AbsenceRate,
+			point.LateArrivalRate,
+			point.MissingPunchRate,
+			point.ExceptionsCount,
+			point.Records,
+		}
+		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", rowIndex), &row); err != nil {
+			return err
+		}
+	}
+
 	headers := []any{
-		"Employee UID",
-		"Name",
+		"Employee",
 		"Working Days",
 		"Present",
 		"Absent",
 		"Late",
 		"Early Departure",
-		"Missing Check-In",
-		"Missing Check-Out",
+		"Missing In/Out",
 		"Total Hours",
 		"Average Check-In",
 		"Average Check-Out",
 	}
-	headerRow := 7
+	trendRowsCount := len(report.OverviewDailyTrend)
+	if trendRowsCount == 0 {
+		trendRowsCount = 1
+	}
+	employeeTitleRow := trendDataStartRow + trendRowsCount + 2
+	employeeTitle := []any{"Employee Breakdown"}
+	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", employeeTitleRow), &employeeTitle); err != nil {
+		return err
+	}
+
+	headerRow := employeeTitleRow + 1
 	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", headerRow), &headers); err != nil {
 		return err
 	}
@@ -514,15 +792,13 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	for index, employee := range report.Employees {
 		rowIndex := headerRow + index + 1
 		row := []any{
-			employee.EmployeeUID,
 			employee.EmployeeName,
 			employee.TotalWorkingDays,
 			employee.DaysPresent,
 			employee.DaysAbsent,
 			employee.LateDays,
 			employee.EarlyDepartureDays,
-			employee.MissingCheckInDays,
-			employee.MissingCheckOutDays,
+			fmt.Sprintf("%d / %d", employee.MissingCheckInDays, employee.MissingCheckOutDays),
 			employee.TotalWorkedHours,
 			formatOptionalReportTime(employee.AverageCheckInTime),
 			formatOptionalReportTime(employee.AverageCheckOutTime),
@@ -542,23 +818,39 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	if err := f.SetRowStyle(sheetName, headerRow, headerRow, headerStyle); err != nil {
 		return err
 	}
+	if err := f.SetRowStyle(sheetName, trendHeaderRow, trendHeaderRow, headerStyle); err != nil {
+		return err
+	}
 
 	numberStyle, err := f.NewStyle(&excelize.Style{NumFmt: 2})
+	if err != nil {
+		return err
+	}
+	percentStyle, err := f.NewStyle(&excelize.Style{NumFmt: 10})
 	if err != nil {
 		return err
 	}
 	if len(report.Employees) > 0 {
 		firstDataRow := headerRow + 1
 		lastDataRow := headerRow + len(report.Employees)
-		if err := f.SetCellStyle(sheetName, fmt.Sprintf("J%d", firstDataRow), fmt.Sprintf("J%d", lastDataRow), numberStyle); err != nil {
+		if err := f.SetCellStyle(sheetName, fmt.Sprintf("H%d", firstDataRow), fmt.Sprintf("H%d", lastDataRow), numberStyle); err != nil {
 			return err
 		}
 	}
-	if err := f.SetCellStyle(sheetName, "B4", "B5", numberStyle); err != nil {
+	if len(report.OverviewDailyTrend) > 0 {
+		trendLastRow := trendDataStartRow + len(report.OverviewDailyTrend) - 1
+		if err := f.SetCellStyle(sheetName, fmt.Sprintf("B%d", trendDataStartRow), fmt.Sprintf("E%d", trendLastRow), percentStyle); err != nil {
+			return err
+		}
+	}
+	if err := f.SetCellStyle(sheetName, "B3", "B5", percentStyle); err != nil {
+		return err
+	}
+	if err := f.SetCellStyle(sheetName, "B6", "B9", numberStyle); err != nil {
 		return err
 	}
 
-	widths := []float64{22, 28, 16, 12, 12, 12, 18, 18, 18, 14, 18, 18}
+	widths := []float64{30, 16, 12, 12, 12, 18, 18, 14, 18, 18}
 	for index, width := range widths {
 		column, err := excelize.ColumnNumberToName(index + 1)
 		if err != nil {
@@ -570,6 +862,30 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	}
 
 	return nil
+}
+
+func formatOverviewDay(value *DepartmentAttendanceOverviewDay) string {
+	if value == nil {
+		return "-"
+	}
+	return fmt.Sprintf("%s (%.2f%%)", value.Date.Format("2006-01-02"), value.AttendanceRate*100)
+}
+
+func formatOverviewExceptionType(value domain.AttendanceExceptionType) string {
+	switch value {
+	case domain.AttendanceExceptionTypeAbsence:
+		return "Absence"
+	case domain.AttendanceExceptionTypeLateArrival:
+		return "Late arrival"
+	case domain.AttendanceExceptionTypeEarlyDeparture:
+		return "Early departure"
+	case domain.AttendanceExceptionTypeMissedPunchIn:
+		return "Missed punch in"
+	case domain.AttendanceExceptionTypeMissedPunchOut:
+		return "Missed punch out"
+	default:
+		return string(value)
+	}
 }
 
 func formatOptionalReportTime(value *time.Time) string {

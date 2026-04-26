@@ -38,6 +38,20 @@ func (m *mockHolidayDefinitionRepo) GetByDate(ctx context.Context, q ports.Queri
 	return m.holidays, nil
 }
 
+func (m *mockHolidayDefinitionRepo) ListAllByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
+	var result []*domain.HolidayDefinition
+	for _, h := range m.holidays {
+		if !h.Date.Before(start) && !h.Date.After(end) {
+			result = append(result, h)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockHolidayDefinitionRepo) ListByDateRangeForDepartment(ctx context.Context, q ports.Querier, start, end time.Time, departmentUID string) ([]*domain.HolidayDefinition, error) {
+	return m.ListAllByDateRange(ctx, q, start, end)
+}
+
 func (m *mockHolidayDefinitionRepo) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
 	var result []*domain.HolidayDefinition
 	for _, h := range m.holidays {
@@ -53,6 +67,14 @@ func (m *mockHolidayDefinitionRepo) List(ctx context.Context, q ports.Querier) (
 }
 
 func (m *mockHolidayDefinitionRepo) Create(ctx context.Context, q ports.Querier, def *domain.HolidayDefinition) error {
+	return nil
+}
+
+func (m *mockHolidayDefinitionRepo) Update(ctx context.Context, q ports.Querier, def *domain.HolidayDefinition) error {
+	return nil
+}
+
+func (m *mockHolidayDefinitionRepo) Delete(ctx context.Context, q ports.Querier, id int64) error {
 	return nil
 }
 

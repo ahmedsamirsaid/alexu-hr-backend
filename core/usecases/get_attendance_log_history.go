@@ -17,6 +17,7 @@ type AttendanceLogHistoryItemOutput struct {
 	NewValue      *string `json:"newValue,omitempty"`
 	Reason        *string `json:"reason,omitempty"`
 	EditedByUID   string  `json:"editedByUid"`
+	EditedByEmployeeUID *string `json:"editedByEmployeeUid,omitempty"`
 	EditedByName  string  `json:"editedByName"`
 	EditedByPhone *string `json:"editedByPhone,omitempty"`
 	EditedAt      string  `json:"editedAt"`
@@ -87,6 +88,7 @@ func (uc *GetAttendanceLogHistoryUseCase) Execute(ctx context.Context, input Get
 			NewValue:      item.History.NewValue,
 			Reason:        item.History.Reason,
 			EditedByUID:   item.History.EditedByUID,
+			EditedByEmployeeUID: item.EditedByEmployeeUID,
 			EditedByName:  item.EditedByName,
 			EditedByPhone: item.EditedByPhone,
 			EditedAt:      item.History.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),

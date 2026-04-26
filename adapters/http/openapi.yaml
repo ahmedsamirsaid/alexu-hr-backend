@@ -921,6 +921,48 @@ components:
           format: float
           example: 7.98
 
+    MonthlyAttendanceDayBreakdown:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2024-06-01"
+        check_in:
+          type: string
+          nullable: true
+          example: "09:18:00+02:00"
+        check_out:
+          type: string
+          nullable: true
+          example: "16:42:00+02:00"
+        worked_hours:
+          type: number
+          format: float
+          example: 7.4
+        is_late:
+          type: boolean
+          example: true
+        late_minutes:
+          type: integer
+          example: 3
+        is_early_departure:
+          type: boolean
+          example: true
+        early_departure_minutes:
+          type: integer
+          example: 18
+        is_absent:
+          type: boolean
+          example: false
+        is_on_leave:
+          type: boolean
+          example: false
+        leave_type_name:
+          type: string
+          nullable: true
+          example: "Annual Leave"
+
     MonthlyAttendanceStatsResponse:
       type: object
       properties:
@@ -953,6 +995,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyWorkingHoursByDay"
+        late_days_count:
+          type: integer
+          example: 4
+        early_departure_days_count:
+          type: integer
+          example: 2
+        absent_days_count:
+          type: integer
+          example: 1
+        days_breakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyAttendanceDayBreakdown"
 
     AttendanceDevice:
       type: object
@@ -3368,6 +3423,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/attendance/employees/{employeeUid}/reports:
+    get:
+      tags: [Attendance]
+      summary: Export employee attendance report to Excel
+      parameters:
+        - name: employeeUid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "emp_xyz789"
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-30"
+      responses:
+        "200":
+          description: Excel report
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: Invalid date range
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Employee is outside the caller's access scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/attendance/employees/{employeeUid}/logs/stats/monthly:
     get:
       tags: [Attendance]
@@ -3385,9 +3492,21 @@ paths:
           schema:
             type: string
           example: "2024-06-01"
+        - name: start_date
+          in: query
+          description: Alias for startDate.
+          schema:
+            type: string
+          example: "2024-06-01"
         - name: endDate
           in: query
           description: Accepts YYYY-MM-DD or RFC3339. Must be provided together with startDate. Cannot be combined with month or year.
+          schema:
+            type: string
+          example: "2024-06-30"
+        - name: end_date
+          in: query
+          description: Alias for endDate.
           schema:
             type: string
           example: "2024-06-30"

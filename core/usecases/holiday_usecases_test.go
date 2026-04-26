@@ -7,6 +7,7 @@ import (
 	"time"
 
 	dbadapter "github.com/banumusa/backend/adapters/db"
+	"github.com/banumusa/backend/core/domain"
 )
 
 func TestCreateManualHolidayUseCase_RejectsExistingHolidayDate(t *testing.T) {
@@ -34,7 +35,7 @@ func TestCreateManualHolidayUseCase_RejectsExistingHolidayDate(t *testing.T) {
 	}
 }
 
-func TestCreateManualHolidayUseCase_RejectsWeekendDate(t *testing.T) {
+func TestCreateManualHolidayUseCase_AllowsWeekendDate(t *testing.T) {
 	db := newUsecaseTestSQLiteDB(t)
 	defer db.Close()
 	seedWeekendDays(t, db, int(time.Friday), int(time.Saturday))
@@ -44,12 +45,15 @@ func TestCreateManualHolidayUseCase_RejectsWeekendDate(t *testing.T) {
 	uc := NewCreateManualHolidayUseCase(db, defRepo, weekendRepo)
 
 	friday := nextWeekdayDate(time.Now(), time.Friday)
-	_, err := uc.Execute(context.Background(), CreateManualHolidayInput{
+	created, err := uc.Execute(context.Background(), CreateManualHolidayInput{
 		Date:   friday,
 		NameEN: "Friday Holiday",
 	})
-	if !errors.Is(err, ErrHolidayDateFallsOnWeekend) {
-		t.Fatalf("expected ErrHolidayDateFallsOnWeekend, got %v", err)
+	if err != nil {
+		t.Fatalf("expected weekend create to succeed, got %v", err)
+	}
+	if created == nil {
+		t.Fatal("expected created holiday, got nil")
 	}
 }
 
@@ -87,6 +91,98 @@ func TestListHolidaysUseCase_ReturnsNamesAndMetadata(t *testing.T) {
 	}
 	if !output.Holidays[0].IsManual {
 		t.Fatalf("unexpected metadata: manual=%v", output.Holidays[0].IsManual)
+	}
+}
+
+func TestCreateManualHolidayUseCase_AllowsDepartmentScopedHolidayOnSameDateAsGlobal(t *testing.T) {
+	db := newUsecaseTestSQLiteDB(t)
+	defer db.Close()
+
+	defRepo := dbadapter.NewHolidayDefinitionRepository()
+	createUC := NewCreateManualHolidayUseCase(db, defRepo, nil)
+	listUC := NewListHolidaysUseCase(db, defRepo)
+
+	dateValue := nextWeekdayDate(time.Now(), time.Monday)
+	if _, err := createUC.Execute(context.Background(), CreateManualHolidayInput{
+		Date:   dateValue,
+		NameEN: "Company Day",
+	}); err != nil {
+		t.Fatalf("global create returned error: %v", err)
+	}
+
+	departmentHoliday, err := createUC.Execute(context.Background(), CreateManualHolidayInput{
+		Date:           dateValue,
+		NameEN:         "Finance Day",
+		DepartmentUIDs: []string{"dept-finance"},
+	})
+	if err != nil {
+		t.Fatalf("department-scoped create returned error: %v", err)
+	}
+	if len(departmentHoliday.DepartmentUIDs) != 1 || departmentHoliday.DepartmentUIDs[0] != "dept-finance" {
+		t.Fatalf("unexpected scoped departments: %+v", departmentHoliday.DepartmentUIDs)
+	}
+
+	start := dateValue.AddDate(0, 0, -1)
+	end := dateValue.AddDate(0, 0, 1)
+	output, err := listUC.Execute(context.Background(), ListHolidaysInput{StartDate: &start, EndDate: &end})
+	if err != nil {
+		t.Fatalf("list returned error: %v", err)
+	}
+	if len(output.Holidays) != 2 {
+		t.Fatalf("expected 2 holidays, got %d", len(output.Holidays))
+	}
+}
+
+func TestUpdateHolidayUseCase_RejectsPastDate(t *testing.T) {
+	db := newUsecaseTestSQLiteDB(t)
+	defer db.Close()
+
+	defRepo := dbadapter.NewHolidayDefinitionRepository()
+	createUC := NewCreateManualHolidayUseCase(db, defRepo, nil)
+	updateUC := NewUpdateHolidayUseCase(db, defRepo, nil)
+
+	futureDate := normalizeDateOnly(time.Now().AddDate(0, 0, 2))
+	created, err := createUC.Execute(context.Background(), CreateManualHolidayInput{
+		Date:   futureDate,
+		NameEN: "Editable Holiday",
+	})
+	if err != nil {
+		t.Fatalf("create returned error: %v", err)
+	}
+
+	pastDate := normalizeDateOnly(time.Now().AddDate(0, 0, -1))
+	_, err = updateUC.Execute(context.Background(), UpdateHolidayInput{
+		UID:  created.UID,
+		Date: pastDate,
+	})
+	if !errors.Is(err, ErrHolidayDateInPast) {
+		t.Fatalf("expected ErrHolidayDateInPast, got %v", err)
+	}
+}
+
+func TestDeleteHolidayUseCase_RejectsPastDate(t *testing.T) {
+	db := newUsecaseTestSQLiteDB(t)
+	defer db.Close()
+
+	defRepo := dbadapter.NewHolidayDefinitionRepository()
+	deleteUC := NewDeleteHolidayUseCase(db, defRepo)
+
+	pastDate := normalizeDateOnly(time.Now().AddDate(0, 0, -1))
+	pastHoliday := &domain.HolidayDefinition{
+		UID:      "hdef_past_1",
+		Code:     "PAST_HOLIDAY",
+		NameEN:   "Past Holiday",
+		NameAR:   "Past Holiday",
+		Date:     pastDate,
+		IsManual: true,
+	}
+	if err := defRepo.Create(context.Background(), db, pastHoliday); err != nil {
+		t.Fatalf("failed to create past holiday: %v", err)
+	}
+
+	err := deleteUC.Execute(context.Background(), DeleteHolidayInput{UID: pastHoliday.UID})
+	if !errors.Is(err, ErrHolidayDateInPast) {
+		t.Fatalf("expected ErrHolidayDateInPast, got %v", err)
 	}
 }
 

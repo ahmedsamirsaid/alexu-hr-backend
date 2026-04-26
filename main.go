@@ -234,7 +234,18 @@ func main() {
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
 	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
-	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
+	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
+		sqliteDB,
+		attendanceRecordRepo,
+		usecases.MonthlyAttendanceStatsDependencies{
+			EmployeeRepo: employeeRepo,
+			DeptRepo:     departmentRepo,
+			ShiftRepo:    shiftRepo,
+			WeekendRepo:  weekendRepo,
+			HolidayRepo:  holidayDefinitionRepo,
+		},
+	)
+	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
@@ -302,6 +313,7 @@ func main() {
 		httpAdapter.AttendanceReportDependencies{
 			GetDepartmentReportUC:    departmentAttendanceReportUC,
 			ExportDepartmentReportUC: exportDepartmentAttendanceReportUC,
+			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
 		},
 	)
 	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(

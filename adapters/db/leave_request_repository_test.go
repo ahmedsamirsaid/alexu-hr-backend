@@ -138,6 +138,7 @@ func TestLeaveRequestRepository_CreateAndGetByUID_WithSubLeaveType(t *testing.T)
 		employee.UID,
 		leaveType.UID,
 		&subLeaveType.UID,
+		stringPtr("Free-text other reason"),
 		time.Now(),
 		time.Now().AddDate(0, 0, 1),
 		2,
@@ -166,6 +167,13 @@ func TestLeaveRequestRepository_CreateAndGetByUID_WithSubLeaveType(t *testing.T)
 	if *found.SubLeaveTypeUID != subLeaveType.UID {
 		t.Fatalf("GetByUID() subLeaveTypeUID = %s, want %s", *found.SubLeaveTypeUID, subLeaveType.UID)
 	}
+	if found.OtherSubLeaveName == nil || *found.OtherSubLeaveName != "Free-text other reason" {
+		t.Fatalf("GetByUID() otherSubLeaveName = %v, want %q", found.OtherSubLeaveName, "Free-text other reason")
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func seedApprovalFlow(t *testing.T, tdb *TestDB) *domain.ApprovalFlow {

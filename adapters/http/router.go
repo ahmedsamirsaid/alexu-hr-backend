@@ -98,8 +98,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))
 
 	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
-	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
-	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
+	protectedMux.Handle("GET /api/v1/leave-requests", RequireAnyPermission("leave:request", "leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
+	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequireAnyPermission("leave:request", "leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
 	protectedMux.Handle("PATCH /api/v1/leave-requests/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.UpdateRejectedLeaveRequest)))
 	protectedMux.Handle("POST /api/v1/leave-requests/{uid}/cancel", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.CancelLeaveRequest)))
 

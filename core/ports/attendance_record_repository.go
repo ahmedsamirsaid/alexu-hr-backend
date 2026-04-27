@@ -43,6 +43,7 @@ type DepartmentAttendanceLogsFilter struct {
 type AttendanceRecordRepository interface {
 	Create(ctx context.Context, q Querier, record *domain.AttendanceRecord) (bool, error)
 	GetByUID(ctx context.Context, q Querier, uid string) (*domain.AttendanceRecord, error)
+	GetByUIDs(ctx context.Context, q Querier, uids []string) ([]*domain.AttendanceRecord, error)
 	Update(ctx context.Context, q Querier, record *domain.AttendanceRecord) error
 	ListByDate(ctx context.Context, q Querier, date time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error)
 	ListByDateRange(ctx context.Context, q Querier, startDate, endDate time.Time, employeeUID *string) ([]*domain.AttendanceRecord, error)

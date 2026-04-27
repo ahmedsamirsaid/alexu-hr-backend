@@ -17,6 +17,7 @@ type LeaveRequestListFilter struct {
 type LeaveRequestRepository interface {
 	GetByID(ctx context.Context, q Querier, id int64) (*domain.LeaveRequest, error)
 	GetByUID(ctx context.Context, q Querier, uid string) (*domain.LeaveRequest, error)
+	GetByUIDs(ctx context.Context, q Querier, uids []string) ([]*domain.LeaveRequest, error)
 	GetByApprovalRequestUID(ctx context.Context, q Querier, approvalRequestUID string) (*domain.LeaveRequest, error)
 	Create(ctx context.Context, q Querier, request *domain.LeaveRequest) error
 	Update(ctx context.Context, q Querier, request *domain.LeaveRequest) error

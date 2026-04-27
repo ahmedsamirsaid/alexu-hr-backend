@@ -35,6 +35,52 @@ func (r *DepartmentRepository) GetByUID(ctx context.Context, q ports.Querier, ui
 	return r.scanDepartment(q.QueryRowContext(ctx, query, uid))
 }
 
+func (r *DepartmentRepository) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Department, error) {
+	if len(uids) == 0 {
+		return []*domain.Department{}, nil
+	}
+
+	// Build IN clause with placeholders
+	query := `
+		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at
+		FROM departments
+		WHERE uid IN (`
+
+	args := make([]any, len(uids))
+	for i, uid := range uids {
+		if i > 0 {
+			query += ", "
+		}
+		query += "?"
+		args[i] = uid
+	}
+	query += ")"
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("department_repository.GetByUIDs.query", "error", err, "count", len(uids))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var departments []*domain.Department
+	for rows.Next() {
+		dept, err := r.scanDepartmentRow(rows)
+		if err != nil {
+			slog.Error("department_repository.GetByUIDs.scan", "error", err)
+			return nil, err
+		}
+		departments = append(departments, dept)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("department_repository.GetByUIDs.rows_err", "error", err)
+		return nil, err
+	}
+
+	return departments, nil
+}
+
 func (r *DepartmentRepository) GetByCode(ctx context.Context, q ports.Querier, code string) (*domain.Department, error) {
 	query := `
 		SELECT id, uid, code, name_en, name_ar, is_active, default_shift_uid, created_at, updated_at

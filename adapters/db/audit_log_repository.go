@@ -98,31 +98,130 @@ func (r *AuditLogRepository) ListByActor(ctx context.Context, q ports.Querier, a
 func (r *AuditLogRepository) ListAll(ctx context.Context, q ports.Querier, filters ports.AuditLogFilters, p ports.ListParams) ([]*domain.AuditLog, error) {
 	p = p.Normalize(20, 100, "occurred_at", ports.SortOrderDesc)
 
-	query := `
-		SELECT id, uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at
-		FROM audit_logs
-		WHERE 1=1`
+	// Base query - use JOIN if actor name filtering is needed
+	var query string
+	if filters.ActorName != "" {
+		query = `
+			SELECT al.id, al.uid, al.actor_uid, al.action, al.entity_type, al.entity_uid, al.meta, al.occurred_at, al.created_at
+			FROM audit_logs al
+			LEFT JOIN employees e ON al.actor_uid = e.uid
+			WHERE 1=1`
+	} else {
+		query = `
+			SELECT id, uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at
+			FROM audit_logs
+			WHERE 1=1`
+	}
 
 	args := []interface{}{}
 
 	// Apply filters
 	if filters.EntityType != "" {
-		query += " AND entity_type = ?"
+		if filters.ActorName != "" {
+			query += " AND al.entity_type = ?"
+		} else {
+			query += " AND entity_type = ?"
+		}
 		args = append(args, filters.EntityType)
 	}
 
+	if len(filters.EntityTypes) > 0 {
+		if filters.ActorName != "" {
+			query += " AND al.entity_type IN ("
+		} else {
+			query += " AND entity_type IN ("
+		}
+		for i, et := range filters.EntityTypes {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, et)
+		}
+		query += ")"
+	}
+
 	if filters.ActorUID != "" {
-		query += " AND actor_uid = ?"
+		if filters.ActorName != "" {
+			query += " AND al.actor_uid = ?"
+		} else {
+			query += " AND actor_uid = ?"
+		}
 		args = append(args, filters.ActorUID)
+	}
+
+	if filters.ActorName != "" {
+		query += " AND e.name LIKE ?"
+		args = append(args, "%"+filters.ActorName+"%")
+	}
+
+	if len(filters.ActionTypes) > 0 {
+		if filters.ActorName != "" {
+			query += " AND al.action IN ("
+		} else {
+			query += " AND action IN ("
+		}
+		for i, at := range filters.ActionTypes {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, at)
+		}
+		query += ")"
 	}
 
 	if filters.SearchText != "" {
 		searchPattern := "%" + filters.SearchText + "%"
-		query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+		if filters.ActorName != "" {
+			query += " AND (al.entity_uid LIKE ? OR al.action LIKE ? OR al.meta LIKE ?)"
+		} else {
+			query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+		}
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
 
-	query += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+	if filters.StartDate != nil {
+		if filters.ActorName != "" {
+			query += " AND al.occurred_at >= ?"
+		} else {
+			query += " AND occurred_at >= ?"
+		}
+		args = append(args, filters.StartDate.Format(time.RFC3339))
+	}
+
+	if filters.EndDate != nil {
+		if filters.ActorName != "" {
+			query += " AND al.occurred_at <= ?"
+		} else {
+			query += " AND occurred_at <= ?"
+		}
+		args = append(args, filters.EndDate.Format(time.RFC3339))
+	}
+
+	if filters.HideSystemActions {
+		// Exclude system actions
+		systemActions := []string{"deduct_balance", "annual_reset", "auto_reject", "system_adjustment", "cascade_delete", "auto_create_transaction"}
+		if filters.ActorName != "" {
+			query += " AND al.action NOT IN ("
+		} else {
+			query += " AND action NOT IN ("
+		}
+		for i := range systemActions {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, systemActions[i])
+		}
+		query += ")"
+	}
+
+	if filters.ActorName != "" {
+		query += " ORDER BY al.occurred_at DESC LIMIT ? OFFSET ?"
+	} else {
+		query += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+	}
 	args = append(args, p.PageSize, p.Offset())
 
 	rows, err := q.QueryContext(ctx, query, args...)
@@ -131,6 +230,7 @@ func (r *AuditLogRepository) ListAll(ctx context.Context, q ports.Querier, filte
 			"error", err,
 			"entity_type", filters.EntityType,
 			"actor_uid", filters.ActorUID,
+			"actor_name", filters.ActorName,
 			"search_text", filters.SearchText,
 		)
 		return nil, err
@@ -174,4 +274,157 @@ func (r *AuditLogRepository) scanRow(rows *sql.Rows) (*domain.AuditLog, error) {
 	l.OccurredAt = occurredAt.Time
 	l.CreatedAt = createdAt.Time
 	return &l, nil
+}
+
+// GetDistinctActionTypes returns all unique action types in the audit log.
+func (r *AuditLogRepository) GetDistinctActionTypes(ctx context.Context, q ports.Querier) ([]string, error) {
+	query := `
+		SELECT DISTINCT action
+		FROM audit_logs
+		ORDER BY action ASC`
+
+	rows, err := q.QueryContext(ctx, query)
+	if err != nil {
+		slog.Error("audit_log_repository.GetDistinctActionTypes.query", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var actionTypes []string
+	for rows.Next() {
+		var action string
+		if err := rows.Scan(&action); err != nil {
+			slog.Error("audit_log_repository.GetDistinctActionTypes.scan", "error", err)
+			return nil, err
+		}
+		actionTypes = append(actionTypes, action)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("audit_log_repository.GetDistinctActionTypes.rows_err", "error", err)
+		return nil, err
+	}
+
+	return actionTypes, nil
+}
+
+// GetDistinctEntityTypes returns all unique entity types in the audit log.
+func (r *AuditLogRepository) GetDistinctEntityTypes(ctx context.Context, q ports.Querier) ([]string, error) {
+	query := `
+		SELECT DISTINCT entity_type
+		FROM audit_logs
+		ORDER BY entity_type ASC`
+
+	rows, err := q.QueryContext(ctx, query)
+	if err != nil {
+		slog.Error("audit_log_repository.GetDistinctEntityTypes.query", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entityTypes []string
+	for rows.Next() {
+		var entityType string
+		if err := rows.Scan(&entityType); err != nil {
+			slog.Error("audit_log_repository.GetDistinctEntityTypes.scan", "error", err)
+			return nil, err
+		}
+		entityTypes = append(entityTypes, entityType)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("audit_log_repository.GetDistinctEntityTypes.rows_err", "error", err)
+		return nil, err
+	}
+
+	return entityTypes, nil
+}
+
+// CountAll returns the total count of audit logs matching the filters.
+func (r *AuditLogRepository) CountAll(ctx context.Context, q ports.Querier, filters ports.AuditLogFilters) (int, error) {
+	query := `SELECT COUNT(*) FROM audit_logs WHERE 1=1`
+	args := []interface{}{}
+
+	// Apply the same filters as ListAll
+	if filters.EntityType != "" {
+		query += " AND entity_type = ?"
+		args = append(args, filters.EntityType)
+	}
+
+	if len(filters.EntityTypes) > 0 {
+		query += " AND entity_type IN ("
+		for i, et := range filters.EntityTypes {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, et)
+		}
+		query += ")"
+	}
+
+	if filters.ActorUID != "" {
+		query += " AND actor_uid = ?"
+		args = append(args, filters.ActorUID)
+	}
+
+	if filters.ActorName != "" {
+		// JOIN with employees table for actor name filtering
+		query = `SELECT COUNT(*) FROM audit_logs al 
+			LEFT JOIN employees e ON al.actor_uid = e.uid 
+			WHERE 1=1`
+		query += " AND e.name LIKE ?"
+		args = append(args, "%"+filters.ActorName+"%")
+	}
+
+	if len(filters.ActionTypes) > 0 {
+		query += " AND action IN ("
+		for i, at := range filters.ActionTypes {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, at)
+		}
+		query += ")"
+	}
+
+	if filters.SearchText != "" {
+		searchPattern := "%" + filters.SearchText + "%"
+		query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+		args = append(args, searchPattern, searchPattern, searchPattern)
+	}
+
+	if filters.StartDate != nil {
+		query += " AND occurred_at >= ?"
+		args = append(args, filters.StartDate.Format(time.RFC3339))
+	}
+
+	if filters.EndDate != nil {
+		query += " AND occurred_at <= ?"
+		args = append(args, filters.EndDate.Format(time.RFC3339))
+	}
+
+	if filters.HideSystemActions {
+		// Exclude system actions
+		systemActions := []string{"deduct_balance", "annual_reset", "auto_reject", "system_adjustment", "cascade_delete", "auto_create_transaction"}
+		query += " AND action NOT IN ("
+		for i := range systemActions {
+			if i > 0 {
+				query += ", "
+			}
+			query += "?"
+			args = append(args, systemActions[i])
+		}
+		query += ")"
+	}
+
+	var count int
+	err := q.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		slog.Error("audit_log_repository.CountAll.query", "error", err)
+		return 0, err
+	}
+
+	return count, nil
 }

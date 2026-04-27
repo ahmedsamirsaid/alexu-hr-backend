@@ -37,6 +37,52 @@ func (r *LeaveRequestRepository) GetByUID(ctx context.Context, q ports.Querier, 
 	return r.scanLeaveRequest(q.QueryRowContext(ctx, query, uid))
 }
 
+func (r *LeaveRequestRepository) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.LeaveRequest, error) {
+	if len(uids) == 0 {
+		return []*domain.LeaveRequest{}, nil
+	}
+
+	// Build IN clause with placeholders
+	query := `
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		FROM leave_requests
+		WHERE uid IN (`
+
+	args := make([]any, len(uids))
+	for i, uid := range uids {
+		if i > 0 {
+			query += ", "
+		}
+		query += "?"
+		args[i] = uid
+	}
+	query += ")"
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("leave_request_repository.GetByUIDs.query", "error", err, "count", len(uids))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []*domain.LeaveRequest
+	for rows.Next() {
+		req, err := r.scanLeaveRequestRow(rows)
+		if err != nil {
+			slog.Error("leave_request_repository.GetByUIDs.scan", "error", err)
+			return nil, err
+		}
+		requests = append(requests, req)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("leave_request_repository.GetByUIDs.rows_err", "error", err)
+		return nil, err
+	}
+
+	return requests, nil
+}
+
 func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q ports.Querier, approvalRequestUID string) (*domain.LeaveRequest, error) {
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at

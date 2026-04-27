@@ -325,7 +325,11 @@ func main() {
 	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo)
 	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
 	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB)
-	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC)
+	listEnrichedAuditLogsUC := usecases.NewListEnrichedAuditLogsUseCase(
+		auditLogRepo, employeeRepo, departmentRepo, leaveRequestRepo, leaveTypeRepo, attendanceRecordRepo, sqliteDB,
+	)
+	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB)
+	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC, listEnrichedAuditLogsUC, getAuditFilterOptionsUC)
 
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,

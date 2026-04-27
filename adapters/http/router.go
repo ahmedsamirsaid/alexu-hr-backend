@@ -135,6 +135,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	// Audit endpoints
 	protectedMux.Handle("GET /api/v1/audit/logs", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.ListAllAuditLogs)))
+	protectedMux.Handle("GET /api/v1/audit/logs/enriched", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.ListEnrichedAuditLogs)))
+	protectedMux.Handle("GET /api/v1/audit/filter-options", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetFilterOptions)))
 	protectedMux.Handle("GET /api/v1/audit/entity/{entityType}/{entityUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetAuditTrail)))
 	protectedMux.Handle("GET /api/v1/audit/actor/{actorUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetActorAuditEvents)))
 

@@ -10,6 +10,7 @@ type AttendanceEditHistoryWithEditor struct {
 	History       *domain.AttendanceEditHistory
 	EditedByName  string
 	EditedByPhone *string
+	EditedByEmployeeUID *string
 }
 
 type AttendanceEditHistoryRepository interface {

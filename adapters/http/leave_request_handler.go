@@ -58,6 +58,8 @@ type SubmitLeaveRequestRequest struct {
 	LeaveTypeUID        string                           `json:"leaveTypeUid"`
 	SubLeaveTypeUID     *string                          `json:"subLeaveTypeUid,omitempty"`
 	SubLeaveTypeUIDV2   *string                          `json:"sub_leave_type_uid,omitempty"`
+	OtherSubLeaveName   *string                          `json:"otherSubLeaveName,omitempty"`
+	OtherSubLeaveNameV2 *string                          `json:"other_sub_leave_name,omitempty"`
 	StartDate           string                           `json:"startDate"`
 	EndDate             string                           `json:"endDate"`
 	Notes               *string                          `json:"notes,omitempty"`
@@ -109,6 +111,7 @@ type LeaveRequestResponse struct {
 	LeaveTypeNameEN    string                               `json:"leaveTypeNameEn,omitempty"`
 	LeaveTypeNameAR    string                               `json:"leaveTypeNameAr,omitempty"`
 	SubLeaveTypeUID    *string                              `json:"subLeaveTypeUid,omitempty"`
+	OtherSubLeaveName  *string                              `json:"otherSubLeaveName,omitempty"`
 	SubLeaveTypeNameEN string                               `json:"subLeaveTypeNameEn,omitempty"`
 	SubLeaveTypeNameAR string                               `json:"subLeaveTypeNameAr,omitempty"`
 	StartDate          string                               `json:"startDate"`
@@ -221,6 +224,7 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 		EmployeeUID:       *currentUser.EmployeeUID,
 		LeaveTypeUID:      req.LeaveTypeUID,
 		SubLeaveTypeUID:   firstNonNilString(req.SubLeaveTypeUID, req.SubLeaveTypeUIDV2),
+		OtherSubLeaveName: firstNonNilString(req.OtherSubLeaveName, req.OtherSubLeaveNameV2),
 		StartDate:         startDate,
 		EndDate:           endDate,
 		Notes:             req.Notes,
@@ -254,6 +258,8 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrInvalidDateRange):
 			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrLeaveRequestOutsideDeadline):
+			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrExceedsConsecutiveDays):
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrNoDepartmentAssigned):
@@ -276,27 +282,33 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 	}
 
 	// Handle auto-approved leaves (no approval flow)
-	if output.LeaveRecord != nil {
-		decidedAt := time.Now().Format("2006-01-02T15:04:05Z")
+	if output.LeaveRecord != nil && output.LeaveRequest != nil && output.ApprovalRequest != nil {
+		var decidedAt *string
+		if output.LeaveRequest.DecidedAt != nil {
+			t := output.LeaveRequest.DecidedAt.Format("2006-01-02T15:04:05Z")
+			decidedAt = &t
+		}
 		writeJSON(w, http.StatusCreated, LeaveRequestResponse{
-			UID:               output.LeaveRecord.UID,
-			EmployeeUID:       *currentUser.EmployeeUID,
-			LeaveTypeUID:      req.LeaveTypeUID,
-			SubLeaveTypeUID:   firstNonNilString(req.SubLeaveTypeUID, req.SubLeaveTypeUIDV2),
-			StartDate:         output.LeaveRecord.StartDate.Format("2006-01-02"),
-			EndDate:           output.LeaveRecord.EndDate.Format("2006-01-02"),
-			Days:              output.LeaveRecord.Days,
-			Notes:             output.LeaveRecord.Notes,
-			StudyDestination:  req.StudyDestination,
-			Assignment:        req.Assignment,
-			AssignmentCountry: req.AssignmentCountry,
-			SpouseWorkCountry: req.SpouseWorkCountry,
-			Status:            "approved",
-			CurrentStep:       1,
-			MaxStep:           1,
-			SubmittedAt:       time.Now().Format("2006-01-02T15:04:05Z"),
-			DecidedAt:         &decidedAt,
-			Documents:         toLeaveRequestDocumentResponses(output.Documents),
+			UID:                output.LeaveRequest.UID,
+			ApprovalRequestUID: output.ApprovalRequest.UID,
+			EmployeeUID:        output.LeaveRequest.EmployeeUID,
+			LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
+			SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+			OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
+			StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
+			EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
+			Days:               output.LeaveRequest.Days,
+			Notes:              output.LeaveRequest.Notes,
+			StudyDestination:   output.LeaveRequest.StudyDestination,
+			Assignment:         output.LeaveRequest.Assignment,
+			AssignmentCountry:  output.LeaveRequest.AssignmentCountry,
+			SpouseWorkCountry:  output.LeaveRequest.SpouseWorkCountry,
+			Status:             string(output.ApprovalRequest.Status),
+			CurrentStep:        output.ApprovalRequest.CurrentStep,
+			MaxStep:            output.ApprovalRequest.MaxStep,
+			SubmittedAt:        output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+			DecidedAt:          decidedAt,
+			Documents:          toLeaveRequestDocumentResponses(output.Documents),
 		})
 		return
 	}
@@ -313,6 +325,7 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 		EmployeeUID:       output.LeaveRequest.EmployeeUID,
 		LeaveTypeUID:      output.LeaveRequest.LeaveTypeUID,
 		SubLeaveTypeUID:   output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName: output.LeaveRequest.OtherSubLeaveName,
 		StartDate:         output.LeaveRequest.StartDate.Format("2006-01-02"),
 		EndDate:           output.LeaveRequest.EndDate.Format("2006-01-02"),
 		Days:              output.LeaveRequest.Days,
@@ -508,6 +521,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 		EmployeeUID:        output.LeaveRequest.EmployeeUID,
 		LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
 		SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
 		StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
 		EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
 		Days:               output.LeaveRequest.Days,
@@ -597,6 +611,7 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 			EmployeeUID:        req.LeaveRequest.EmployeeUID,
 			LeaveTypeUID:       req.LeaveRequest.LeaveTypeUID,
 			SubLeaveTypeUID:    req.LeaveRequest.SubLeaveTypeUID,
+			OtherSubLeaveName:  req.LeaveRequest.OtherSubLeaveName,
 			StartDate:          req.LeaveRequest.StartDate.Format("2006-01-02"),
 			EndDate:            req.LeaveRequest.EndDate.Format("2006-01-02"),
 			Days:               req.LeaveRequest.Days,
@@ -669,6 +684,7 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 		EmployeeUID:        output.LeaveRequest.EmployeeUID,
 		LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
 		SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
 		StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
 		EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
 		Days:               output.LeaveRequest.Days,

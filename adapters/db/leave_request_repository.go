@@ -21,7 +21,7 @@ func NewLeaveRequestRepository() *LeaveRequestRepository {
 
 func (r *LeaveRequestRepository) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveRequest, error) {
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE id = ?`
 
@@ -30,7 +30,7 @@ func (r *LeaveRequestRepository) GetByID(ctx context.Context, q ports.Querier, i
 
 func (r *LeaveRequestRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.LeaveRequest, error) {
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE uid = ?`
 
@@ -39,7 +39,7 @@ func (r *LeaveRequestRepository) GetByUID(ctx context.Context, q ports.Querier, 
 
 func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q ports.Querier, approvalRequestUID string) (*domain.LeaveRequest, error) {
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE approval_request_uid = ?`
 
@@ -48,8 +48,8 @@ func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q 
 
 func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
 	query := `
-		INSERT INTO leave_requests (uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		INSERT INTO leave_requests (uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
 	request.CreatedAt = now
@@ -59,7 +59,7 @@ func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, re
 	}
 
 	result, err := q.ExecContext(ctx, query,
-		request.UID, request.EmployeeUID, request.LeaveTypeUID, request.SubLeaveTypeUID,
+		request.UID, request.EmployeeUID, request.LeaveTypeUID, request.SubLeaveTypeUID, request.OtherSubLeaveName,
 		request.StartDate, request.EndDate, request.Days, request.Notes,
 		request.StudyDestination, request.Assignment, request.AssignmentCountry, request.SpouseWorkCountry,
 		request.SubmittedAt, request.DecidedAt, request.ApprovalRequestUID,
@@ -82,7 +82,7 @@ func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, re
 func (r *LeaveRequestRepository) Update(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
 	query := `
 		UPDATE leave_requests
-		SET leave_type_uid = ?, sub_leave_type_uid = ?, start_date = ?, end_date = ?, days = ?, notes = ?,
+		SET leave_type_uid = ?, sub_leave_type_uid = ?, other_sub_leave_name = ?, start_date = ?, end_date = ?, days = ?, notes = ?,
 		    study_destination = ?, assignment = ?, assignment_country = ?, spouse_work_country = ?,
 		    decided_at = ?, updated_at = ?
 		WHERE id = ?`
@@ -90,7 +90,7 @@ func (r *LeaveRequestRepository) Update(ctx context.Context, q ports.Querier, re
 	request.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
-		request.LeaveTypeUID, request.SubLeaveTypeUID, request.StartDate, request.EndDate, request.Days, request.Notes,
+		request.LeaveTypeUID, request.SubLeaveTypeUID, request.OtherSubLeaveName, request.StartDate, request.EndDate, request.Days, request.Notes,
 		request.StudyDestination, request.Assignment, request.AssignmentCountry, request.SpouseWorkCountry,
 		request.DecidedAt, request.UpdatedAt, request.ID)
 	if err != nil {
@@ -101,7 +101,7 @@ func (r *LeaveRequestRepository) Update(ctx context.Context, q ports.Querier, re
 
 func (r *LeaveRequestRepository) ListByEmployee(ctx context.Context, q ports.Querier, employeeUID string) ([]*domain.LeaveRequest, error) {
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE employee_uid = ?
 		ORDER BY submitted_at DESC`
@@ -111,7 +111,7 @@ func (r *LeaveRequestRepository) ListByEmployee(ctx context.Context, q ports.Que
 
 func (r *LeaveRequestRepository) ListByEmployeePaginated(ctx context.Context, q ports.Querier, employeeUID string, limit, offset int) ([]*domain.LeaveRequest, error) {
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE employee_uid = ?
 		ORDER BY submitted_at DESC
@@ -158,7 +158,7 @@ func (r *LeaveRequestRepository) HasOverlapping(ctx context.Context, q ports.Que
 
 func (r *LeaveRequestRepository) List(ctx context.Context, q ports.Querier, filter ports.LeaveRequestListFilter, limit, offset int) ([]*domain.LeaveRequest, error) {
 	query := `
-		SELECT lr.id, lr.uid, lr.employee_uid, lr.leave_type_uid, lr.sub_leave_type_uid, lr.start_date, lr.end_date, lr.days, lr.notes, lr.study_destination, lr.assignment, lr.assignment_country, lr.spouse_work_country, lr.submitted_at, lr.decided_at, lr.approval_request_uid, lr.created_at, lr.updated_at
+		SELECT lr.id, lr.uid, lr.employee_uid, lr.leave_type_uid, lr.sub_leave_type_uid, lr.other_sub_leave_name, lr.start_date, lr.end_date, lr.days, lr.notes, lr.study_destination, lr.assignment, lr.assignment_country, lr.spouse_work_country, lr.submitted_at, lr.decided_at, lr.approval_request_uid, lr.created_at, lr.updated_at
 		FROM leave_requests lr
 		JOIN approval_requests ar ON lr.approval_request_uid = ar.uid
 		WHERE 1=1`
@@ -266,7 +266,7 @@ func (r *LeaveRequestRepository) scanLeaveRequest(row *sql.Row) (*domain.LeaveRe
 	var startDate, endDate, submittedAt, createdAt, updatedAt domain.Time
 	var decidedAt domain.NullTime
 	err := row.Scan(
-		&req.ID, &req.UID, &req.EmployeeUID, &req.LeaveTypeUID, &req.SubLeaveTypeUID,
+		&req.ID, &req.UID, &req.EmployeeUID, &req.LeaveTypeUID, &req.SubLeaveTypeUID, &req.OtherSubLeaveName,
 		&startDate, &endDate, &req.Days, &req.Notes, &req.StudyDestination, &req.Assignment, &req.AssignmentCountry, &req.SpouseWorkCountry,
 		&submittedAt, &decidedAt, &req.ApprovalRequestUID,
 		&createdAt, &updatedAt)
@@ -293,7 +293,7 @@ func (r *LeaveRequestRepository) scanLeaveRequestRow(rows *sql.Rows) (*domain.Le
 	var startDate, endDate, submittedAt, createdAt, updatedAt domain.Time
 	var decidedAt domain.NullTime
 	err := rows.Scan(
-		&req.ID, &req.UID, &req.EmployeeUID, &req.LeaveTypeUID, &req.SubLeaveTypeUID,
+		&req.ID, &req.UID, &req.EmployeeUID, &req.LeaveTypeUID, &req.SubLeaveTypeUID, &req.OtherSubLeaveName,
 		&startDate, &endDate, &req.Days, &req.Notes, &req.StudyDestination, &req.Assignment, &req.AssignmentCountry, &req.SpouseWorkCountry,
 		&submittedAt, &decidedAt, &req.ApprovalRequestUID,
 		&createdAt, &updatedAt)
@@ -314,7 +314,7 @@ func (r *LeaveRequestRepository) scanLeaveRequestRow(rows *sql.Rows) (*domain.Le
 func (r *LeaveRequestRepository) FindExpiredPending(ctx context.Context, q ports.Querier, graceDays int) ([]*domain.LeaveRequest, error) {
 	// Find pending leave requests where start_date < (now - graceDays)
 	query := `
-		SELECT lr.id, lr.uid, lr.employee_uid, lr.leave_type_uid, lr.sub_leave_type_uid, lr.start_date, lr.end_date, lr.days, lr.notes, lr.study_destination, lr.assignment, lr.assignment_country, lr.spouse_work_country, lr.submitted_at, lr.decided_at, lr.approval_request_uid, lr.created_at, lr.updated_at
+		SELECT lr.id, lr.uid, lr.employee_uid, lr.leave_type_uid, lr.sub_leave_type_uid, lr.other_sub_leave_name, lr.start_date, lr.end_date, lr.days, lr.notes, lr.study_destination, lr.assignment, lr.assignment_country, lr.spouse_work_country, lr.submitted_at, lr.decided_at, lr.approval_request_uid, lr.created_at, lr.updated_at
 		FROM leave_requests lr
 		JOIN approval_requests ar ON lr.approval_request_uid = ar.uid
 		WHERE ar.status = 'pending'

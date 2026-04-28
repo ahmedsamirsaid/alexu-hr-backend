@@ -186,6 +186,7 @@ type attendanceLogHistoryItemResponse struct {
 	NewValue      *string `json:"newValue,omitempty"`
 	Reason        *string `json:"reason,omitempty"`
 	EditedByUID   string  `json:"editedByUid"`
+	EditedByEmployeeUID *string `json:"editedByEmployeeUid,omitempty"`
 	EditedByName  string  `json:"editedByName"`
 	EditedByPhone *string `json:"editedByPhone,omitempty"`
 	EditedAt      string  `json:"editedAt"`
@@ -567,6 +568,7 @@ func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request
 			NewValue:      item.NewValue,
 			Reason:        item.Reason,
 			EditedByUID:   item.EditedByUID,
+			EditedByEmployeeUID: item.EditedByEmployeeUID,
 			EditedByName:  item.EditedByName,
 			EditedByPhone: item.EditedByPhone,
 			EditedAt:      item.EditedAt,

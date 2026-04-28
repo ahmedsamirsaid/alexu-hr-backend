@@ -97,6 +97,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/admin/weekend-config", RequirePermission("departments:read")(http.HandlerFunc(cfg.WeekendHandler.ListWeekendDays)))
 	protectedMux.Handle("GET /api/v1/admin/holidays", RequirePermission("holidays:read")(http.HandlerFunc(cfg.HolidayHandler.ListHolidays)))
 	protectedMux.Handle("POST /api/v1/admin/holidays", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.CreateHoliday)))
+	protectedMux.Handle("PATCH /api/v1/admin/holidays/{uid}", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.UpdateHoliday)))
+	protectedMux.Handle("DELETE /api/v1/admin/holidays/{uid}", RequirePermission("holidays:write")(http.HandlerFunc(cfg.HolidayHandler.DeleteHoliday)))
 
 	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
 	protectedMux.Handle("GET /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))

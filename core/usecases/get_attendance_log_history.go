@@ -20,6 +20,7 @@ type AttendanceLogHistoryItemOutput struct {
 	NewValue      *string `json:"newValue,omitempty"`
 	Reason        *string `json:"reason,omitempty"`
 	EditedByUID   string  `json:"editedByUid"`
+	EditedByEmployeeUID *string `json:"editedByEmployeeUid,omitempty"`
 	EditedByName  string  `json:"editedByName"`
 	EditedByPhone *string `json:"editedByPhone,omitempty"`
 	EditedAt      string  `json:"editedAt"`

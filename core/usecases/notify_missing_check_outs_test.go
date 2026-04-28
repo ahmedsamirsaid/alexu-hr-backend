@@ -165,6 +165,12 @@ func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByYear(ctx context.C
 func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
 	return m.holidays, nil
 }
+func (m *mockHolidayInstanceRepoForAttendanceReminders) ListAllByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
+	return m.holidays, nil
+}
+func (m *mockHolidayInstanceRepoForAttendanceReminders) ListByDateRangeForDepartment(ctx context.Context, q ports.Querier, start, end time.Time, departmentUID string) ([]*domain.HolidayDefinition, error) {
+	return m.holidays, nil
+}
 func (m *mockHolidayInstanceRepoForAttendanceReminders) List(ctx context.Context, q ports.Querier) ([]*domain.HolidayDefinition, error) {
 	return m.holidays, nil
 }
@@ -172,6 +178,9 @@ func (m *mockHolidayInstanceRepoForAttendanceReminders) Create(ctx context.Conte
 	return nil
 }
 func (m *mockHolidayInstanceRepoForAttendanceReminders) Update(ctx context.Context, q ports.Querier, instance *domain.HolidayDefinition) error {
+	return nil
+}
+func (m *mockHolidayInstanceRepoForAttendanceReminders) Delete(ctx context.Context, q ports.Querier, id int64) error {
 	return nil
 }
 

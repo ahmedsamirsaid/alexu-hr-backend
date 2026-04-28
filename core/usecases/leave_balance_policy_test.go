@@ -49,6 +49,66 @@ func TestEntitledBalanceTotalDays(t *testing.T) {
 			want:      45,
 		},
 		{
+			name: "regular leave is forty five for special needs permanent employees",
+			employee: &domain.Employee{
+				HireDate: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypePermanent,
+				SubType:  domain.EmployeeSubTypeSpecialNeeds,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      45,
+		},
+		{
+			name: "regular leave is forty five for special needs temporary employees",
+			employee: &domain.Employee{
+				HireDate: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypeTemporary,
+				SubType:  domain.EmployeeSubTypeSpecialNeeds,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      45,
+		},
+		{
+			name: "regular leave is twenty one for comprehensive bonus subtype",
+			employee: &domain.Employee{
+				HireDate: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypeTemporary,
+				SubType:  domain.EmployeeSubTypeComprehensiveBonus,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      21,
+		},
+		{
+			name: "regular leave is twenty one for contract employees subtype",
+			employee: &domain.Employee{
+				HireDate: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypeTemporary,
+				SubType:  domain.EmployeeSubTypeContractEmployees,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      21,
+		},
+		{
+			name: "special needs overrides long service rule",
+			employee: &domain.Employee{
+				HireDate: time.Date(2010, 4, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypePermanent,
+				SubType:  domain.EmployeeSubTypeSpecialNeeds,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      45,
+		},
+		{
+			name: "contract employees override long service rule",
+			employee: &domain.Employee{
+				HireDate: time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC),
+				Type:     domain.EmployeeTypeTemporary,
+				SubType:  domain.EmployeeSubTypeContractEmployees,
+			},
+			leaveType: &domain.LeaveType{Code: leaveTypeCodeRegular, DefaultBalance: 21},
+			want:      21,
+		},
+		{
 			name: "other leave types keep default balance",
 			employee: &domain.Employee{
 				HireDate: time.Date(2010, 4, 1, 0, 0, 0, 0, time.UTC),

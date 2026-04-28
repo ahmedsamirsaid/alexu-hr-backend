@@ -22,6 +22,14 @@ func entitledBalanceTotalDays(employee *domain.Employee, leaveType *domain.Leave
 	case leaveTypeCodeCasual:
 		return 7
 	case leaveTypeCodeRegular:
+		if employee != nil {
+			switch employee.SubType {
+			case domain.EmployeeSubTypeSpecialNeeds:
+				return 45
+			case domain.EmployeeSubTypeComprehensiveBonus, domain.EmployeeSubTypeContractEmployees:
+				return 21
+			}
+		}
 		if employee != nil && completedYearsBetween(employee.HireDate, asOf) > 50 {
 			return 45
 		}

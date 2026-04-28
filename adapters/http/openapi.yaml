@@ -176,6 +176,15 @@ components:
           type: string
           enum: [active, inactive]
           example: active
+        type:
+          type: string
+          enum: [permanent, temporary]
+          example: permanent
+        subType:
+          type: string
+          enum:
+            [normal, special_needs, separation_termination_for_budget, comprehensive_bonus, contract_employees]
+          example: normal
 
     EmployeeListItem:
       allOf:

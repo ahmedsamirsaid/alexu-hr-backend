@@ -20,7 +20,7 @@ func NewEmployeeRepository() *EmployeeRepository {
 func (r *EmployeeRepository) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Employee, error) {
 	query := `
 		SELECT id, uid, name, mobile, government_id, university_id, email,
-		       hire_date, status, department_uid, shift_uid, created_at, updated_at
+		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
 		WHERE id = ?`
 
@@ -30,7 +30,7 @@ func (r *EmployeeRepository) GetByID(ctx context.Context, q ports.Querier, id in
 func (r *EmployeeRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Employee, error) {
 	query := `
 		SELECT id, uid, name, mobile, government_id, university_id, email,
-		       hire_date, status, department_uid, shift_uid, created_at, updated_at
+		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
 		WHERE uid = ?`
 
@@ -40,17 +40,19 @@ func (r *EmployeeRepository) GetByUID(ctx context.Context, q ports.Querier, uid 
 func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
 	query := `
 		INSERT INTO employees (uid, name, mobile, government_id, university_id, email,
-		                       hire_date, status, department_uid, shift_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		                       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	now := time.Now()
+	employee.ApplyClassificationDefaults()
 	employee.CreatedAt = now
 	employee.UpdatedAt = now
 
 	result, err := q.ExecContext(ctx, query,
 		employee.UID, employee.Name, employee.Mobile,
 		employee.GovernmentID, employee.UniversityID, employee.Email,
-		employee.HireDate, employee.Status, employee.DepartmentUID, employee.ShiftUID, employee.CreatedAt, employee.UpdatedAt)
+		employee.HireDate, employee.Status, employee.Type, employee.SubType,
+		employee.DepartmentUID, employee.ShiftUID, employee.CreatedAt, employee.UpdatedAt)
 	if err != nil {
 		slog.Error("employee_repository.Create.exec_query", "error", err, "uid", employee.UID)
 		return err
@@ -70,14 +72,16 @@ func (r *EmployeeRepository) Update(ctx context.Context, q ports.Querier, employ
 	query := `
 		UPDATE employees
 		SET name = ?, mobile = ?, government_id = ?, university_id = ?, email = ?,
-		    hire_date = ?, status = ?, department_uid = ?, shift_uid = ?, updated_at = ?
+		    hire_date = ?, status = ?, type = ?, sub_type = ?, department_uid = ?, shift_uid = ?, updated_at = ?
 		WHERE id = ?`
 
+	employee.ApplyClassificationDefaults()
 	employee.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
 		employee.Name, employee.Mobile, employee.GovernmentID, employee.UniversityID,
-		employee.Email, employee.HireDate, employee.Status, employee.DepartmentUID, employee.ShiftUID, employee.UpdatedAt, employee.ID)
+		employee.Email, employee.HireDate, employee.Status, employee.Type, employee.SubType,
+		employee.DepartmentUID, employee.ShiftUID, employee.UpdatedAt, employee.ID)
 	if err != nil {
 		slog.Error("employee_repository.Update.exec_query", "error", err, "uid", employee.UID)
 	}
@@ -88,7 +92,7 @@ func (r *EmployeeRepository) Update(ctx context.Context, q ports.Querier, employ
 func (r *EmployeeRepository) List(ctx context.Context, q ports.Querier, filter *ports.EmployeeListFilter) ([]*domain.Employee, error) {
 	query := `
 		SELECT id, uid, name, mobile, government_id, university_id, email,
-		       hire_date, status, department_uid, shift_uid, created_at, updated_at
+		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
 		WHERE 1=1`
 
@@ -200,7 +204,7 @@ func (r *EmployeeRepository) scanEmployee(row *sql.Row) (*domain.Employee, error
 	var hireDate, createdAt, updatedAt domain.Time
 	err := row.Scan(
 		&e.ID, &e.UID, &e.Name, &e.Mobile, &e.GovernmentID, &e.UniversityID,
-		&e.Email, &hireDate, &e.Status, &e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
+		&e.Email, &hireDate, &e.Status, &e.Type, &e.SubType, &e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -219,7 +223,7 @@ func (r *EmployeeRepository) scanEmployeeRow(rows *sql.Rows) (*domain.Employee, 
 	var hireDate, createdAt, updatedAt domain.Time
 	err := rows.Scan(
 		&e.ID, &e.UID, &e.Name, &e.Mobile, &e.GovernmentID, &e.UniversityID,
-		&e.Email, &hireDate, &e.Status, &e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
+		&e.Email, &hireDate, &e.Status, &e.Type, &e.SubType, &e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}

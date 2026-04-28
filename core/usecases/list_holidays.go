@@ -8,11 +8,12 @@ import (
 )
 
 type HolidayListItem struct {
-	UID      string
-	Date     time.Time
-	NameEN   string
-	NameAR   string
-	IsManual bool
+	UID            string
+	Date           time.Time
+	NameEN         string
+	NameAR         string
+	DepartmentUIDs []string
+	IsManual       bool
 }
 
 type ListHolidaysInput struct {
@@ -54,7 +55,7 @@ func (uc *ListHolidaysUseCase) Execute(ctx context.Context, input ListHolidaysIn
 		start, end = end, start
 	}
 
-	definitions, err := uc.holidayDefRepo.ListByDateRange(ctx, uc.db, start, end)
+	definitions, err := uc.holidayDefRepo.ListAllByDateRange(ctx, uc.db, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +63,12 @@ func (uc *ListHolidaysUseCase) Execute(ctx context.Context, input ListHolidaysIn
 	items := make([]HolidayListItem, 0, len(definitions))
 	for _, definition := range definitions {
 		items = append(items, HolidayListItem{
-			UID:      definition.UID,
-			Date:     definition.Date,
-			NameEN:   definition.NameEN,
-			NameAR:   definition.NameAR,
-			IsManual: definition.IsManual,
+			UID:            definition.UID,
+			Date:           definition.Date,
+			NameEN:         definition.NameEN,
+			NameAR:         definition.NameAR,
+			DepartmentUIDs: append([]string(nil), definition.DepartmentUIDs...),
+			IsManual:       definition.IsManual,
 		})
 	}
 

@@ -4,6 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
@@ -16,16 +23,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
-	"time"
 )
 
 func main() {
@@ -196,6 +197,8 @@ func main() {
 		cfg.MinIODocumentsBucket,
 		cfg.MinIODownloadExpiryMinutes,
 	)
+	updateHolidayUC := usecases.NewUpdateHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(sqliteDB, holidayDefinitionRepo)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
 		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
@@ -307,7 +310,7 @@ func main() {
 	)
 	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, listSubLeaveTypesUC, toggleLeaveTypeUC)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
-	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
+	holidayHandler := httpAdapter.NewHolidayHandler(sqliteDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
 	debugHandler := httpAdapter.NewDebugHandler(sendTestPushUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(

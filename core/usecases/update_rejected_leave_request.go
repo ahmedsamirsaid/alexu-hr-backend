@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -114,11 +115,23 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 	oldStartDate := leaveRequest.StartDate
 	oldEndDate := leaveRequest.EndDate
 
+	// Build human-readable action sentence
+	actorName := input.ActorEmployeeUID
+	if employee != nil {
+		actorName = employee.Name
+	}
+	
+	actionSentence := fmt.Sprintf(
+		"%s (Employee) updated and resubmitted their rejected leave request",
+		actorName,
+	)
+	
 	// Build audit metadata with field changes
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionUpdate).
 		On(audit.EntityLeaveRequest, input.LeaveRequestUID).
-		WithMeta("action", "resubmit_after_rejection")
+		WithMeta("action", actionSentence).
+		WithMeta("resubmit_after_rejection", true)
 
 	if input.LeaveTypeUID != nil && *input.LeaveTypeUID != "" {
 		leaveRequest.LeaveTypeUID = *input.LeaveTypeUID

@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -59,6 +60,8 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 	oldRoleUID := step.RoleUID
 
 	// Build audit metadata with field changes
+	actorName := audit.ActorFromContext(ctx)
+	changedFields := []string{}
 	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionUpdateStep).On(audit.EntityApprovalFlowStep, input.UID)
 
 	if input.StepOrder != nil {
@@ -72,6 +75,7 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 				return nil, ErrDuplicateStepOrder
 			}
 			auditBuilder.WithMeta("old_step_order", oldStepOrder).WithMeta("new_step_order", *input.StepOrder)
+			changedFields = append(changedFields, fmt.Sprintf("order from %d to %d", oldStepOrder, *input.StepOrder))
 		}
 		step.StepOrder = *input.StepOrder
 	}
@@ -87,9 +91,17 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 		}
 		if *input.RoleUID != step.RoleUID {
 			auditBuilder.WithMeta("old_role_uid", oldRoleUID).WithMeta("new_role_uid", *input.RoleUID).WithMeta("new_role_name", role.Name)
+			changedFields = append(changedFields, fmt.Sprintf("role to %s", role.Name))
 		}
 		step.RoleUID = *input.RoleUID
 	}
+
+	// Build human-readable action sentence
+	actionSentence := fmt.Sprintf("%s updated approval flow step", actorName)
+	if len(changedFields) > 0 {
+		actionSentence = fmt.Sprintf("%s updated approval flow step: %s", actorName, changedFields[0])
+	}
+	auditBuilder.WithMeta("action", actionSentence)
 
 	if err := uc.stepRepo.Update(ctx, tx, step); err != nil {
 		return nil, err

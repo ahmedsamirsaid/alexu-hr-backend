@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"errors"
 	"net"
 	"strings"
@@ -83,10 +84,18 @@ func (uc *RegisterAttendanceDeviceUseCase) Execute(ctx context.Context, input Re
 
 	device := domain.NewAttendanceDevice(input.IP, input.Port, input.Name, input.Location, input.SerialNumber)
 	
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s registered attendance device '%s' at %s:%d (SN: %s)",
+		actorName, device.Name, device.IP, device.Port, device.SerialNumber,
+	)
+	
 	// Audit log will fire after successful device registration
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityAttendanceDevice, device.UID).
+		WithMeta("action", actionSentence).
 		WithMeta("ip", device.IP).
 		WithMeta("port", device.Port).
 		WithMeta("serial_number", device.SerialNumber).

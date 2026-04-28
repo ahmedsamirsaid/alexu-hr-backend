@@ -36,12 +36,11 @@ type ListEnrichedAuditLogsInput struct {
 	SearchText string
 
 	// New filters
-	ActorName         string     // Partial name match
-	ActionTypes       []string   // Filter by action types
-	EntityTypes       []string   // Filter by entity types
-	StartDate         *time.Time // Filter by date range start
-	EndDate           *time.Time // Filter by date range end
-	HideSystemActions bool       // Default: true
+	ActorName   string     // Partial name match
+	ActionTypes []string   // Filter by action types
+	EntityTypes []string   // Filter by entity types
+	StartDate   *time.Time // Filter by date range start
+	EndDate     *time.Time // Filter by date range end
 
 	// Pagination
 	Page     int
@@ -91,7 +90,7 @@ func NewListEnrichedAuditLogsUseCase(
 
 // Execute retrieves enriched audit logs with resolved names and bilingual labels.
 func (uc *ListEnrichedAuditLogsUseCase) Execute(ctx context.Context, input ListEnrichedAuditLogsInput) (*ListEnrichedAuditLogsOutput, error) {
-	// 1. Build filters for repository
+	// 1. Build filters for repository - always hide system actions
 	filters := ports.AuditLogFilters{
 		EntityType:        input.EntityType,
 		EntityTypes:       input.EntityTypes,
@@ -101,7 +100,7 @@ func (uc *ListEnrichedAuditLogsUseCase) Execute(ctx context.Context, input ListE
 		SearchText:        input.SearchText,
 		StartDate:         input.StartDate,
 		EndDate:           input.EndDate,
-		HideSystemActions: input.HideSystemActions,
+		HideSystemActions: true, // Always hide system actions
 	}
 
 	params := ports.ListParams{

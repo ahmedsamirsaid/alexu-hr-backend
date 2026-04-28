@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -57,12 +58,18 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 	}
 	oldIsActive := department.IsActive
 
-	// Build audit metadata with field changes
 	auditBuilder := uc.auditor.From(ctx).
 		Did(audit.ActionUpdate).
-		On(audit.EntityDepartment, input.UID)
+		On(audit.EntityDepartment, input.UID).
+		WithMeta("old_state", map[string]interface{}{
+			"code":      oldCode,
+			"name_en":   oldNameEN,
+			"name_ar":   oldNameAR,
+			"is_active": oldIsActive,
+		})
 
-	// Check if new code conflicts with existing department
+	var changedFields []string
+
 	if input.Code != nil && *input.Code != department.Code {
 		existing, err := uc.deptRepo.GetByCode(ctx, uc.db, *input.Code)
 		if err != nil {
@@ -72,11 +79,13 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 			return nil, ErrDepartmentCodeExists
 		}
 		auditBuilder = auditBuilder.WithMeta("old_code", oldCode).WithMeta("new_code", *input.Code)
+		changedFields = append(changedFields, fmt.Sprintf("code (%s → %s)", oldCode, *input.Code))
 		department.Code = *input.Code
 	}
 
 	if input.NameEN != nil && *input.NameEN != department.NameEN {
 		auditBuilder = auditBuilder.WithMeta("old_name_en", oldNameEN).WithMeta("new_name_en", *input.NameEN)
+		changedFields = append(changedFields, fmt.Sprintf("name_en (%s → %s)", oldNameEN, *input.NameEN))
 		department.NameEN = *input.NameEN
 	}
 
@@ -87,12 +96,18 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 		}
 		if newNameAR != oldNameAR {
 			auditBuilder = auditBuilder.WithMeta("old_name_ar", oldNameAR).WithMeta("new_name_ar", newNameAR)
+			changedFields = append(changedFields, "name_ar")
 		}
 		department.NameAR = input.NameAR
 	}
 
 	if input.IsActive != nil && *input.IsActive != department.IsActive {
 		auditBuilder = auditBuilder.WithMeta("old_is_active", oldIsActive).WithMeta("new_is_active", *input.IsActive)
+		status := "deactivated"
+		if *input.IsActive {
+			status = "activated"
+		}
+		changedFields = append(changedFields, status)
 		department.IsActive = *input.IsActive
 	}
 
@@ -100,7 +115,19 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 		department.DefaultShiftUID = input.DefaultShiftUID
 	}
 
-	// Defer audit log
+	// Build human-readable action sentence
+	actionSentence := fmt.Sprintf("Department '%s' was updated", department.NameEN)
+	if len(changedFields) > 0 {
+		actionSentence = fmt.Sprintf("Department '%s' was updated: ", department.NameEN)
+		for i, f := range changedFields {
+			if i > 0 {
+				actionSentence += ", "
+			}
+			actionSentence += f
+		}
+	}
+	auditBuilder = auditBuilder.WithMeta("action", actionSentence)
+
 	defer auditBuilder.Save(ctx)
 
 	if err := uc.deptRepo.Update(ctx, uc.db, department); err != nil {

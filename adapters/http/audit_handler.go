@@ -316,12 +316,6 @@ func (h *AuditHandler) ListEnrichedAuditLogs(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// Parse hide_system_actions (default: true)
-	hideSystemActions := true
-	if hideStr := r.URL.Query().Get("hide_system_actions"); hideStr != "" {
-		hideSystemActions = hideStr != "false" && hideStr != "0"
-	}
-
 	// Parse pagination parameters
 	page := 1
 	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
@@ -344,17 +338,16 @@ func (h *AuditHandler) ListEnrichedAuditLogs(w http.ResponseWriter, r *http.Requ
 	}
 
 	input := usecases.ListEnrichedAuditLogsInput{
-		EntityType:        entityType,
-		ActorUID:          actorUID,
-		ActorName:         actorName,
-		SearchText:        searchText,
-		ActionTypes:       actionTypes,
-		EntityTypes:       entityTypes,
-		StartDate:         startDate,
-		EndDate:           endDate,
-		HideSystemActions: hideSystemActions,
-		Page:              page,
-		PageSize:          pageSize,
+		EntityType:  entityType,
+		ActorUID:    actorUID,
+		ActorName:   actorName,
+		SearchText:  searchText,
+		ActionTypes: actionTypes,
+		EntityTypes: entityTypes,
+		StartDate:   startDate,
+		EndDate:     endDate,
+		Page:        page,
+		PageSize:    pageSize,
 	}
 
 	output, err := h.listEnrichedUC.Execute(r.Context(), input)

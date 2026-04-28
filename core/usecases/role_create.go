@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -37,7 +38,6 @@ func NewCreateRoleUseCase(
 }
 
 func (uc *CreateRoleUseCase) Execute(ctx context.Context, input CreateRoleInput) (*CreateRoleOutput, error) {
-	// Check if name already exists
 	existing, err := uc.roleRepo.GetByName(ctx, uc.db, input.Name)
 	if err != nil {
 		return nil, err
@@ -53,12 +53,20 @@ func (uc *CreateRoleUseCase) Execute(ctx context.Context, input CreateRoleInput)
 
 	role := domain.NewRole(input.Name, input.Description, normalizedScopeType)
 
-	// Audit log will fire after successful role creation
+	actionSentence := fmt.Sprintf("Role '%s' (%s scope) was created", role.Name, role.ScopeType)
+
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityRole, role.UID).
+		WithMeta("action", actionSentence).
 		WithMeta("name", role.Name).
 		WithMeta("scope_type", role.ScopeType).
+		WithMeta("description", role.Description).
+		WithMeta("new_state", map[string]interface{}{
+			"uid":        role.UID,
+			"name":       role.Name,
+			"scope_type": role.ScopeType,
+		}).
 		Save(ctx)
 
 	if err := uc.roleRepo.Create(ctx, uc.db, role); err != nil {

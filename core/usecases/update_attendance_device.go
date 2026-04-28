@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -77,23 +78,42 @@ func (uc *UpdateAttendanceDeviceUseCase) Execute(ctx context.Context, input Upda
 		return nil, ErrDeviceAddressExists
 	}
 
-	// Build audit metadata with field changes
+	// Build audit metadata with field changes and human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	var changes []string
+	
 	auditBuilder := uc.auditor.From(ctx).
 		Did(audit.ActionUpdate).
 		On(audit.EntityAttendanceDevice, input.UID)
 
 	if existing.IP != input.IP {
 		auditBuilder.WithMeta("old_ip", existing.IP).WithMeta("new_ip", input.IP)
+		changes = append(changes, fmt.Sprintf("IP (%s → %s)", existing.IP, input.IP))
 	}
 	if existing.Port != input.Port {
 		auditBuilder.WithMeta("old_port", existing.Port).WithMeta("new_port", input.Port)
+		changes = append(changes, fmt.Sprintf("port (%d → %d)", existing.Port, input.Port))
 	}
 	if existing.Name != input.Name {
 		auditBuilder.WithMeta("old_name", existing.Name).WithMeta("new_name", input.Name)
+		changes = append(changes, fmt.Sprintf("name (%s → %s)", existing.Name, input.Name))
 	}
 	if existing.Location != input.Location {
 		auditBuilder.WithMeta("old_location", existing.Location).WithMeta("new_location", input.Location)
+		changes = append(changes, "location")
 	}
+	
+	actionSentence := fmt.Sprintf("%s updated attendance device '%s'", actorName, existing.Name)
+	if len(changes) > 0 {
+		actionSentence += ": "
+		for i, c := range changes {
+			if i > 0 {
+				actionSentence += ", "
+			}
+			actionSentence += c
+		}
+	}
+	auditBuilder.WithMeta("action", actionSentence)
 
 	defer auditBuilder.Save(ctx)
 

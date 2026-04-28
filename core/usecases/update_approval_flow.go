@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -66,10 +67,13 @@ func (uc *UpdateApprovalFlowUseCase) Execute(ctx context.Context, input UpdateAp
 	oldIsActive := flow.IsActive
 
 	// Build audit metadata with field changes
+	actorName := audit.ActorFromContext(ctx)
+	changedFields := []string{}
 	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionUpdate).On(audit.EntityApprovalFlow, input.UID)
 
 	if input.NameEN != nil && *input.NameEN != flow.NameEN {
 		auditBuilder.WithMeta("old_name_en", oldNameEN).WithMeta("new_name_en", *input.NameEN)
+		changedFields = append(changedFields, fmt.Sprintf("name from '%s' to '%s'", oldNameEN, *input.NameEN))
 		flow.NameEN = *input.NameEN
 	}
 	if input.NameAR != nil {
@@ -94,8 +98,20 @@ func (uc *UpdateApprovalFlowUseCase) Execute(ctx context.Context, input UpdateAp
 	}
 	if input.IsActive != nil && *input.IsActive != flow.IsActive {
 		auditBuilder.WithMeta("old_is_active", oldIsActive).WithMeta("new_is_active", *input.IsActive)
+		statusChange := "deactivated"
+		if *input.IsActive {
+			statusChange = "activated"
+		}
+		changedFields = append(changedFields, statusChange)
 		flow.IsActive = *input.IsActive
 	}
+
+	// Build human-readable action sentence
+	actionSentence := fmt.Sprintf("%s updated approval flow '%s'", actorName, flow.NameEN)
+	if len(changedFields) > 0 {
+		actionSentence = fmt.Sprintf("%s updated approval flow '%s': %s", actorName, flow.NameEN, changedFields[0])
+	}
+	auditBuilder.WithMeta("action", actionSentence).WithMeta("flow_name", flow.NameEN)
 
 	if err := uc.flowRepo.Update(ctx, tx, flow); err != nil {
 		return nil, err

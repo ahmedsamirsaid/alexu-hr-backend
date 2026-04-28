@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -88,11 +89,26 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	}
 	defer tx.Rollback()
 
+	// Get employee name for human-readable action sentence
+	employee, _ := uc.employeeRepo.GetByUID(ctx, uc.db, record.EmployeeUID)
+	employeeName := record.EmployeeUID
+	if employee != nil {
+		employeeName = employee.Name
+	}
+	
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s created attendance record for %s (Employee) — %s at %s",
+		actorName, employeeName, string(record.PunchType), record.PunchedAt.Format("Jan 2, 2006 15:04"),
+	)
+	
 	// Audit log will fire after successful creation
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("action", actionSentence).
 		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("employee_name", employeeName).
 		WithMeta("device_uid", record.DeviceUID).
 		WithMeta("punched_at", record.PunchedAt.Format(time.RFC3339)).
 		WithMeta("punch_type", string(record.PunchType)).
@@ -251,9 +267,27 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 	if err != nil {
 		return nil, err
 	}
+	// Get employee name for human-readable action sentence
+	employee, _ := uc.employeeRepo.GetByUID(ctx, tx, record.EmployeeUID)
+	employeeName := record.EmployeeUID
+	if employee != nil {
+		employeeName = employee.Name
+	}
+	
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s updated attendance record for %s (Employee) — changed from %s at %s to %s at %s",
+		actorName, employeeName,
+		string(oldPunchType), oldPunchedAt.Format("Jan 2, 15:04"),
+		string(record.PunchType), record.PunchedAt.Format("Jan 2, 15:04"),
+	)
+	
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionUpdate).
 		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("employee_name", employeeName).
 		WithMeta("old_device_uid", oldDeviceUID).
 		WithMeta("new_device_uid", record.DeviceUID).
 		WithMeta("old_punched_at", oldPunchedAt.Format(time.RFC3339)).

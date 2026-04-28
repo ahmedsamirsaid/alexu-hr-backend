@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/banumusa/backend/core/audit"
@@ -173,12 +174,26 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 
 		// Audit log for balance deduction (only if we have an actor)
 		if actorUID != "" {
+			// Resolve actor name for human-readable sentence
+			actorName := actorUID
+			if actor, err := uc.employeeRepo.GetByUID(ctx, tx, actorUID); err == nil && actor != nil {
+				actorName = actor.Name
+			}
+			
+			actionSentence := fmt.Sprintf(
+				"%s recorded %s leave for %s — deducted %d days from balance (was %d used, now %d used)",
+				actorName, leaveType.NameEN, employee.Name,
+				workingDays, oldUsedDays, balance.UsedDays,
+			)
+			
 			defer uc.auditor.Actor(actorUID).
 				Did(audit.ActionDeductBalance).
 				On(audit.EntityLeaveBalance, balance.UID).
+				WithMeta("action", actionSentence).
 				WithMeta("employee_uid", input.EmployeeUID).
+				WithMeta("employee_name", employee.Name).
 				WithMeta("leave_type_uid", input.LeaveTypeUID).
-				WithMeta("leave_type_name", leaveType.NameAR).
+				WithMeta("leave_type_name", leaveType.NameEN).
 				WithMeta("deduction_amount", workingDays).
 				WithMeta("old_used_days", oldUsedDays).
 				WithMeta("new_used_days", balance.UsedDays).

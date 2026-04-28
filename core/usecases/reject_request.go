@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/banumusa/backend/core/audit"
@@ -63,13 +64,6 @@ func NewRejectRequestUseCase(
 }
 
 func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequestInput) (*RejectRequestOutput, error) {
-	// Audit log will fire after successful rejection
-	defer uc.auditor.Actor(input.ActorEmployeeUID).
-		Did(audit.ActionReject).
-		On(audit.EntityLeaveRequest, input.ApprovalRequestUID).
-		WithMeta("reason", input.Comments).
-		Save(ctx)
-
 	tx, err := uc.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -114,6 +108,61 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 		return nil, ErrNotAuthorizedApprover
 	}
 
+	// Fetch actor name and role name for audit action sentence
+	actorName := input.ActorEmployeeUID
+	if actor, err := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID); err == nil && actor != nil {
+		actorName = actor.Name
+	}
+	actorRoleName := "Approver"
+	if role, err := uc.roleRepo.GetByUID(ctx, tx, step.RoleUID); err == nil && role != nil {
+		actorRoleName = role.Name
+	}
+
+	// Fetch leave request and leave type for context
+	leaveRequest, _ := uc.leaveRequestRepo.GetByApprovalRequestUID(ctx, tx, approvalRequest.UID)
+	leaveTypeName := "Leave"
+	var leaveStartDate, leaveEndDate string
+	leaveDays := 0
+	leaveRequestUID := ""
+	if leaveRequest != nil {
+		leaveRequestUID = leaveRequest.UID
+		leaveStartDate = leaveRequest.StartDate.Format("Jan 2, 2006")
+		leaveEndDate = leaveRequest.EndDate.Format("Jan 2, 2006")
+		leaveDays = leaveRequest.Days
+		if lt, err := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID); err == nil && lt != nil {
+			leaveTypeName = lt.NameEN
+		}
+	}
+
+	// Build reason string for the sentence
+	reasonStr := ""
+	if input.Comments != nil && *input.Comments != "" {
+		reasonStr = fmt.Sprintf(" Reason: %s", *input.Comments)
+	}
+
+	actionSentence := fmt.Sprintf(
+		"%s (%s) rejected %s (Employee)'s %s leave request for %s to %s (%d days).%s",
+		actorName, actorRoleName, requester.Name, leaveTypeName,
+		leaveStartDate, leaveEndDate, leaveDays, reasonStr,
+	)
+
+	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionReject).
+		On(audit.EntityLeaveRequest, leaveRequestUID).
+		WithMeta("action", actionSentence).
+		WithMeta("reason", input.Comments).
+		WithMeta("approval_request_uid", input.ApprovalRequestUID).
+		WithMeta("requester_uid", approvalRequest.RequesterUID).
+		WithMeta("requester_name", requester.Name).
+		WithMeta("leave_type", leaveTypeName).
+		WithMeta("start_date", leaveStartDate).
+		WithMeta("end_date", leaveEndDate).
+		WithMeta("days", leaveDays).
+		WithMeta("old_status", "pending").
+		WithMeta("new_status", "rejected").
+		WithMeta("step_order", approvalRequest.CurrentStep)
+	defer auditBuilder.Save(ctx)
+
 	// Record the reject action
 	currentStep := approvalRequest.CurrentStep
 	action := domain.NewApprovalAction(
@@ -134,10 +183,6 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 	}
 
 	// Update leave request decided_at
-	leaveRequest, err := uc.leaveRequestRepo.GetByApprovalRequestUID(ctx, tx, approvalRequest.UID)
-	if err != nil {
-		return nil, err
-	}
 	if leaveRequest != nil {
 		leaveRequest.SetDecided()
 		if err := uc.leaveRequestRepo.Update(ctx, tx, leaveRequest); err != nil {
@@ -145,16 +190,14 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 		}
 	}
 
-	// Get data for notification before commit
+	// Get data for notification
 	var requesterUID string
-	var leaveTypeName string
-	var leaveRequestUID string
+	var leaveTypeNameNotif string
 	if leaveRequest != nil {
 		requesterUID = approvalRequest.RequesterUID
-		leaveRequestUID = leaveRequest.UID
 		leaveType, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if leaveType != nil {
-			leaveTypeName = leaveType.NameAR
+			leaveTypeNameNotif = leaveType.NameAR
 		}
 	}
 
@@ -164,7 +207,7 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 
 	// Send notification to requester (after commit, non-blocking)
 	if requesterUID != "" {
-		go uc.notifyRequesterRejected(requesterUID, leaveTypeName, leaveRequestUID)
+		go uc.notifyRequesterRejected(requesterUID, leaveTypeNameNotif, leaveRequestUID)
 	}
 
 	return &RejectRequestOutput{
@@ -173,7 +216,6 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 }
 
 func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeName, requestUID string) {
-	// Get the user linked to this employee
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("reject_request.notifyRequesterRejected.no_user", "employee_uid", employeeUID)

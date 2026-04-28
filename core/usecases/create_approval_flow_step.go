@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -82,8 +83,18 @@ func (uc *CreateApprovalFlowStepUseCase) Execute(ctx context.Context, input Crea
 		return nil, err
 	}
 
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s added step %d to approval flow (role: %s)",
+		actorName, input.StepOrder, role.Name,
+	)
+
 	// Audit log after successful creation with step details
-	defer uc.auditor.From(ctx).Did(audit.ActionAddStep).On(audit.EntityApprovalFlowStep, step.UID).
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionAddStep).
+		On(audit.EntityApprovalFlowStep, step.UID).
+		WithMeta("action", actionSentence).
 		WithMeta("approval_flow_uid", input.ApprovalFlowUID).
 		WithMeta("step_order", input.StepOrder).
 		WithMeta("role_uid", input.RoleUID).

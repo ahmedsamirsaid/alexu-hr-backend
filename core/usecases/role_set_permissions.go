@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -46,13 +47,11 @@ func (uc *SetRolePermissionsUseCase) Execute(ctx context.Context, input SetRoleP
 		return ErrCannotModifySystemRole
 	}
 
-	// Get current permissions for audit trail
 	currentPerms, err := uc.permRepo.GetPermissionsForRole(ctx, uc.db, role.ID)
 	if err != nil {
 		return err
 	}
 
-	// Get permission IDs from UIDs
 	allPerms, err := uc.permRepo.List(ctx, uc.db)
 	if err != nil {
 		return err
@@ -74,10 +73,11 @@ func (uc *SetRolePermissionsUseCase) Execute(ctx context.Context, input SetRoleP
 		}
 	}
 
-	// Calculate added and removed permissions
 	currentPermUIDs := make(map[string]bool)
+	oldPermCodes := make([]string, 0, len(currentPerms))
 	for _, p := range currentPerms {
 		currentPermUIDs[p.UID] = true
+		oldPermCodes = append(oldPermCodes, p.Code)
 	}
 
 	addedPerms := []string{}
@@ -95,10 +95,23 @@ func (uc *SetRolePermissionsUseCase) Execute(ctx context.Context, input SetRoleP
 		}
 	}
 
-	// Audit log after successful permission update
+	newPermCodes := make([]string, 0, len(newPermUIDs))
+	for uid := range newPermUIDs {
+		newPermCodes = append(newPermCodes, uidToCode[uid])
+	}
+
+	actionSentence := fmt.Sprintf(
+		"Permissions for role '%s' were updated: %d added, %d removed",
+		role.Name, len(addedPerms), len(removedPerms),
+	)
+
 	defer uc.auditor.From(ctx).Did(audit.ActionUpdate).On(audit.EntityRole, input.RoleUID).
+		WithMeta("action", actionSentence).
+		WithMeta("role_name", role.Name).
 		WithMeta("added_permissions", addedPerms).
 		WithMeta("removed_permissions", removedPerms).
+		WithMeta("old_permissions", oldPermCodes).
+		WithMeta("new_permissions", newPermCodes).
 		Save(ctx)
 
 	return uc.roleRepo.SetRolePermissions(ctx, uc.db, role.ID, permIDs)

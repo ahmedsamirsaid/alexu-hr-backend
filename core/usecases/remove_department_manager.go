@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -65,10 +66,25 @@ func (uc *RemoveDepartmentManagerUseCase) Execute(ctx context.Context, input Rem
 		}
 	}
 
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s removed manager from department '%s'",
+		actorName, department.NameEN,
+	)
+	if managerName != "" {
+		actionSentence = fmt.Sprintf(
+			"%s removed %s as manager of department '%s'",
+			actorName, managerName, department.NameEN,
+		)
+	}
+	
 	// Audit log with manager information
 	auditBuilder := uc.auditor.From(ctx).
 		Did("remove_manager").
-		On(audit.EntityDepartment, input.DepartmentUID)
+		On(audit.EntityDepartment, input.DepartmentUID).
+		WithMeta("action", actionSentence).
+		WithMeta("department_name", department.NameEN)
 	
 	if managerUID != "" {
 		auditBuilder = auditBuilder.

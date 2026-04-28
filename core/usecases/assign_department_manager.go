@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -87,10 +88,19 @@ func (uc *AssignDepartmentManagerUseCase) Execute(ctx context.Context, input Ass
 		return errors.New("department_manager_role_not_found")
 	}
 
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s assigned %s as manager of department '%s'",
+		actorName, managerName, department.NameEN,
+	)
+	
 	// Audit log with manager information
 	defer uc.auditor.From(ctx).
 		Did("assign_manager").
 		On(audit.EntityDepartment, input.DepartmentUID).
+		WithMeta("action", actionSentence).
+		WithMeta("department_name", department.NameEN).
 		WithMeta("manager_uid", input.UserUID).
 		WithMeta("manager_name", managerName).
 		Save(ctx)

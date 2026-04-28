@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -41,7 +42,6 @@ func NewCreateDepartmentUseCase(
 }
 
 func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, input CreateDepartmentInput) (*CreateDepartmentOutput, error) {
-	// Check if code already exists
 	existing, err := uc.deptRepo.GetByCode(ctx, uc.db, input.Code)
 	if err != nil {
 		return nil, err
@@ -53,10 +53,19 @@ func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, input CreateDepa
 	department := domain.NewDepartment(input.Code, input.NameEN, input.NameAR)
 	department.DefaultShiftUID = input.DefaultShiftUID
 
-	// Audit log
+	actionSentence := fmt.Sprintf("Department '%s' (code: %s) was created", input.NameEN, input.Code)
+
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityDepartment, department.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("code", input.Code).
+		WithMeta("name_en", input.NameEN).
+		WithMeta("new_state", map[string]interface{}{
+			"uid":     department.UID,
+			"code":    input.Code,
+			"name_en": input.NameEN,
+		}).
 		Save(ctx)
 
 	if err := uc.deptRepo.Create(ctx, uc.db, department); err != nil {

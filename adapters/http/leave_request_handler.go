@@ -550,6 +550,11 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 	}
 
 	var err error
+	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+	if err != nil || currentUser.EmployeeUID == nil {
+		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		return
+	}
 
 	page := 1
 	pageSize := 20
@@ -569,21 +574,8 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		Limit:  pageSize,
 		Offset: (page - 1) * pageSize,
 	}
-
-	if !claims.HasPermission("*") {
-		if claims.IsDepartmentScope() {
-			input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
-		} else if claims.IsSelfScope() {
-			currentUser, currentUserErr := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-			if currentUserErr != nil || currentUser.EmployeeUID == nil {
-				writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
-				return
-			}
-
-			employeeUID := *currentUser.EmployeeUID
-			input.EmployeeUID = &employeeUID
-		}
-	}
+	employeeUID := *currentUser.EmployeeUID
+	input.EmployeeUID = &employeeUID
 
 	if status := r.URL.Query().Get("status"); status != "" {
 		s := domain.ApprovalRequestStatus(status)

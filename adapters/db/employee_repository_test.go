@@ -37,6 +37,12 @@ func TestEmployeeRepository_Create(t *testing.T) {
 	if employee.UpdatedAt.IsZero() {
 		t.Error("Create() did not set UpdatedAt")
 	}
+	if employee.Type != domain.EmployeeTypePermanent {
+		t.Errorf("Create() Type = %v, want %v", employee.Type, domain.EmployeeTypePermanent)
+	}
+	if employee.SubType != domain.EmployeeSubTypeNormal {
+		t.Errorf("Create() SubType = %v, want %v", employee.SubType, domain.EmployeeSubTypeNormal)
+	}
 }
 
 func TestEmployeeRepository_Create_DuplicateMobile(t *testing.T) {
@@ -82,6 +88,12 @@ func TestEmployeeRepository_GetByID(t *testing.T) {
 	}
 	if found.UID != employee.UID {
 		t.Errorf("GetByID() UID = %v, want %v", found.UID, employee.UID)
+	}
+	if found.Type != employee.Type {
+		t.Errorf("GetByID() Type = %v, want %v", found.Type, employee.Type)
+	}
+	if found.SubType != employee.SubType {
+		t.Errorf("GetByID() SubType = %v, want %v", found.SubType, employee.SubType)
 	}
 }
 
@@ -158,6 +170,8 @@ func TestEmployeeRepository_Update(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // Ensure time difference
 	employee.Name = "New Name"
 	employee.Status = domain.EmployeeStatusInactive
+	employee.Type = domain.EmployeeTypeTemporary
+	employee.SubType = domain.EmployeeSubTypeComprehensiveBonus
 
 	err := repo.Update(ctx, tdb.SQLiteDB, employee)
 	if err != nil {
@@ -178,6 +192,12 @@ func TestEmployeeRepository_Update(t *testing.T) {
 	}
 	if found.Status != domain.EmployeeStatusInactive {
 		t.Errorf("Update() Status = %v, want %v", found.Status, domain.EmployeeStatusInactive)
+	}
+	if found.Type != domain.EmployeeTypeTemporary {
+		t.Errorf("Update() Type = %v, want %v", found.Type, domain.EmployeeTypeTemporary)
+	}
+	if found.SubType != domain.EmployeeSubTypeComprehensiveBonus {
+		t.Errorf("Update() SubType = %v, want %v", found.SubType, domain.EmployeeSubTypeComprehensiveBonus)
 	}
 }
 

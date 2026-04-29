@@ -24,27 +24,31 @@ func NewGenerateImportTemplateUseCase() *GenerateImportTemplateUseCase {
 
 // Template column headers and sample data.
 var templateHeaders = []string{
-	"name", "mobile", "government_id", "university_id", "email", "hire_date", "status",
+	"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type",
 }
 
 var sampleRows = [][]string{
 	{
-		"أحمد محمد علي",           // Ahmed Mohamed Ali
+		"أحمد محمد علي", // Ahmed Mohamed Ali
 		"01012345678",
 		"28501011234567",
 		"EMP001",
 		"ahmed.ali@example.com",
 		"2024-01-15",
 		"active",
+		"permanent",
+		"normal",
 	},
 	{
-		"فاطمة إبراهيم حسن",        // Fatima Ibrahim Hassan
+		"فاطمة إبراهيم حسن", // Fatima Ibrahim Hassan
 		"01098765432",
 		"29002021234567",
 		"EMP002",
 		"fatima.hassan@example.com",
 		"2024-03-01",
 		"active",
+		"temporary",
+		"contract_employees",
 	},
 }
 
@@ -92,6 +96,8 @@ func (uc *GenerateImportTemplateUseCase) Execute() (*GenerateImportTemplateOutpu
 		"E": 30, // email
 		"F": 12, // hire_date
 		"G": 10, // status
+		"H": 14, // type
+		"I": 34, // sub_type
 	}
 	for col, width := range columnWidths {
 		f.SetColWidth(sheetName, col, col, width)
@@ -102,6 +108,22 @@ func (uc *GenerateImportTemplateUseCase) Execute() (*GenerateImportTemplateOutpu
 	dv.Sqref = "G2:G1000"
 	dv.SetDropList([]string{"active", "inactive"})
 	f.AddDataValidation(sheetName, dv)
+
+	typeValidation := excelize.NewDataValidation(true)
+	typeValidation.Sqref = "H2:H1000"
+	typeValidation.SetDropList([]string{"permanent", "temporary"})
+	f.AddDataValidation(sheetName, typeValidation)
+
+	subTypeValidation := excelize.NewDataValidation(true)
+	subTypeValidation.Sqref = "I2:I1000"
+	subTypeValidation.SetDropList([]string{
+		"normal",
+		"special_needs",
+		"separation_termination_for_budget",
+		"comprehensive_bonus",
+		"contract_employees",
+	})
+	f.AddDataValidation(sheetName, subTypeValidation)
 
 	// Add comment to header row explaining required fields
 	f.AddComment(sheetName, excelize.Comment{
@@ -138,6 +160,16 @@ func (uc *GenerateImportTemplateUseCase) Execute() (*GenerateImportTemplateOutpu
 		Cell:   "G1",
 		Author: "System",
 		Text:   "Optional: 'active' (default) or 'inactive'",
+	})
+	f.AddComment(sheetName, excelize.Comment{
+		Cell:   "H1",
+		Author: "System",
+		Text:   "Required: 'permanent' or 'temporary'",
+	})
+	f.AddComment(sheetName, excelize.Comment{
+		Cell:   "I1",
+		Author: "System",
+		Text:   "Required subtype based on type: permanent => normal/special_needs, temporary => separation_termination_for_budget/comprehensive_bonus/contract_employees",
 	})
 
 	// Write to buffer

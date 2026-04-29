@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"time"
 
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
@@ -79,26 +80,34 @@ func (uc *GetBalanceUseCase) Execute(ctx context.Context, input GetBalanceInput)
 
 	var result []BalanceInfo
 	for _, lt := range leaveTypes {
+		totalDays := entitledBalanceTotalDays(employee, lt, balanceAsOfDate(input.Year))
 		info := BalanceInfo{
 			LeaveTypeUID:    lt.UID,
 			LeaveTypeCode:   lt.Code,
 			LeaveTypeNameEN: lt.NameEN,
 			LeaveTypeNameAR: lt.NameAR,
 			Year:            input.Year,
+			InitialBalance:  totalDays,
 		}
 
 		if balance, ok := balanceMap[lt.ID]; ok {
-			info.InitialBalance = balance.TotalDays
 			info.UsedBalance = balance.UsedDays
-			info.RemainingBalance = balance.TotalDays - balance.UsedDays
+			info.RemainingBalance = totalDays - balance.UsedDays
 		} else {
-			info.InitialBalance = lt.DefaultBalance
 			info.UsedBalance = 0
-			info.RemainingBalance = lt.DefaultBalance
+			info.RemainingBalance = totalDays
 		}
 
 		result = append(result, info)
 	}
 
 	return &GetBalanceOutput{Balances: result}, nil
+}
+
+func balanceAsOfDate(year int) time.Time {
+	now := time.Now()
+	if year == now.Year() {
+		return now
+	}
+	return time.Date(year, 12, 31, 0, 0, 0, 0, time.UTC)
 }

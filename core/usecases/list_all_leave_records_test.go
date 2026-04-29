@@ -41,8 +41,16 @@ func (m *mockLeaveTypeRepoForAll) GetByCode(ctx context.Context, q ports.Querier
 	return nil, nil
 }
 
+func (m *mockLeaveTypeRepoForAll) GetSubLeaveTypeByUID(ctx context.Context, q ports.Querier, uid string) (*domain.SubLeaveType, error) {
+	return nil, nil
+}
+
 func (m *mockLeaveTypeRepoForAll) List(ctx context.Context, q ports.Querier, activeOnly bool) ([]*domain.LeaveType, error) {
 	return m.leaveTypes, nil
+}
+
+func (m *mockLeaveTypeRepoForAll) ListSubLeaveTypesByLeaveTypeUID(ctx context.Context, q ports.Querier, leaveTypeUID string) ([]*domain.SubLeaveType, error) {
+	return nil, nil
 }
 
 func (m *mockLeaveTypeRepoForAll) SetActive(ctx context.Context, q ports.Querier, uid string, isActive bool) error {

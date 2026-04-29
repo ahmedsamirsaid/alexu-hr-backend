@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -13,13 +14,17 @@ import (
 var (
 	ErrLeaveRequestDocumentsRequired    = errors.New("documents array is required when documents_attached is true")
 	ErrLeaveRequestDocumentsUnsupported = errors.New("document attachments are only supported for leave requests that require approval")
+	ErrLeaveRequestOutsideDeadline      = errors.New("leave request is outside the allowed recording deadline")
 )
+
+const autoApprovedLeaveFlowUID = "apf_leave_default"
 
 type SubmitLeaveRequestInput struct {
 	UserUID           string
 	EmployeeUID       string
 	LeaveTypeUID      string
 	SubLeaveTypeUID   *string
+	OtherSubLeaveName *string
 	StartDate         time.Time
 	EndDate           time.Time
 	Notes             *string
@@ -142,6 +147,10 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		return nil, ErrLeaveTypeNotFound
 	}
 
+	if err := validateLeaveRequestRecordingDeadline(leaveType, input.StartDate, time.Now()); err != nil {
+		return nil, err
+	}
+
 	if input.SubLeaveTypeUID != nil && *input.SubLeaveTypeUID != "" {
 		subLeaveType, err := uc.leaveTypeRepo.GetSubLeaveTypeByUID(ctx, tx, *input.SubLeaveTypeUID)
 		if err != nil {
@@ -153,6 +162,11 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		if subLeaveType.LeaveTypeUID != input.LeaveTypeUID {
 			return nil, ErrSubLeaveTypeDoesNotBelongToLeaveType
 		}
+		if !isOtherSubLeaveType(subLeaveType) {
+			input.OtherSubLeaveName = nil
+		}
+	} else {
+		input.OtherSubLeaveName = nil
 	}
 
 	// Calculate working days
@@ -166,6 +180,10 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		return nil, ErrNoWorkingDays
 	}
 
+	if leaveType.MaxConsecutive != nil && totalWorkingDays > *leaveType.MaxConsecutive {
+		return nil, ErrExceedsConsecutiveDays
+	}
+
 	// Check for overlapping requests
 	hasOverlap, err := uc.leaveRequestRepo.HasOverlapping(ctx, tx, input.EmployeeUID, input.StartDate, input.EndDate, nil)
 	if err != nil {
@@ -177,16 +195,9 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 
 	// Get or create balance and check sufficiency
 	year := input.StartDate.Year()
-	balance, err := uc.leaveBalanceRepo.GetByEmployeeAndTypeAndYear(ctx, tx, employee.ID, leaveType.ID, year)
+	balance, _, err := ensureLeaveBalance(ctx, tx, uc.leaveBalanceRepo, employee, leaveType, year, input.StartDate)
 	if err != nil {
 		return nil, err
-	}
-	if balance == nil {
-		// Create balance with default
-		balance = domain.NewLeaveBalance(employee.ID, leaveType.ID, year, leaveType.DefaultBalance)
-		if err := uc.leaveBalanceRepo.Create(ctx, tx, balance); err != nil {
-			return nil, err
-		}
 	}
 
 	remaining := balance.TotalDays - balance.UsedDays
@@ -221,7 +232,56 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		return nil, ErrLeaveRequestDocumentsUnsupported
 	}
 
-	// Create leave record directly (no request/approval needed)
+	approvalRequest := domain.NewApprovalRequestWithState(
+		autoApprovedLeaveFlowUID,
+		input.EmployeeUID,
+		0,
+		0,
+		domain.ApprovalRequestStatusApproved,
+	)
+	if err := uc.approvalRequestRepo.Create(ctx, tx, approvalRequest); err != nil {
+		return nil, err
+	}
+
+	leaveRequest := domain.NewLeaveRequest(
+		input.EmployeeUID,
+		input.LeaveTypeUID,
+		input.SubLeaveTypeUID,
+		input.OtherSubLeaveName,
+		input.StartDate,
+		input.EndDate,
+		totalWorkingDays,
+		input.Notes,
+		input.StudyDestination,
+		input.Assignment,
+		input.AssignmentCountry,
+		input.SpouseWorkCountry,
+		approvalRequest.UID,
+	)
+	if err := uc.leaveRequestRepo.Create(ctx, tx, leaveRequest); err != nil {
+		return nil, err
+	}
+	leaveRequest.SetDecided()
+	if err := uc.leaveRequestRepo.Update(ctx, tx, leaveRequest); err != nil {
+		return nil, err
+	}
+
+	submitAction := domain.NewApprovalAction(
+		approvalRequest.UID,
+		domain.ApprovalActionTypeSubmit,
+		nil,
+		input.EmployeeUID,
+		nil,
+	)
+	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
+		return nil, err
+	}
+
+	documents, err := uc.createLeaveRequestDocuments(ctx, tx, leaveRequest.UID, input)
+	if err != nil {
+		return nil, err
+	}
+
 	leaveRecord := domain.NewLeaveRecord(
 		employee.ID,
 		leaveType.ID,
@@ -230,7 +290,7 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		totalWorkingDays,
 		&employee.ID, // recorded_by is the employee themselves
 		input.Notes,
-		nil, // no leave_request_uid for auto-approved
+		&leaveRequest.UID,
 	)
 	if err := uc.leaveRecordRepo.Create(ctx, tx, leaveRecord); err != nil {
 		return nil, err
@@ -260,7 +320,10 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 	}
 
 	return &SubmitLeaveRequestOutput{
-		LeaveRecord: leaveRecord,
+		LeaveRequest:    leaveRequest,
+		ApprovalRequest: approvalRequest,
+		LeaveRecord:     leaveRecord,
+		Documents:       documents,
 	}, nil
 }
 
@@ -320,6 +383,7 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		input.EmployeeUID,
 		input.LeaveTypeUID,
 		input.SubLeaveTypeUID,
+		input.OtherSubLeaveName,
 		input.StartDate,
 		input.EndDate,
 		totalWorkingDays,
@@ -399,6 +463,7 @@ func (uc *SubmitLeaveRequestUseCase) handleTopRoleAutoApprove(
 		input.EmployeeUID,
 		input.LeaveTypeUID,
 		input.SubLeaveTypeUID,
+		input.OtherSubLeaveName,
 		input.StartDate,
 		input.EndDate,
 		totalWorkingDays,
@@ -474,6 +539,49 @@ func (uc *SubmitLeaveRequestUseCase) handleTopRoleAutoApprove(
 		LeaveRecord:     leaveRecord,
 		Documents:       documents,
 	}, nil
+}
+
+func isOtherSubLeaveType(subLeaveType *domain.SubLeaveType) bool {
+	if subLeaveType == nil {
+		return false
+	}
+
+	nameEN := strings.TrimSpace(strings.ToLower(subLeaveType.NameEN))
+	nameAR := strings.TrimSpace(subLeaveType.NameAR)
+
+	return nameEN == "other" || nameAR == "أخرى" || nameAR == "أخرى."
+}
+
+func validateLeaveRequestRecordingDeadline(leaveType *domain.LeaveType, startDate, now time.Time) error {
+	if leaveType == nil || leaveType.RecordingDeadlineDays == nil {
+		return nil
+	}
+
+	startDay := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
+	nowUTC := now.UTC()
+	submitDay := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	deadlineDays := *leaveType.RecordingDeadlineDays
+
+	switch leaveType.Code {
+	case leaveTypeCodeCasual:
+		if submitDay.After(startDay) {
+			daysLate := int(submitDay.Sub(startDay).Hours() / 24)
+			if daysLate > deadlineDays {
+				return ErrLeaveRequestOutsideDeadline
+			}
+		}
+	default:
+		if !startDay.After(submitDay) {
+			return ErrLeaveRequestOutsideDeadline
+		}
+
+		daysAhead := int(startDay.Sub(submitDay).Hours() / 24)
+		if daysAhead < deadlineDays {
+			return ErrLeaveRequestOutsideDeadline
+		}
+	}
+
+	return nil
 }
 
 func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(

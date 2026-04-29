@@ -23,6 +23,8 @@ type GetEmployeeOutput struct {
 	Email         *string
 	HireDate      time.Time
 	Status        domain.EmployeeStatus
+	Type          domain.EmployeeType
+	SubType       domain.EmployeeSubType
 	DepartmentUID *string
 	ShiftUID      *string
 }
@@ -63,6 +65,8 @@ func (uc *GetEmployeeUseCase) Execute(ctx context.Context, input GetEmployeeInpu
 		Email:         employee.Email,
 		HireDate:      employee.HireDate,
 		Status:        employee.Status,
+		Type:          employee.Type,
+		SubType:       employee.SubType,
 		DepartmentUID: employee.DepartmentUID,
 		ShiftUID:      employee.ShiftUID,
 	}, nil

@@ -23,6 +23,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 )
 
 func main() {
@@ -394,6 +398,10 @@ func main() {
 }
 
 func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
+	if err := reconcileMigrationVersion(sqlDB, migrationsPath); err != nil {
+		return fmt.Errorf("failed to reconcile migration version: %w", err)
+	}
+
 	driver, err := sqlite.WithInstance(sqlDB, &sqlite.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
@@ -413,4 +421,102 @@ func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
 	}
 
 	return nil
+}
+
+func reconcileMigrationVersion(sqlDB *sql.DB, migrationsPath string) error {
+	currentVersion, dirty, hasVersion, err := readSchemaMigrationVersion(sqlDB)
+	if err != nil || !hasVersion || dirty {
+		return err
+	}
+
+	versions, err := listMigrationVersions(migrationsPath)
+	if err != nil {
+		return err
+	}
+	if len(versions) == 0 {
+		return nil
+	}
+
+	if _, ok := versions[currentVersion]; ok {
+		return nil
+	}
+
+	targetVersion, ok := legacyOrdinalToVersion(currentVersion, versions)
+	if !ok {
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(`UPDATE schema_migrations SET version = ?`, targetVersion); err != nil {
+		return err
+	}
+
+	slog.Info("main.main.reconciled_migration_version", "from", currentVersion, "to", targetVersion)
+	return nil
+}
+
+func readSchemaMigrationVersion(sqlDB *sql.DB) (version uint64, dirty bool, hasVersion bool, err error) {
+	var count int
+	if err = sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&count); err != nil {
+		return 0, false, false, err
+	}
+	if count == 0 {
+		return 0, false, false, nil
+	}
+
+	err = sqlDB.QueryRow(`SELECT version, dirty FROM schema_migrations LIMIT 1`).Scan(&version, &dirty)
+	if err == sql.ErrNoRows {
+		return 0, false, false, nil
+	}
+	if err != nil {
+		return 0, false, false, err
+	}
+
+	return version, dirty, true, nil
+}
+
+func listMigrationVersions(migrationsPath string) (map[uint64]struct{}, error) {
+	entries, err := os.ReadDir(migrationsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make(map[uint64]struct{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if filepath.Ext(name) != ".sql" || (!strings.HasSuffix(name, ".up.sql") && !strings.HasSuffix(name, ".down.sql")) {
+			continue
+		}
+
+		prefix, _, found := strings.Cut(name, "_")
+		if !found {
+			continue
+		}
+
+		version, err := strconv.ParseUint(prefix, 10, 64)
+		if err != nil {
+			continue
+		}
+
+		versions[version] = struct{}{}
+	}
+
+	return versions, nil
+}
+
+func legacyOrdinalToVersion(legacyVersion uint64, versions map[uint64]struct{}) (uint64, bool) {
+	ordered := make([]uint64, 0, len(versions))
+	for version := range versions {
+		ordered = append(ordered, version)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+
+	if legacyVersion == 0 || legacyVersion > uint64(len(ordered)) {
+		return 0, false
+	}
+
+	return ordered[legacyVersion-1], true
 }

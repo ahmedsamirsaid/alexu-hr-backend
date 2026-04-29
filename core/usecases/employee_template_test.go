@@ -57,7 +57,7 @@ func TestGenerateImportTemplate_HasHeaders(t *testing.T) {
 		t.Fatal("expected at least header row")
 	}
 
-	expectedHeaders := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	expectedHeaders := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	headerRow := rows[0]
 
 	if len(headerRow) < len(expectedHeaders) {

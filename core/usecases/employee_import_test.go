@@ -264,10 +264,10 @@ func createTestExcelFile(t *testing.T, headers []string, rows [][]string) *bytes
 }
 
 func TestImportEmployees_ValidFile(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active"},
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active"},
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active", "permanent", "normal"},
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active", "temporary", "contract_employees"},
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -300,6 +300,14 @@ func TestImportEmployees_ValidFile(t *testing.T) {
 	if len(empRepo.createdEmployees) != 2 {
 		t.Errorf("expected 2 created employees, got %d", len(empRepo.createdEmployees))
 	}
+	if len(empRepo.createdEmployees) == 2 {
+		if empRepo.createdEmployees[0].Type != domain.EmployeeTypePermanent || empRepo.createdEmployees[0].SubType != domain.EmployeeSubTypeNormal {
+			t.Errorf("expected first employee classification permanent/normal, got %s/%s", empRepo.createdEmployees[0].Type, empRepo.createdEmployees[0].SubType)
+		}
+		if empRepo.createdEmployees[1].Type != domain.EmployeeTypeTemporary || empRepo.createdEmployees[1].SubType != domain.EmployeeSubTypeContractEmployees {
+			t.Errorf("expected second employee classification temporary/contract_employees, got %s/%s", empRepo.createdEmployees[1].Type, empRepo.createdEmployees[1].SubType)
+		}
+	}
 
 	// Verify users were created
 	if len(userRepo.createdUsers) != 2 {
@@ -312,13 +320,13 @@ func TestImportEmployees_ValidFile(t *testing.T) {
 }
 
 func TestImportEmployees_MissingRequiredFields(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},    // Missing name
-		{"فاطمة علي", "", "29002021234567", "EMP002", "", "2024-03-01", "active"},      // Missing mobile
-		{"عمر حسن", "01055555555", "", "EMP003", "", "2024-03-01", "active"},           // Missing gov ID
-		{"سارة أحمد", "01066666666", "30001011234567", "", "", "2024-03-01", "active"}, // Missing uni ID
-		{"محمد علي", "01077777777", "31001011234567", "EMP005", "", "", "active"},      // Missing hire date
+		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},    // Missing name
+		{"فاطمة علي", "", "29002021234567", "EMP002", "", "2024-03-01", "active", "permanent", "normal"},      // Missing mobile
+		{"عمر حسن", "01055555555", "", "EMP003", "", "2024-03-01", "active", "permanent", "normal"},           // Missing gov ID
+		{"سارة أحمد", "01066666666", "30001011234567", "", "", "2024-03-01", "active", "permanent", "normal"}, // Missing uni ID
+		{"محمد علي", "01077777777", "31001011234567", "EMP005", "", "", "active", "permanent", "normal"},      // Missing hire date
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -349,11 +357,11 @@ func TestImportEmployees_MissingRequiredFields(t *testing.T) {
 }
 
 func TestImportEmployees_InvalidFormats(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "invalid_mobile", "28501011234567", "EMP001", "", "2024-01-15", "active"}, // Invalid mobile
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "invalid-date", "active"},  // Invalid date
-		{"عمر حسن", "01055555555", "30001011234567", "EMP003", "", "2024-03-01", "unknown"},     // Invalid status
+		{"أحمد محمد", "invalid_mobile", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},  // Invalid mobile
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "invalid-date", "active", "permanent", "normal"},   // Invalid date
+		{"عمر حسن", "01055555555", "30001011234567", "EMP003", "", "2024-03-01", "unknown", "temporary", "invalid_sub"}, // Invalid status and subtype
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -384,12 +392,12 @@ func TestImportEmployees_InvalidFormats(t *testing.T) {
 }
 
 func TestImportEmployees_InFileDuplicates(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},
-		{"فاطمة علي", "01012345678", "29002021234567", "EMP002", "", "2024-03-01", "active"}, // Duplicate mobile
-		{"عمر حسن", "01055555555", "28501011234567", "EMP003", "", "2024-03-01", "active"},   // Duplicate gov ID
-		{"سارة أحمد", "01066666666", "30001011234567", "EMP001", "", "2024-03-01", "active"}, // Duplicate uni ID
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},
+		{"فاطمة علي", "01012345678", "29002021234567", "EMP002", "", "2024-03-01", "active", "temporary", "contract_employees"},  // Duplicate mobile
+		{"عمر حسن", "01055555555", "28501011234567", "EMP003", "", "2024-03-01", "active", "permanent", "special_needs"},         // Duplicate gov ID
+		{"سارة أحمد", "01066666666", "30001011234567", "EMP001", "", "2024-03-01", "active", "temporary", "comprehensive_bonus"}, // Duplicate uni ID
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -421,10 +429,10 @@ func TestImportEmployees_InFileDuplicates(t *testing.T) {
 }
 
 func TestImportEmployees_DatabaseDuplicates(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active"},
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active", "temporary", "contract_employees"},
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -458,7 +466,7 @@ func TestImportEmployees_DatabaseDuplicates(t *testing.T) {
 }
 
 func TestImportEmployees_EmptyFile(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{} // No data rows
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -524,9 +532,9 @@ func TestImportEmployees_FileTooLarge(t *testing.T) {
 }
 
 func TestImportEmployees_CreatesUsersWithEmployeeRole(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active"},
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active", "permanent", "normal"},
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -588,9 +596,9 @@ func TestImportEmployees_CreatesUsersWithEmployeeRole(t *testing.T) {
 }
 
 func TestImportEmployees_DuplicateUserPhoneError(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"},
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},
 	}
 
 	buf := createTestExcelFile(t, headers, rows)
@@ -632,10 +640,10 @@ func TestImportEmployees_DuplicateUserPhoneError(t *testing.T) {
 }
 
 func TestImportEmployees_DateFormats(t *testing.T) {
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"}, // YYYY-MM-DD
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "15/01/2024", "active"}, // DD/MM/YYYY
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"},             // YYYY-MM-DD
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "15/01/2024", "active", "temporary", "contract_employees"}, // DD/MM/YYYY
 	}
 
 	buf := createTestExcelFile(t, headers, rows)

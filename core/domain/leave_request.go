@@ -8,6 +8,7 @@ type LeaveRequest struct {
 	EmployeeUID        string
 	LeaveTypeUID       string
 	SubLeaveTypeUID    *string
+	OtherSubLeaveName  *string
 	StartDate          time.Time
 	EndDate            time.Time
 	Days               int
@@ -26,6 +27,7 @@ type LeaveRequest struct {
 func NewLeaveRequest(
 	employeeUID, leaveTypeUID string,
 	subLeaveTypeUID *string,
+	otherSubLeaveName *string,
 	startDate, endDate time.Time,
 	days int,
 	notes *string,
@@ -40,6 +42,7 @@ func NewLeaveRequest(
 		EmployeeUID:        employeeUID,
 		LeaveTypeUID:       leaveTypeUID,
 		SubLeaveTypeUID:    subLeaveTypeUID,
+		OtherSubLeaveName:  otherSubLeaveName,
 		StartDate:          startDate,
 		EndDate:            endDate,
 		Days:               days,

@@ -129,10 +129,18 @@ func (m *mockLeaveTypeRepo) GetByCode(ctx context.Context, q ports.Querier, code
 	return m.leaveType, nil
 }
 
+func (m *mockLeaveTypeRepo) GetSubLeaveTypeByUID(ctx context.Context, q ports.Querier, uid string) (*domain.SubLeaveType, error) {
+	return nil, nil
+}
+
 func (m *mockLeaveTypeRepo) List(ctx context.Context, q ports.Querier, activeOnly bool) ([]*domain.LeaveType, error) {
 	if m.leaveType != nil {
 		return []*domain.LeaveType{m.leaveType}, nil
 	}
+	return nil, nil
+}
+
+func (m *mockLeaveTypeRepo) ListSubLeaveTypesByLeaveTypeUID(ctx context.Context, q ports.Querier, leaveTypeUID string) ([]*domain.SubLeaveType, error) {
 	return nil, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/usecases"
@@ -11,11 +12,12 @@ import (
 
 func TestGetBalanceUseCase_Execute(t *testing.T) {
 	employee := &domain.Employee{
-		ID:  1,
-		UID: "emp_123",
+		ID:       1,
+		UID:      "emp_123",
+		HireDate: time.Date(2010, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	leaveType := &domain.LeaveType{
+	casualLeaveType := &domain.LeaveType{
 		ID:             1,
 		UID:            "lt_casual",
 		Code:           "CASUAL",
@@ -24,13 +26,23 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 		DefaultBalance: 7,
 	}
 
+	regularLeaveType := &domain.LeaveType{
+		ID:             2,
+		UID:            "lt_regular",
+		Code:           "REGULAR",
+		NameEN:         "Regular Leave",
+		NameAR:         "إجازة اعتيادى",
+		DefaultBalance: 21,
+	}
+
 	tests := []struct {
-		name             string
-		input            usecases.GetBalanceInput
-		employee         *domain.Employee
-		leaveType        *domain.LeaveType
-		balance          *domain.LeaveBalance
-		expectedErr      error
+		name              string
+		input             usecases.GetBalanceInput
+		employee          *domain.Employee
+		leaveType         *domain.LeaveType
+		balance           *domain.LeaveBalance
+		expectedErr       error
+		expectedInitial   int
 		expectedRemaining int
 	}{
 		{
@@ -40,7 +52,7 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 				Year:        2025,
 			},
 			employee:  employee,
-			leaveType: leaveType,
+			leaveType: casualLeaveType,
 			balance: &domain.LeaveBalance{
 				ID:          1,
 				EmployeeID:  1,
@@ -50,6 +62,7 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 				UsedDays:    3,
 			},
 			expectedErr:       nil,
+			expectedInitial:   7,
 			expectedRemaining: 4,
 		},
 		{
@@ -59,10 +72,24 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 				Year:        2025,
 			},
 			employee:          employee,
-			leaveType:         leaveType,
+			leaveType:         casualLeaveType,
 			balance:           nil,
 			expectedErr:       nil,
+			expectedInitial:   7,
 			expectedRemaining: 7, // Default balance
+		},
+		{
+			name: "regular leave uses service based entitlement",
+			input: usecases.GetBalanceInput{
+				EmployeeUID: "emp_123",
+				Year:        2025,
+			},
+			employee:          employee,
+			leaveType:         regularLeaveType,
+			balance:           nil,
+			expectedErr:       nil,
+			expectedInitial:   30,
+			expectedRemaining: 30,
 		},
 		{
 			name: "employee not found",
@@ -71,7 +98,7 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 				Year:        2025,
 			},
 			employee:    nil,
-			leaveType:   leaveType,
+			leaveType:   casualLeaveType,
 			expectedErr: usecases.ErrEmployeeNotFound,
 		},
 	}
@@ -109,6 +136,10 @@ func TestGetBalanceUseCase_Execute(t *testing.T) {
 
 			if len(output.Balances) == 0 {
 				t.Fatal("expected at least one balance")
+			}
+
+			if output.Balances[0].InitialBalance != tt.expectedInitial {
+				t.Errorf("expected initial balance %d, got %d", tt.expectedInitial, output.Balances[0].InitialBalance)
 			}
 
 			if output.Balances[0].RemainingBalance != tt.expectedRemaining {

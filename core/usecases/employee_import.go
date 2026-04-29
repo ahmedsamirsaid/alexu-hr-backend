@@ -84,7 +84,7 @@ func NewImportEmployeesUseCase(
 
 // Expected column headers (order matters).
 var expectedHeaders = []string{
-	"name", "mobile", "government_id", "university_id", "email", "hire_date", "status",
+	"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type",
 }
 
 const maxFileSize = 20 * 1024 * 1024 // 20MB
@@ -217,6 +217,8 @@ func (uc *ImportEmployeesUseCase) Execute(ctx context.Context, input ImportEmplo
 			existingEmp.Mobile = emp.employee.Mobile
 			existingEmp.Email = emp.employee.Email
 			existingEmp.Status = emp.employee.Status
+			existingEmp.Type = emp.employee.Type
+			existingEmp.SubType = emp.employee.SubType
 			if err := uc.employeeRepo.Update(ctx, tx, existingEmp); err != nil {
 				return nil, fmt.Errorf("failed to update employee at row %d: %w", emp.row, err)
 			}
@@ -346,6 +348,8 @@ func (uc *ImportEmployeesUseCase) parseAndValidateRows(rows [][]string) ([]parse
 		email := getValue(4)
 		hireDateStr := getValue(5)
 		statusStr := getValue(6)
+		typeStr := getValue(7)
+		subTypeStr := getValue(8)
 
 		rowHasErrors := false
 		addError := func(column, value, message string) {
@@ -399,6 +403,28 @@ func (uc *ImportEmployeesUseCase) parseAndValidateRows(rows [][]string) ([]parse
 			}
 		}
 
+		employeeType := domain.EmployeeTypePermanent
+		if typeStr != "" {
+			employeeType = domain.NormalizeEmployeeType(typeStr)
+			if employeeType == "" {
+				addError("type", typeStr, "Invalid type. Use 'permanent' or 'temporary'")
+			}
+		}
+
+		var subType domain.EmployeeSubType
+		if subTypeStr == "" {
+			addError("sub_type", "", "Required field missing")
+		} else {
+			subType = domain.NormalizeEmployeeSubType(subTypeStr)
+			if subType == "" {
+				addError("sub_type", subTypeStr, "Invalid sub type")
+			}
+		}
+
+		if employeeType != "" && subType != "" && !domain.IsValidEmployeeSubTypeForType(employeeType, subType) {
+			addError("sub_type", subTypeStr, "Sub type does not belong to the selected type")
+		}
+
 		// Check in-file duplicates
 		if mobile != "" {
 			if prevRow, exists := seenMobiles[mobile]; exists {
@@ -431,6 +457,8 @@ func (uc *ImportEmployeesUseCase) parseAndValidateRows(rows [][]string) ([]parse
 		// Create employee
 		emp := domain.NewEmployee(name, mobile, governmentID, universityID, hireDate)
 		emp.Status = status
+		emp.Type = employeeType
+		emp.SubType = subType
 		if email != "" {
 			emp.Email = &email
 		}

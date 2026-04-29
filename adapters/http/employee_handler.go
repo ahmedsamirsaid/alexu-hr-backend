@@ -58,6 +58,8 @@ type GetEmployeeResponse struct {
 	Email         *string `json:"email,omitempty"`
 	HireDate      string  `json:"hireDate"`
 	Status        string  `json:"status"`
+	Type          string  `json:"type"`
+	SubType       string  `json:"subType"`
 	DepartmentUID *string `json:"departmentUid,omitempty"`
 	ShiftUID      *string `json:"shiftUid,omitempty"`
 }
@@ -85,6 +87,8 @@ type EmployeeListItemResponse struct {
 	Email         *string                   `json:"email,omitempty"`
 	HireDate      string                    `json:"hireDate"`
 	Status        string                    `json:"status"`
+	Type          string                    `json:"type"`
+	SubType       string                    `json:"subType"`
 	DepartmentUID *string                   `json:"departmentUid,omitempty"`
 	ShiftUID      *string                   `json:"shiftUid,omitempty"`
 	User          *EmployeeUserInfoResponse `json:"user,omitempty"`
@@ -135,6 +139,8 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 		Email:         output.Email,
 		HireDate:      output.HireDate.Format("2006-01-02"),
 		Status:        string(output.Status),
+		Type:          string(output.Type),
+		SubType:       string(output.SubType),
 		DepartmentUID: output.DepartmentUID,
 		ShiftUID:      output.ShiftUID,
 	})
@@ -186,6 +192,8 @@ func (h *EmployeeHandler) ListEmployees(w http.ResponseWriter, r *http.Request) 
 			Email:         emp.Email,
 			HireDate:      emp.HireDate.Format("2006-01-02"),
 			Status:        string(emp.Status),
+			Type:          string(emp.Type),
+			SubType:       string(emp.SubType),
 			DepartmentUID: emp.DepartmentUID,
 			ShiftUID:      emp.ShiftUID,
 		}

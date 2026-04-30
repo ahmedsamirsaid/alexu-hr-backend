@@ -79,7 +79,7 @@ func LoadConfig() *AppConfig {
 		HolidaySyncTimezone:    getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
 
 		// Storage config
-		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "34.68.220.78:9000"),
+		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "localhost:9000"),
 		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "minioadmin"),
 		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "minioadmin"),
 		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", false),

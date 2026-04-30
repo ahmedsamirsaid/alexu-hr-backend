@@ -203,6 +203,12 @@ func newAbsenceSyncTestSQLiteDB(t *testing.T) *dbadapter.SQLiteDB {
 			created_at TEXT DEFAULT (datetime('now')),
 			updated_at TEXT DEFAULT (datetime('now'))
 		);`,
+		`CREATE TABLE holiday_definition_departments (
+			holiday_definition_id INTEGER NOT NULL,
+			department_uid TEXT NOT NULL,
+			created_at TEXT DEFAULT (datetime('now')),
+			PRIMARY KEY (holiday_definition_id, department_uid)
+		);`,
 		`CREATE TABLE weekend_config (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			uid TEXT UNIQUE NOT NULL,

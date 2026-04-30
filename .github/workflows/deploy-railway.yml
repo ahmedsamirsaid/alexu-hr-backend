@@ -8,7 +8,54 @@ on:
   workflow_dispatch:
 
 jobs:
+  verify-container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t hr-backend-ci:${{ github.sha }} .
+
+      - name: Start backend container and verify boot
+        run: |
+          set -euo pipefail
+
+          CONTAINER_ID=$(docker run -d --rm \
+            -p 18080:8080 \
+            -e BANU_MUSA_PORT=8080 \
+            -e BANU_MUSA_DB_PATH=/app/data/banumusa.db \
+            -e BANU_MUSA_DB_MIGRATIONS_PATH=/app/adapters/db/migrations \
+            -e BANU_MUSA_FONT_PATH=/app/assets/fonts/Noto_Sans_Arabic/static/NotoSansArabic-Regular.ttf \
+            -e BANU_MUSA_FCM_ENABLED=false \
+            -e BANU_MUSA_MINIO_AUTO_CREATE_BUCKET=false \
+            -e BANU_MUSA_SCHEDULER_ENABLED=false \
+            hr-backend-ci:${{ github.sha }})
+
+          cleanup() {
+            docker logs "$CONTAINER_ID" || true
+            docker stop "$CONTAINER_ID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/docs >/dev/null; then
+              echo "Backend container started and is serving HTTP."
+              exit 0
+            fi
+
+            if [ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || echo false)" != "true" ]; then
+              echo "Backend container exited before becoming ready."
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "Backend container did not become ready in time."
+          exit 1
+
   deploy:
+    needs: verify-container
     runs-on: ubuntu-latest
     container: ghcr.io/railwayapp/cli:latest
     env:

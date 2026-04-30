@@ -187,3 +187,49 @@ func TestHolidayDefinitionRepository_List_Empty(t *testing.T) {
 		t.Errorf("List() returned %d items, want 0", len(defs))
 	}
 }
+
+func TestHolidayDefinitionRepository_Create_WithDepartments(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	repo := NewHolidayDefinitionRepository()
+	ctx := context.Background()
+
+	deptUID := domain.GenerateUID("dep")
+	if _, err := tdb.db.ExecContext(ctx, `INSERT INTO departments (uid, code, name_en, is_active) VALUES (?, ?, ?, 1)`, deptUID, "FINANCE", "Finance"); err != nil {
+		t.Fatalf("failed to seed department: %v", err)
+	}
+
+	def := &domain.HolidayDefinition{
+		UID:            domain.GenerateUID("hdef"),
+		Code:           "FINANCE_DAY",
+		NameEN:         "Finance Day",
+		NameAR:         "يوم المالية",
+		Date:           time.Date(2026, time.March, 11, 0, 0, 0, 0, time.UTC),
+		IsManual:       true,
+		DepartmentUIDs: []string{deptUID},
+	}
+
+	if err := repo.Create(ctx, tdb.SQLiteDB, def); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	found, err := repo.GetByID(ctx, tdb.SQLiteDB, def.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if found == nil {
+		t.Fatal("GetByID() returned nil")
+	}
+	if len(found.DepartmentUIDs) != 1 || found.DepartmentUIDs[0] != deptUID {
+		t.Fatalf("unexpected departments: %+v", found.DepartmentUIDs)
+	}
+
+	defs, err := repo.ListByDateRangeForDepartment(ctx, tdb.SQLiteDB, def.Date.AddDate(0, 0, -1), def.Date.AddDate(0, 0, 1), deptUID)
+	if err != nil {
+		t.Fatalf("ListByDateRangeForDepartment() error = %v", err)
+	}
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 scoped holiday, got %d", len(defs))
+	}
+}

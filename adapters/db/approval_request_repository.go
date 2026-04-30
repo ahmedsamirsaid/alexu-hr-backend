@@ -66,13 +66,13 @@ func (r *ApprovalRequestRepository) Create(ctx context.Context, q ports.Querier,
 func (r *ApprovalRequestRepository) Update(ctx context.Context, q ports.Querier, request *domain.ApprovalRequest) error {
 	query := `
 		UPDATE approval_requests
-		SET current_step = ?, status = ?, updated_at = ?
+		SET approval_flow_uid = ?, current_step = ?, max_step = ?, status = ?, updated_at = ?
 		WHERE id = ?`
 
 	request.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
-		request.CurrentStep, request.Status, request.UpdatedAt, request.ID)
+		request.ApprovalFlowUID, request.CurrentStep, request.MaxStep, request.Status, request.UpdatedAt, request.ID)
 	if err != nil {
 		slog.Error("approval_request_repository.Update.exec_query", "error", err, "id", request.ID, "uid", request.UID)
 	}

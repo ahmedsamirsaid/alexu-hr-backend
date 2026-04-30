@@ -1,13 +1,27 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type EmployeeStatus string
+type EmployeeType string
+type EmployeeSubType string
 
 const (
 	EmployeeStatusActive     EmployeeStatus = "active"
 	EmployeeStatusInactive   EmployeeStatus = "inactive"
 	EmployeeStatusTerminated EmployeeStatus = "terminated"
+
+	EmployeeTypePermanent EmployeeType = "permanent"
+	EmployeeTypeTemporary EmployeeType = "temporary"
+
+	EmployeeSubTypeNormal                         EmployeeSubType = "normal"
+	EmployeeSubTypeSpecialNeeds                   EmployeeSubType = "special_needs"
+	EmployeeSubTypeSeparationTerminationForBudget EmployeeSubType = "separation_termination_for_budget"
+	EmployeeSubTypeComprehensiveBonus             EmployeeSubType = "comprehensive_bonus"
+	EmployeeSubTypeContractEmployees              EmployeeSubType = "contract_employees"
 )
 
 type Employee struct {
@@ -20,6 +34,8 @@ type Employee struct {
 	Email         *string
 	HireDate      time.Time
 	Status        EmployeeStatus
+	Type          EmployeeType
+	SubType       EmployeeSubType
 	DepartmentUID *string
 	ShiftUID      *string
 	CreatedAt     time.Time
@@ -35,5 +51,68 @@ func NewEmployee(name, mobile, governmentID, universityID string, hireDate time.
 		UniversityID: universityID,
 		HireDate:     hireDate,
 		Status:       EmployeeStatusActive,
+		Type:         EmployeeTypePermanent,
+		SubType:      EmployeeSubTypeNormal,
 	}
+}
+
+func (e *Employee) ApplyClassificationDefaults() {
+	if e.Type == "" {
+		e.Type = EmployeeTypePermanent
+	}
+	if e.SubType != "" {
+		return
+	}
+	switch e.Type {
+	case EmployeeTypeTemporary:
+		e.SubType = EmployeeSubTypeContractEmployees
+	default:
+		e.SubType = EmployeeSubTypeNormal
+	}
+}
+
+func NormalizeEmployeeType(value string) EmployeeType {
+	switch normalizeEmployeeClassificationValue(value) {
+	case "permanent", "permenant":
+		return EmployeeTypePermanent
+	case "temporary":
+		return EmployeeTypeTemporary
+	default:
+		return ""
+	}
+}
+
+func NormalizeEmployeeSubType(value string) EmployeeSubType {
+	switch normalizeEmployeeClassificationValue(value) {
+	case "normal":
+		return EmployeeSubTypeNormal
+	case "specialneeds", "special_needs":
+		return EmployeeSubTypeSpecialNeeds
+	case "separationterminationforbudget", "separation_termination_for_budget":
+		return EmployeeSubTypeSeparationTerminationForBudget
+	case "comprehensivebonus", "comprehensive_bonus", "omprehensivebonus", "omprehensive_bonus":
+		return EmployeeSubTypeComprehensiveBonus
+	case "contractemployee", "contractemployees", "contract_employee", "contract_employees":
+		return EmployeeSubTypeContractEmployees
+	default:
+		return ""
+	}
+}
+
+func IsValidEmployeeSubTypeForType(employeeType EmployeeType, subType EmployeeSubType) bool {
+	switch employeeType {
+	case EmployeeTypePermanent:
+		return subType == EmployeeSubTypeNormal || subType == EmployeeSubTypeSpecialNeeds
+	case EmployeeTypeTemporary:
+		return subType == EmployeeSubTypeSeparationTerminationForBudget ||
+			subType == EmployeeSubTypeComprehensiveBonus ||
+			subType == EmployeeSubTypeContractEmployees
+	default:
+		return false
+	}
+}
+
+func normalizeEmployeeClassificationValue(value string) string {
+	replacer := strings.NewReplacer(" ", "", "-", "", "_", "", "/", "")
+	return replacer.Replace(strings.ToLower(strings.TrimSpace(value)))
 }

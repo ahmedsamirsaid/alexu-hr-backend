@@ -24,13 +24,17 @@ type ApprovalRequest struct {
 }
 
 func NewApprovalRequest(approvalFlowUID, requesterUID string, maxStep int) *ApprovalRequest {
+	return NewApprovalRequestWithState(approvalFlowUID, requesterUID, 1, maxStep, ApprovalRequestStatusPending)
+}
+
+func NewApprovalRequestWithState(approvalFlowUID, requesterUID string, currentStep, maxStep int, status ApprovalRequestStatus) *ApprovalRequest {
 	return &ApprovalRequest{
 		UID:             GenerateUID("apr"),
 		ApprovalFlowUID: approvalFlowUID,
 		RequesterUID:    requesterUID,
-		CurrentStep:     1,
+		CurrentStep:     currentStep,
 		MaxStep:         maxStep,
-		Status:          ApprovalRequestStatusPending,
+		Status:          status,
 	}
 }
 

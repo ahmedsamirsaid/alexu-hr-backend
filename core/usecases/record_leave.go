@@ -10,13 +10,15 @@ import (
 )
 
 var (
-	ErrEmployeeNotFound        = errors.New("employee not found")
-	ErrLeaveTypeNotFound       = errors.New("leave type not found")
-	ErrInsufficientBalance     = errors.New("insufficient leave balance")
-	ErrExceedsConsecutiveDays  = errors.New("exceeds maximum consecutive days")
-	ErrRecordingDeadlinePassed = errors.New("recording deadline has passed")
-	ErrInvalidDateRange        = errors.New("invalid date range")
-	ErrNoWorkingDays           = errors.New("no working days")
+	ErrEmployeeNotFound                     = errors.New("employee not found")
+	ErrLeaveTypeNotFound                    = errors.New("leave type not found")
+	ErrSubLeaveTypeNotFound                 = errors.New("sub leave type not found")
+	ErrSubLeaveTypeDoesNotBelongToLeaveType = errors.New("sub leave type does not belong to leave type")
+	ErrInsufficientBalance                  = errors.New("insufficient leave balance")
+	ErrExceedsConsecutiveDays               = errors.New("exceeds maximum consecutive days")
+	ErrRecordingDeadlinePassed              = errors.New("recording deadline has passed")
+	ErrInvalidDateRange                     = errors.New("invalid date range")
+	ErrNoWorkingDays                        = errors.New("no working days")
 )
 
 type RecordLeaveInput struct {
@@ -121,9 +123,22 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 			continue
 		}
 
-		balance, err := uc.getOrCreateBalance(ctx, tx, employee.ID, leaveType, period.Year)
+		balance, created, err := uc.getOrCreateBalance(ctx, tx, employee, leaveType, period.Year, period.Start)
 		if err != nil {
 			return nil, err
+		}
+		if created {
+			initialTx := domain.NewLeaveBalanceTransaction(
+				balance.ID,
+				domain.TransactionTypeInitial,
+				balance.TotalDays,
+				nil,
+				nil,
+				nil,
+			)
+			if err := uc.balanceTxRepo.Create(ctx, tx, initialTx); err != nil {
+				return nil, err
+			}
 		}
 
 		remaining := balance.TotalDays - balance.UsedDays
@@ -206,32 +221,6 @@ func (uc *RecordLeaveUseCase) splitByYear(start, end time.Time) []datePeriod {
 	return periods
 }
 
-func (uc *RecordLeaveUseCase) getOrCreateBalance(ctx context.Context, q ports.Querier, employeeID int64, leaveType *domain.LeaveType, year int) (*domain.LeaveBalance, error) {
-	balance, err := uc.leaveBalanceRepo.GetByEmployeeAndTypeAndYear(ctx, q, employeeID, leaveType.ID, year)
-	if err != nil {
-		return nil, err
-	}
-
-	if balance != nil {
-		return balance, nil
-	}
-
-	balance = domain.NewLeaveBalance(employeeID, leaveType.ID, year, leaveType.DefaultBalance)
-	if err := uc.leaveBalanceRepo.Create(ctx, q, balance); err != nil {
-		return nil, err
-	}
-
-	initialTx := domain.NewLeaveBalanceTransaction(
-		balance.ID,
-		domain.TransactionTypeInitial,
-		leaveType.DefaultBalance,
-		nil,
-		nil,
-		nil,
-	)
-	if err := uc.balanceTxRepo.Create(ctx, q, initialTx); err != nil {
-		return nil, err
-	}
-
-	return balance, nil
+func (uc *RecordLeaveUseCase) getOrCreateBalance(ctx context.Context, q ports.Querier, employee *domain.Employee, leaveType *domain.LeaveType, year int, asOf time.Time) (*domain.LeaveBalance, bool, error) {
+	return ensureLeaveBalance(ctx, q, uc.leaveBalanceRepo, employee, leaveType, year, asOf)
 }

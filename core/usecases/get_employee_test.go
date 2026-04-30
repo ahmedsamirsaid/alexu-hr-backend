@@ -22,6 +22,8 @@ func TestGetEmployeeUseCase_Execute(t *testing.T) {
 		Email:        &email,
 		HireDate:     time.Date(2020, 1, 15, 0, 0, 0, 0, time.UTC),
 		Status:       domain.EmployeeStatusActive,
+		Type:         domain.EmployeeTypePermanent,
+		SubType:      domain.EmployeeSubTypeNormal,
 	}
 
 	tests := []struct {
@@ -95,6 +97,12 @@ func TestGetEmployeeUseCase_Execute(t *testing.T) {
 			}
 			if output.Status != tt.employee.Status {
 				t.Errorf("expected Status %s, got %s", tt.employee.Status, output.Status)
+			}
+			if output.Type != tt.employee.Type {
+				t.Errorf("expected Type %s, got %s", tt.employee.Type, output.Type)
+			}
+			if output.SubType != tt.employee.SubType {
+				t.Errorf("expected SubType %s, got %s", tt.employee.SubType, output.SubType)
 			}
 		})
 	}

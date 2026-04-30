@@ -4,6 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/banumusa/backend/adapters/db"
 	httpAdapter "github.com/banumusa/backend/adapters/http"
 	"github.com/banumusa/backend/adapters/legacy"
@@ -16,6 +23,10 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"log/slog"
 	"net/http"
 	"os"
@@ -78,11 +89,13 @@ func main() {
 	approvalRequestRepo := db.NewApprovalRequestRepository()
 	approvalActionRepo := db.NewApprovalActionRepository()
 	leaveRequestRepo := db.NewLeaveRequestRepository()
+	leaveRequestDocumentRepo := db.NewLeaveRequestDocumentRepository()
 
 	deviceTokenRepo := db.NewDeviceTokenRepository()
 	attendanceReminderRepo := db.NewAttendanceReminderRepository()
 
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
+	attendanceEditHistoryRepo := db.NewAttendanceEditHistoryRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
 
@@ -159,6 +172,7 @@ func main() {
 	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
 
 	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
+	getApprovalFlowUC := usecases.NewGetApprovalFlowUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo)
 	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
@@ -174,22 +188,38 @@ func main() {
 	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
 
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
+	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
 	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIOUploadExpiryMinutes,
+	)
+	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
+		minioService,
+		cfg.MinIODocumentsBucket,
+		cfg.MinIODownloadExpiryMinutes,
+	)
+	updateHolidayUC := usecases.NewUpdateHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo)
+	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(sqliteDB, holidayDefinitionRepo)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
-		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, workingDaysCalc,
+		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
+		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc, generateDocumentUploadURLUC,
 		notificationService, roleRepo,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo,
 	)
-	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo)
+	updateRejectedLeaveRequestUC := usecases.NewUpdateRejectedLeaveRequestUseCase(
+		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC,
+	)
+	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo,
+		sqliteDB, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo, generateDocumentDownloadURLUC,
 	)
 
 	listPendingApprovalsUC := usecases.NewListPendingApprovalsUseCase(
@@ -232,8 +262,9 @@ func main() {
 	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
-	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo)
+	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo, attendanceDeviceRepo)
+	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo, attendanceDeviceRepo)
+	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, attendanceEditHistoryRepo, employeeRepo)
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
 		sqliteDB,
 		attendanceRecordRepo,
@@ -246,6 +277,7 @@ func main() {
 		},
 	)
 	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
+
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
@@ -273,11 +305,11 @@ func main() {
 	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, setRoleScopeUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
 	approvalFlowHandler := httpAdapter.NewApprovalFlowHandler(
-		listApprovalFlowsUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
+		listApprovalFlowsUC, getApprovalFlowUC, createApprovalFlowUC, updateApprovalFlowUC, listApprovalFlowStepsUC,
 		createApprovalFlowStepUC, updateApprovalFlowStepUC, deleteApprovalFlowStepUC,
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
-		submitLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
+		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
 		listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
@@ -296,9 +328,9 @@ func main() {
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,
 	)
-	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, toggleLeaveTypeUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, listSubLeaveTypesUC, toggleLeaveTypeUC)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
-	holidayHandler := httpAdapter.NewHolidayHandler(listHolidaysUC, listWeekendDaysUC, createManualHolidayUC)
+	holidayHandler := httpAdapter.NewHolidayHandler(sqliteDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
 	debugHandler := httpAdapter.NewDebugHandler(sendTestPushUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(
@@ -308,6 +340,7 @@ func main() {
 		listDailyEmployeeAttendanceLogsUC,
 		createAttendanceLogUC,
 		updateAttendanceLogUC,
+		getAttendanceLogHistoryUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
 		httpAdapter.AttendanceReportDependencies{
@@ -316,17 +349,8 @@ func main() {
 			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
 		},
 	)
-	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIOUploadExpiryMinutes,
-	)
 
-	generateDocumentDownloadURLUC := usecases.NewGenerateDocumentDownloadURLUseCase(
-		minioService,
-		cfg.MinIODocumentsBucket,
-		cfg.MinIODownloadExpiryMinutes,
-	)
+
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,
 		generateDocumentDownloadURLUC,
@@ -401,6 +425,10 @@ func main() {
 }
 
 func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
+	if err := reconcileMigrationVersion(sqlDB, migrationsPath); err != nil {
+		return fmt.Errorf("failed to reconcile migration version: %w", err)
+	}
+
 	driver, err := sqlite.WithInstance(sqlDB, &sqlite.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
@@ -420,4 +448,102 @@ func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
 	}
 
 	return nil
+}
+
+func reconcileMigrationVersion(sqlDB *sql.DB, migrationsPath string) error {
+	currentVersion, dirty, hasVersion, err := readSchemaMigrationVersion(sqlDB)
+	if err != nil || !hasVersion || dirty {
+		return err
+	}
+
+	versions, err := listMigrationVersions(migrationsPath)
+	if err != nil {
+		return err
+	}
+	if len(versions) == 0 {
+		return nil
+	}
+
+	if _, ok := versions[currentVersion]; ok {
+		return nil
+	}
+
+	targetVersion, ok := legacyOrdinalToVersion(currentVersion, versions)
+	if !ok {
+		return nil
+	}
+
+	if _, err := sqlDB.Exec(`UPDATE schema_migrations SET version = ?`, targetVersion); err != nil {
+		return err
+	}
+
+	slog.Info("main.main.reconciled_migration_version", "from", currentVersion, "to", targetVersion)
+	return nil
+}
+
+func readSchemaMigrationVersion(sqlDB *sql.DB) (version uint64, dirty bool, hasVersion bool, err error) {
+	var count int
+	if err = sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&count); err != nil {
+		return 0, false, false, err
+	}
+	if count == 0 {
+		return 0, false, false, nil
+	}
+
+	err = sqlDB.QueryRow(`SELECT version, dirty FROM schema_migrations LIMIT 1`).Scan(&version, &dirty)
+	if err == sql.ErrNoRows {
+		return 0, false, false, nil
+	}
+	if err != nil {
+		return 0, false, false, err
+	}
+
+	return version, dirty, true, nil
+}
+
+func listMigrationVersions(migrationsPath string) (map[uint64]struct{}, error) {
+	entries, err := os.ReadDir(migrationsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make(map[uint64]struct{})
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if filepath.Ext(name) != ".sql" || (!strings.HasSuffix(name, ".up.sql") && !strings.HasSuffix(name, ".down.sql")) {
+			continue
+		}
+
+		prefix, _, found := strings.Cut(name, "_")
+		if !found {
+			continue
+		}
+
+		version, err := strconv.ParseUint(prefix, 10, 64)
+		if err != nil {
+			continue
+		}
+
+		versions[version] = struct{}{}
+	}
+
+	return versions, nil
+}
+
+func legacyOrdinalToVersion(legacyVersion uint64, versions map[uint64]struct{}) (uint64, bool) {
+	ordered := make([]uint64, 0, len(versions))
+	for version := range versions {
+		ordered = append(ordered, version)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i] < ordered[j] })
+
+	if legacyVersion == 0 || legacyVersion > uint64(len(ordered)) {
+		return 0, false
+	}
+
+	return ordered[legacyVersion-1], true
 }

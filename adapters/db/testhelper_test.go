@@ -78,6 +78,13 @@ func (tdb *TestDB) clearSeedData() {
 
 	// Clear seed data tables (order matters for foreign keys)
 	tables := []string{
+		"leave_request_documents",
+		"sub_leave_types",
+		"leave_requests",
+		"approval_actions",
+		"approval_requests",
+		"approval_flow_steps",
+		"approval_flows",
 		"user_roles",
 		"role_permissions",
 		"refresh_tokens",
@@ -213,6 +220,37 @@ func (tdb *TestDB) SeedLeaveType(code, nameEN, nameAR string, defaultBalance int
 	lt.UpdatedAt = now
 
 	return lt
+}
+
+func (tdb *TestDB) SeedSubLeaveType(leaveTypeUID, nameEN, nameAR string) *domain.SubLeaveType {
+	tdb.t.Helper()
+
+	subLeaveType := &domain.SubLeaveType{
+		UID:          domain.GenerateUID("slt"),
+		LeaveTypeUID: leaveTypeUID,
+		NameEN:       nameEN,
+		NameAR:       nameAR,
+	}
+
+	ctx := context.Background()
+	now := time.Now()
+	_, err := tdb.db.ExecContext(ctx, `
+		INSERT INTO sub_leave_types (uid, leave_type_uid, name_en, name_ar, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		subLeaveType.UID, subLeaveType.LeaveTypeUID, subLeaveType.NameEN, subLeaveType.NameAR, now, now)
+	if err != nil {
+		tdb.t.Fatalf("failed to seed sub leave type: %v", err)
+	}
+
+	row := tdb.db.QueryRowContext(ctx, "SELECT id FROM sub_leave_types WHERE uid = ?", subLeaveType.UID)
+	if err := row.Scan(&subLeaveType.ID); err != nil {
+		tdb.t.Fatalf("failed to get sub leave type ID: %v", err)
+	}
+
+	subLeaveType.CreatedAt = now
+	subLeaveType.UpdatedAt = now
+
+	return subLeaveType
 }
 
 // SeedLeaveBalance creates a test leave balance and returns it

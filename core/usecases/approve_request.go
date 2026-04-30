@@ -96,7 +96,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		return nil, ErrApprovalFlowStepNotFound
 	}
 
-	// Get the requester to check their department
 	requester, err := uc.employeeRepo.GetByUID(ctx, tx, approvalRequest.RequesterUID)
 	if err != nil {
 		return nil, err
@@ -157,15 +156,9 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 		// Get or create balance
 		year := leaveRequest.StartDate.Year()
-		balance, err := uc.leaveBalanceRepo.GetByEmployeeAndTypeAndYear(ctx, tx, requester.ID, leaveType.ID, year)
+		balance, _, err := ensureLeaveBalance(ctx, tx, uc.leaveBalanceRepo, requester, leaveType, year, leaveRequest.StartDate)
 		if err != nil {
 			return nil, err
-		}
-		if balance == nil {
-			balance = domain.NewLeaveBalance(requester.ID, leaveType.ID, year, leaveType.DefaultBalance)
-			if err := uc.leaveBalanceRepo.Create(ctx, tx, balance); err != nil {
-				return nil, err
-			}
 		}
 
 		// Re-check balance at approval time

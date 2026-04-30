@@ -310,6 +310,8 @@ func createTestEmployees() []*domain.Employee {
 			Email:        &email,
 			HireDate:     time.Date(2020, 1, 15, 0, 0, 0, 0, time.UTC),
 			Status:       domain.EmployeeStatusActive,
+			Type:         domain.EmployeeTypePermanent,
+			SubType:      domain.EmployeeSubTypeNormal,
 		},
 		{
 			ID:           2,
@@ -320,6 +322,8 @@ func createTestEmployees() []*domain.Employee {
 			UniversityID: "EMP002",
 			HireDate:     time.Date(2021, 6, 1, 0, 0, 0, 0, time.UTC),
 			Status:       domain.EmployeeStatusActive,
+			Type:         domain.EmployeeTypeTemporary,
+			SubType:      domain.EmployeeSubTypeContractEmployees,
 		},
 	}
 }
@@ -337,10 +341,10 @@ func TestImportEmployees_Integration_Success(t *testing.T) {
 	getUC := usecases.NewGetEmployeeUseCase(db, repo)
 	handler := NewEmployeeHandler(getUC, listUC, importUC, exportUC, exportPDFUC, templateUC, nil, nil)
 
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active"},
-		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active"},
+		{"أحمد محمد", "01012345678", "28501011234567", "EMP001", "ahmed@test.com", "2024-01-15", "active", "permanent", "normal"},
+		{"فاطمة علي", "01098765432", "29002021234567", "EMP002", "", "2024-03-01", "active", "temporary", "contract_employees"},
 	}
 	excelData := createTestExcel(t, headers, rows)
 
@@ -383,9 +387,9 @@ func TestImportEmployees_Integration_ValidationErrors(t *testing.T) {
 	getUC := usecases.NewGetEmployeeUseCase(db, repo)
 	handler := NewEmployeeHandler(getUC, listUC, importUC, exportUC, exportPDFUC, templateUC, nil, nil)
 
-	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status"}
+	headers := []string{"name", "mobile", "government_id", "university_id", "email", "hire_date", "status", "type", "sub_type"}
 	rows := [][]string{
-		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active"}, // Missing name
+		{"", "01012345678", "28501011234567", "EMP001", "", "2024-01-15", "active", "permanent", "normal"}, // Missing name
 	}
 	excelData := createTestExcel(t, headers, rows)
 

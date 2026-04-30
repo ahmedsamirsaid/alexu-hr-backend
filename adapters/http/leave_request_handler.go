@@ -15,6 +15,7 @@ import (
 // LeaveRequestHandler handles leave request HTTP requests.
 type LeaveRequestHandler struct {
 	submitUC               *usecases.SubmitLeaveRequestUseCase
+	updateRejectedUC       *usecases.UpdateRejectedLeaveRequestUseCase
 	cancelUC               *usecases.CancelLeaveRequestUseCase
 	listUC                 *usecases.ListLeaveRequestsUseCase
 	getUC                  *usecases.GetLeaveRequestUseCase
@@ -27,6 +28,7 @@ type LeaveRequestHandler struct {
 
 func NewLeaveRequestHandler(
 	submitUC *usecases.SubmitLeaveRequestUseCase,
+	updateRejectedUC *usecases.UpdateRejectedLeaveRequestUseCase,
 	cancelUC *usecases.CancelLeaveRequestUseCase,
 	listUC *usecases.ListLeaveRequestsUseCase,
 	getUC *usecases.GetLeaveRequestUseCase,
@@ -38,6 +40,7 @@ func NewLeaveRequestHandler(
 ) *LeaveRequestHandler {
 	return &LeaveRequestHandler{
 		submitUC:               submitUC,
+		updateRejectedUC:       updateRejectedUC,
 		cancelUC:               cancelUC,
 		listUC:                 listUC,
 		getUC:                  getUC,
@@ -52,10 +55,45 @@ func NewLeaveRequestHandler(
 // Request types
 
 type SubmitLeaveRequestRequest struct {
-	LeaveTypeUID string  `json:"leaveTypeUid"`
-	StartDate    string  `json:"startDate"`
-	EndDate      string  `json:"endDate"`
-	Notes        *string `json:"notes,omitempty"`
+	LeaveTypeUID        string                           `json:"leaveTypeUid"`
+	SubLeaveTypeUID     *string                          `json:"subLeaveTypeUid,omitempty"`
+	SubLeaveTypeUIDV2   *string                          `json:"sub_leave_type_uid,omitempty"`
+	OtherSubLeaveName   *string                          `json:"otherSubLeaveName,omitempty"`
+	OtherSubLeaveNameV2 *string                          `json:"other_sub_leave_name,omitempty"`
+	StartDate           string                           `json:"startDate"`
+	EndDate             string                           `json:"endDate"`
+	Notes               *string                          `json:"notes,omitempty"`
+	StudyDestination    *string                          `json:"studyDestination,omitempty"`
+	StudyDestinationV2  *string                          `json:"study_destination,omitempty"`
+	Assignment          *string                          `json:"assignment,omitempty"`
+	AssignmentCountry   *string                          `json:"assignmentCountry,omitempty"`
+	AssignmentCountryV2 *string                          `json:"assignment_country,omitempty"`
+	SpouseWorkCountry   *string                          `json:"spouseWorkCountry,omitempty"`
+	SpouseWorkCountryV2 *string                          `json:"spouse_work_country,omitempty"`
+	DocumentsAttached   bool                             `json:"documents_attached"`
+	Documents           []SubmitLeaveRequestDocumentItem `json:"documents,omitempty"`
+}
+
+type SubmitLeaveRequestDocumentItem struct {
+	FileName    string `json:"fileName"`
+	ContentType string `json:"contentType"`
+}
+
+type UpdateLeaveRequestRequest struct {
+	LeaveTypeUID        *string                          `json:"leaveTypeUid,omitempty"`
+	SubLeaveTypeUID     *string                          `json:"subLeaveTypeUid,omitempty"`
+	SubLeaveTypeUIDV2   *string                          `json:"sub_leave_type_uid,omitempty"`
+	StartDate           *string                          `json:"startDate,omitempty"`
+	EndDate             *string                          `json:"endDate,omitempty"`
+	Notes               *string                          `json:"notes,omitempty"`
+	StudyDestination    *string                          `json:"studyDestination,omitempty"`
+	StudyDestinationV2  *string                          `json:"study_destination,omitempty"`
+	Assignment          *string                          `json:"assignment,omitempty"`
+	AssignmentCountry   *string                          `json:"assignmentCountry,omitempty"`
+	AssignmentCountryV2 *string                          `json:"assignment_country,omitempty"`
+	SpouseWorkCountry   *string                          `json:"spouseWorkCountry,omitempty"`
+	SpouseWorkCountryV2 *string                          `json:"spouse_work_country,omitempty"`
+	Documents           []SubmitLeaveRequestDocumentItem `json:"documents,omitempty"`
 }
 
 type ApprovalActionRequest struct {
@@ -65,21 +103,39 @@ type ApprovalActionRequest struct {
 // Response types
 
 type LeaveRequestResponse struct {
-	UID             string  `json:"uid"`
-	EmployeeUID     string  `json:"employeeUid"`
-	EmployeeName    string  `json:"employeeName,omitempty"`
-	LeaveTypeUID    string  `json:"leaveTypeUid"`
-	LeaveTypeNameEN string  `json:"leaveTypeNameEn,omitempty"`
-	LeaveTypeNameAR string  `json:"leaveTypeNameAr,omitempty"`
-	StartDate       string  `json:"startDate"`
-	EndDate         string  `json:"endDate"`
-	Days            int     `json:"days"`
-	Notes           *string `json:"notes,omitempty"`
-	Status          string  `json:"status"`
-	CurrentStep     int     `json:"currentStep"`
-	MaxStep         int     `json:"maxStep"`
-	SubmittedAt     string  `json:"submittedAt"`
-	DecidedAt       *string `json:"decidedAt,omitempty"`
+	UID                string                               `json:"uid"`
+	ApprovalRequestUID string                               `json:"approvalRequestUid"`
+	EmployeeUID        string                               `json:"employeeUid"`
+	EmployeeName       string                               `json:"employeeName,omitempty"`
+	LeaveTypeUID       string                               `json:"leaveTypeUid"`
+	LeaveTypeNameEN    string                               `json:"leaveTypeNameEn,omitempty"`
+	LeaveTypeNameAR    string                               `json:"leaveTypeNameAr,omitempty"`
+	SubLeaveTypeUID    *string                              `json:"subLeaveTypeUid,omitempty"`
+	OtherSubLeaveName  *string                              `json:"otherSubLeaveName,omitempty"`
+	SubLeaveTypeNameEN string                               `json:"subLeaveTypeNameEn,omitempty"`
+	SubLeaveTypeNameAR string                               `json:"subLeaveTypeNameAr,omitempty"`
+	StartDate          string                               `json:"startDate"`
+	EndDate            string                               `json:"endDate"`
+	Days               int                                  `json:"days"`
+	Notes              *string                              `json:"notes,omitempty"`
+	StudyDestination   *string                              `json:"studyDestination,omitempty"`
+	Assignment         *string                              `json:"assignment,omitempty"`
+	AssignmentCountry  *string                              `json:"assignmentCountry,omitempty"`
+	SpouseWorkCountry  *string                              `json:"spouseWorkCountry,omitempty"`
+	Status             string                               `json:"status"`
+	CurrentStep        int                                  `json:"currentStep"`
+	MaxStep            int                                  `json:"maxStep"`
+	SubmittedAt        string                               `json:"submittedAt"`
+	DecidedAt          *string                              `json:"decidedAt,omitempty"`
+	Documents          []LeaveRequestDocumentUploadResponse `json:"documents,omitempty"`
+}
+
+type LeaveRequestDocumentUploadResponse struct {
+	FileName  string `json:"fileName"`
+	URL       string `json:"url"`
+	Method    string `json:"method"`
+	Bucket    string `json:"bucket"`
+	ObjectKey string `json:"objectKey"`
 }
 
 type ListLeaveRequestsResponse struct {
@@ -91,6 +147,7 @@ type ListLeaveRequestsResponse struct {
 
 type PendingApprovalResponse struct {
 	UID             string  `json:"uid"`
+	LeaveRequestUID string  `json:"leaveRequestUid"`
 	RequesterUID    string  `json:"requesterUid"`
 	RequesterName   string  `json:"requesterName"`
 	LeaveTypeUID    string  `json:"leaveTypeUid"`
@@ -163,11 +220,26 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 	}
 
 	input := usecases.SubmitLeaveRequestInput{
-		EmployeeUID:  *currentUser.EmployeeUID,
-		LeaveTypeUID: req.LeaveTypeUID,
-		StartDate:    startDate,
-		EndDate:      endDate,
-		Notes:        req.Notes,
+		UserUID:           claims.UserUID,
+		EmployeeUID:       *currentUser.EmployeeUID,
+		LeaveTypeUID:      req.LeaveTypeUID,
+		SubLeaveTypeUID:   firstNonNilString(req.SubLeaveTypeUID, req.SubLeaveTypeUIDV2),
+		OtherSubLeaveName: firstNonNilString(req.OtherSubLeaveName, req.OtherSubLeaveNameV2),
+		StartDate:         startDate,
+		EndDate:           endDate,
+		Notes:             req.Notes,
+		StudyDestination:  firstNonNilString(req.StudyDestination, req.StudyDestinationV2),
+		Assignment:        req.Assignment,
+		AssignmentCountry: firstNonNilString(req.AssignmentCountry, req.AssignmentCountryV2),
+		SpouseWorkCountry: firstNonNilString(req.SpouseWorkCountry, req.SpouseWorkCountryV2),
+		DocumentsAttached: req.DocumentsAttached,
+		Documents:         make([]usecases.SubmitLeaveRequestDocumentInput, 0, len(req.Documents)),
+	}
+	for _, document := range req.Documents {
+		input.Documents = append(input.Documents, usecases.SubmitLeaveRequestDocumentInput{
+			FileName:    document.FileName,
+			ContentType: document.ContentType,
+		})
 	}
 
 	output, err := h.submitUC.Execute(r.Context(), input)
@@ -178,9 +250,15 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrLeaveTypeNotFound):
 			statusCode = http.StatusNotFound
+		case errors.Is(err, usecases.ErrSubLeaveTypeNotFound):
+			statusCode = http.StatusNotFound
+		case errors.Is(err, usecases.ErrSubLeaveTypeDoesNotBelongToLeaveType):
+			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrInsufficientBalance):
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrInvalidDateRange):
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrLeaveRequestOutsideDeadline):
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrExceedsConsecutiveDays):
 			statusCode = http.StatusBadRequest
@@ -188,6 +266,14 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrOverlappingRequest):
 			statusCode = http.StatusConflict
+		case errors.Is(err, usecases.ErrLeaveRequestDocumentsRequired):
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrLeaveRequestDocumentsUnsupported):
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrInvalidFilename):
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrInvalidContentType):
+			statusCode = http.StatusBadRequest
 		default:
 			slog.Error("leave_request_handler.SubmitLeaveRequest.execute_usecase", "error", err)
 		}
@@ -196,21 +282,33 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 	}
 
 	// Handle auto-approved leaves (no approval flow)
-	if output.LeaveRecord != nil {
-		decidedAt := time.Now().Format("2006-01-02T15:04:05Z")
+	if output.LeaveRecord != nil && output.LeaveRequest != nil && output.ApprovalRequest != nil {
+		var decidedAt *string
+		if output.LeaveRequest.DecidedAt != nil {
+			t := output.LeaveRequest.DecidedAt.Format("2006-01-02T15:04:05Z")
+			decidedAt = &t
+		}
 		writeJSON(w, http.StatusCreated, LeaveRequestResponse{
-			UID:          output.LeaveRecord.UID,
-			EmployeeUID:  *currentUser.EmployeeUID,
-			LeaveTypeUID: req.LeaveTypeUID,
-			StartDate:    output.LeaveRecord.StartDate.Format("2006-01-02"),
-			EndDate:      output.LeaveRecord.EndDate.Format("2006-01-02"),
-			Days:         output.LeaveRecord.Days,
-			Notes:        output.LeaveRecord.Notes,
-			Status:       "approved",
-			CurrentStep:  1,
-			MaxStep:      1,
-			SubmittedAt:  time.Now().Format("2006-01-02T15:04:05Z"),
-			DecidedAt:    &decidedAt,
+			UID:                output.LeaveRequest.UID,
+			ApprovalRequestUID: output.ApprovalRequest.UID,
+			EmployeeUID:        output.LeaveRequest.EmployeeUID,
+			LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
+			SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+			OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
+			StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
+			EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
+			Days:               output.LeaveRequest.Days,
+			Notes:              output.LeaveRequest.Notes,
+			StudyDestination:   output.LeaveRequest.StudyDestination,
+			Assignment:         output.LeaveRequest.Assignment,
+			AssignmentCountry:  output.LeaveRequest.AssignmentCountry,
+			SpouseWorkCountry:  output.LeaveRequest.SpouseWorkCountry,
+			Status:             string(output.ApprovalRequest.Status),
+			CurrentStep:        output.ApprovalRequest.CurrentStep,
+			MaxStep:            output.ApprovalRequest.MaxStep,
+			SubmittedAt:        output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+			DecidedAt:          decidedAt,
+			Documents:          toLeaveRequestDocumentResponses(output.Documents),
 		})
 		return
 	}
@@ -223,19 +321,54 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 	}
 
 	writeJSON(w, http.StatusCreated, LeaveRequestResponse{
-		UID:          output.LeaveRequest.UID,
-		EmployeeUID:  output.LeaveRequest.EmployeeUID,
-		LeaveTypeUID: output.LeaveRequest.LeaveTypeUID,
-		StartDate:    output.LeaveRequest.StartDate.Format("2006-01-02"),
-		EndDate:      output.LeaveRequest.EndDate.Format("2006-01-02"),
-		Days:         output.LeaveRequest.Days,
-		Notes:        output.LeaveRequest.Notes,
-		Status:       string(output.ApprovalRequest.Status),
-		CurrentStep:  output.ApprovalRequest.CurrentStep,
-		MaxStep:      output.ApprovalRequest.MaxStep,
-		SubmittedAt:  output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
-		DecidedAt:    decidedAt,
+		UID:               output.LeaveRequest.UID,
+		EmployeeUID:       output.LeaveRequest.EmployeeUID,
+		LeaveTypeUID:      output.LeaveRequest.LeaveTypeUID,
+		SubLeaveTypeUID:   output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName: output.LeaveRequest.OtherSubLeaveName,
+		StartDate:         output.LeaveRequest.StartDate.Format("2006-01-02"),
+		EndDate:           output.LeaveRequest.EndDate.Format("2006-01-02"),
+		Days:              output.LeaveRequest.Days,
+		Notes:             output.LeaveRequest.Notes,
+		StudyDestination:  output.LeaveRequest.StudyDestination,
+		Assignment:        output.LeaveRequest.Assignment,
+		AssignmentCountry: output.LeaveRequest.AssignmentCountry,
+		SpouseWorkCountry: output.LeaveRequest.SpouseWorkCountry,
+		Status:            string(output.ApprovalRequest.Status),
+		CurrentStep:       output.ApprovalRequest.CurrentStep,
+		MaxStep:           output.ApprovalRequest.MaxStep,
+		SubmittedAt:       output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+		DecidedAt:         decidedAt,
+		Documents:         toLeaveRequestDocumentResponses(output.Documents),
 	})
+}
+
+func toLeaveRequestDocumentResponses(documents []usecases.SubmitLeaveRequestDocumentOutput) []LeaveRequestDocumentUploadResponse {
+	if len(documents) == 0 {
+		return nil
+	}
+
+	response := make([]LeaveRequestDocumentUploadResponse, 0, len(documents))
+	for _, document := range documents {
+		response = append(response, LeaveRequestDocumentUploadResponse{
+			FileName:  document.FileName,
+			URL:       document.URL,
+			Method:    document.Method,
+			Bucket:    document.Bucket,
+			ObjectKey: document.ObjectKey,
+		})
+	}
+
+	return response
+}
+
+func firstNonNilString(values ...*string) *string {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 // CancelLeaveRequest handles POST /api/v1/leave-requests/{uid}/cancel
@@ -288,6 +421,126 @@ func (h *LeaveRequestHandler) CancelLeaveRequest(w http.ResponseWriter, r *http.
 	})
 }
 
+// UpdateRejectedLeaveRequest handles PATCH /api/v1/leave-requests/{uid}
+func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+
+	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+	if err != nil || currentUser.EmployeeUID == nil {
+		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		return
+	}
+
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	var req UpdateLeaveRequestRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		slog.Error("leave_request_handler.UpdateRejectedLeaveRequest.decode_request", "error", err)
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	var startDate *time.Time
+	if req.StartDate != nil {
+		parsed, err := time.Parse("2006-01-02", *req.StartDate)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid startDate format, expected YYYY-MM-DD")
+			return
+		}
+		startDate = &parsed
+	}
+
+	var endDate *time.Time
+	if req.EndDate != nil {
+		parsed, err := time.Parse("2006-01-02", *req.EndDate)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid endDate format, expected YYYY-MM-DD")
+			return
+		}
+		endDate = &parsed
+	}
+
+	input := usecases.UpdateRejectedLeaveRequestInput{
+		LeaveRequestUID:   uid,
+		ActorUserUID:      claims.UserUID,
+		ActorEmployeeUID:  *currentUser.EmployeeUID,
+		LeaveTypeUID:      req.LeaveTypeUID,
+		SubLeaveTypeUID:   firstNonNilString(req.SubLeaveTypeUID, req.SubLeaveTypeUIDV2),
+		StartDate:         startDate,
+		EndDate:           endDate,
+		Notes:             req.Notes,
+		StudyDestination:  firstNonNilString(req.StudyDestination, req.StudyDestinationV2),
+		Assignment:        req.Assignment,
+		AssignmentCountry: firstNonNilString(req.AssignmentCountry, req.AssignmentCountryV2),
+		SpouseWorkCountry: firstNonNilString(req.SpouseWorkCountry, req.SpouseWorkCountryV2),
+		Documents:         make([]usecases.SubmitLeaveRequestDocumentInput, 0, len(req.Documents)),
+	}
+	for _, document := range req.Documents {
+		input.Documents = append(input.Documents, usecases.SubmitLeaveRequestDocumentInput{
+			FileName:    document.FileName,
+			ContentType: document.ContentType,
+		})
+	}
+
+	output, err := h.updateRejectedUC.Execute(r.Context(), input)
+	if err != nil {
+		statusCode := http.StatusInternalServerError
+		switch {
+		case errors.Is(err, usecases.ErrLeaveRequestNotFound), errors.Is(err, usecases.ErrApprovalRequestNotFound), errors.Is(err, usecases.ErrLeaveRequestDocumentNotFound):
+			statusCode = http.StatusNotFound
+		case errors.Is(err, usecases.ErrNotRequestOwner):
+			statusCode = http.StatusForbidden
+		case errors.Is(err, usecases.ErrRequestNotRejected), errors.Is(err, usecases.ErrLeaveTypeNoApprovalRequired), errors.Is(err, usecases.ErrApprovalFlowMismatch):
+			statusCode = http.StatusBadRequest
+		case errors.Is(err, usecases.ErrInvalidDateRange), errors.Is(err, usecases.ErrNoWorkingDays), errors.Is(err, usecases.ErrOverlappingRequest), errors.Is(err, usecases.ErrNoDepartmentAssigned), errors.Is(err, usecases.ErrSubLeaveTypeNotFound), errors.Is(err, usecases.ErrSubLeaveTypeDoesNotBelongToLeaveType), errors.Is(err, usecases.ErrInvalidFilename), errors.Is(err, usecases.ErrInvalidContentType):
+			statusCode = http.StatusBadRequest
+		default:
+			slog.Error("leave_request_handler.UpdateRejectedLeaveRequest.execute_usecase", "error", err)
+		}
+		writeError(w, statusCode, err.Error())
+		return
+	}
+
+	var decidedAt *string
+	if output.LeaveRequest.DecidedAt != nil {
+		t := output.LeaveRequest.DecidedAt.Format("2006-01-02T15:04:05Z")
+		decidedAt = &t
+	}
+
+	resp := LeaveRequestResponse{
+		UID:                output.LeaveRequest.UID,
+		ApprovalRequestUID: output.LeaveRequest.ApprovalRequestUID,
+		EmployeeUID:        output.LeaveRequest.EmployeeUID,
+		LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
+		SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
+		StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
+		EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
+		Days:               output.LeaveRequest.Days,
+		Notes:              output.LeaveRequest.Notes,
+		StudyDestination:   output.LeaveRequest.StudyDestination,
+		Assignment:         output.LeaveRequest.Assignment,
+		AssignmentCountry:  output.LeaveRequest.AssignmentCountry,
+		SpouseWorkCountry:  output.LeaveRequest.SpouseWorkCountry,
+		Status:             string(output.ApprovalRequest.Status),
+		CurrentStep:        output.ApprovalRequest.CurrentStep,
+		MaxStep:            output.ApprovalRequest.MaxStep,
+		SubmittedAt:        output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+		DecidedAt:          decidedAt,
+		Documents:          toLeaveRequestDocumentResponses(output.Documents),
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
 // ListLeaveRequests handles GET /api/v1/leave-requests
 func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
@@ -297,6 +550,11 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 	}
 
 	var err error
+	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+	if err != nil || currentUser.EmployeeUID == nil {
+		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		return
+	}
 
 	page := 1
 	pageSize := 20
@@ -316,21 +574,8 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		Limit:  pageSize,
 		Offset: (page - 1) * pageSize,
 	}
-
-	if !claims.HasPermission("*") {
-		if claims.IsDepartmentScope() {
-			input.ManagedDepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
-		} else if claims.IsSelfScope() {
-			currentUser, currentUserErr := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-			if currentUserErr != nil || currentUser.EmployeeUID == nil {
-				writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
-				return
-			}
-
-			employeeUID := *currentUser.EmployeeUID
-			input.EmployeeUID = &employeeUID
-		}
-	}
+	employeeUID := *currentUser.EmployeeUID
+	input.EmployeeUID = &employeeUID
 
 	if status := r.URL.Query().Get("status"); status != "" {
 		s := domain.ApprovalRequestStatus(status)
@@ -353,18 +598,33 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		}
 
 		resp := LeaveRequestResponse{
-			UID:          req.LeaveRequest.UID,
-			EmployeeUID:  req.LeaveRequest.EmployeeUID,
-			LeaveTypeUID: req.LeaveRequest.LeaveTypeUID,
-			StartDate:    req.LeaveRequest.StartDate.Format("2006-01-02"),
-			EndDate:      req.LeaveRequest.EndDate.Format("2006-01-02"),
-			Days:         req.LeaveRequest.Days,
-			Notes:        req.LeaveRequest.Notes,
-			Status:       string(req.ApprovalRequest.Status),
-			CurrentStep:  req.ApprovalRequest.CurrentStep,
-			MaxStep:      req.ApprovalRequest.MaxStep,
-			SubmittedAt:  req.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
-			DecidedAt:    decidedAt,
+			UID:                req.LeaveRequest.UID,
+			ApprovalRequestUID: req.LeaveRequest.ApprovalRequestUID,
+			EmployeeUID:        req.LeaveRequest.EmployeeUID,
+			LeaveTypeUID:       req.LeaveRequest.LeaveTypeUID,
+			SubLeaveTypeUID:    req.LeaveRequest.SubLeaveTypeUID,
+			OtherSubLeaveName:  req.LeaveRequest.OtherSubLeaveName,
+			StartDate:          req.LeaveRequest.StartDate.Format("2006-01-02"),
+			EndDate:            req.LeaveRequest.EndDate.Format("2006-01-02"),
+			Days:               req.LeaveRequest.Days,
+			Notes:              req.LeaveRequest.Notes,
+			StudyDestination:   req.LeaveRequest.StudyDestination,
+			Assignment:         req.LeaveRequest.Assignment,
+			AssignmentCountry:  req.LeaveRequest.AssignmentCountry,
+			SpouseWorkCountry:  req.LeaveRequest.SpouseWorkCountry,
+			Status:             string(req.ApprovalRequest.Status),
+			CurrentStep:        req.ApprovalRequest.CurrentStep,
+			MaxStep:            req.ApprovalRequest.MaxStep,
+			SubmittedAt:        req.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+			DecidedAt:          decidedAt,
+		}
+		if req.LeaveType != nil {
+			resp.LeaveTypeNameEN = req.LeaveType.NameEN
+			resp.LeaveTypeNameAR = req.LeaveType.NameAR
+		}
+		if req.SubLeaveType != nil {
+			resp.SubLeaveTypeNameEN = req.SubLeaveType.NameEN
+			resp.SubLeaveTypeNameAR = req.SubLeaveType.NameAR
 		}
 
 		requests = append(requests, resp)
@@ -411,18 +671,26 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 	}
 
 	resp := LeaveRequestResponse{
-		UID:          output.LeaveRequest.UID,
-		EmployeeUID:  output.LeaveRequest.EmployeeUID,
-		LeaveTypeUID: output.LeaveRequest.LeaveTypeUID,
-		StartDate:    output.LeaveRequest.StartDate.Format("2006-01-02"),
-		EndDate:      output.LeaveRequest.EndDate.Format("2006-01-02"),
-		Days:         output.LeaveRequest.Days,
-		Notes:        output.LeaveRequest.Notes,
-		Status:       string(output.ApprovalRequest.Status),
-		CurrentStep:  output.ApprovalRequest.CurrentStep,
-		MaxStep:      output.ApprovalRequest.MaxStep,
-		SubmittedAt:  output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
-		DecidedAt:    decidedAt,
+		UID:                output.LeaveRequest.UID,
+		ApprovalRequestUID: output.LeaveRequest.ApprovalRequestUID,
+		EmployeeUID:        output.LeaveRequest.EmployeeUID,
+		LeaveTypeUID:       output.LeaveRequest.LeaveTypeUID,
+		SubLeaveTypeUID:    output.LeaveRequest.SubLeaveTypeUID,
+		OtherSubLeaveName:  output.LeaveRequest.OtherSubLeaveName,
+		StartDate:          output.LeaveRequest.StartDate.Format("2006-01-02"),
+		EndDate:            output.LeaveRequest.EndDate.Format("2006-01-02"),
+		Days:               output.LeaveRequest.Days,
+		Notes:              output.LeaveRequest.Notes,
+		StudyDestination:   output.LeaveRequest.StudyDestination,
+		Assignment:         output.LeaveRequest.Assignment,
+		AssignmentCountry:  output.LeaveRequest.AssignmentCountry,
+		SpouseWorkCountry:  output.LeaveRequest.SpouseWorkCountry,
+		Status:             string(output.ApprovalRequest.Status),
+		CurrentStep:        output.ApprovalRequest.CurrentStep,
+		MaxStep:            output.ApprovalRequest.MaxStep,
+		SubmittedAt:        output.LeaveRequest.SubmittedAt.Format("2006-01-02T15:04:05Z"),
+		DecidedAt:          decidedAt,
+		Documents:          toLeaveRequestDocumentResponses(output.Documents),
 	}
 
 	if output.Employee != nil {
@@ -431,6 +699,10 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 	if output.LeaveType != nil {
 		resp.LeaveTypeNameEN = output.LeaveType.NameEN
 		resp.LeaveTypeNameAR = output.LeaveType.NameAR
+	}
+	if output.SubLeaveType != nil {
+		resp.SubLeaveTypeNameEN = output.SubLeaveType.NameEN
+		resp.SubLeaveTypeNameAR = output.SubLeaveType.NameAR
 	}
 
 	if !claims.HasPermission("*") {
@@ -477,6 +749,7 @@ func (h *LeaveRequestHandler) ListPendingApprovals(w http.ResponseWriter, r *htt
 		}
 
 		if pa.LeaveRequest != nil {
+			resp.LeaveRequestUID = pa.LeaveRequest.UID
 			resp.LeaveTypeUID = pa.LeaveRequest.LeaveTypeUID
 			resp.StartDate = pa.LeaveRequest.StartDate.Format("2006-01-02")
 			resp.EndDate = pa.LeaveRequest.EndDate.Format("2006-01-02")

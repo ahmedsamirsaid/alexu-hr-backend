@@ -45,6 +45,7 @@ type AttendanceHandler struct {
 	listDailyEmployeeLogsUC   *usecases.ListDailyEmployeeAttendanceLogsUseCase
 	createLogUC               *usecases.CreateAttendanceLogUseCase
 	updateLogUC               *usecases.UpdateAttendanceLogUseCase
+	getLogHistoryUC           attendanceLogHistoryExecutor
 	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
 	getDepartmentReportUC     departmentAttendanceReportExecutor
@@ -59,6 +60,7 @@ func NewAttendanceHandler(
 	listDailyEmployeeLogsUC *usecases.ListDailyEmployeeAttendanceLogsUseCase,
 	createLogUC *usecases.CreateAttendanceLogUseCase,
 	updateLogUC *usecases.UpdateAttendanceLogUseCase,
+	getLogHistoryUC *usecases.GetAttendanceLogHistoryUseCase,
 	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
 	reportDeps ...AttendanceReportDependencies,
@@ -70,6 +72,7 @@ func NewAttendanceHandler(
 		listDailyEmployeeLogsUC:   listDailyEmployeeLogsUC,
 		createLogUC:               createLogUC,
 		updateLogUC:               updateLogUC,
+		getLogHistoryUC:           getLogHistoryUC,
 		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
 	}
@@ -82,16 +85,18 @@ func NewAttendanceHandler(
 }
 
 type createAttendanceLogRequest struct {
-	EmployeeUID string `json:"employeeUid"`
-	DeviceUID   string `json:"deviceUid"`
-	PunchedAt   string `json:"punchedAt"`
-	PunchType   string `json:"punchType"`
+	EmployeeUID string  `json:"employeeUid"`
+	DeviceUID   string  `json:"deviceUid"`
+	PunchedAt   string  `json:"punchedAt"`
+	PunchType   string  `json:"punchType"`
+	Reason      *string `json:"reason"`
 }
 
 type updateAttendanceLogRequest struct {
-	DeviceUID string `json:"deviceUid"`
-	PunchedAt string `json:"punchedAt"`
-	PunchType string `json:"punchType"`
+	DeviceUID string  `json:"deviceUid"`
+	PunchedAt string  `json:"punchedAt"`
+	PunchType string  `json:"punchType"`
+	Reason    *string `json:"reason"`
 }
 
 type dailySummaryItemResponse struct {
@@ -150,6 +155,7 @@ type dailyAttendanceLogItemResponse struct {
 	CheckInDeviceUID  *string                       `json:"checkInDeviceUid,omitempty"`
 	CheckOutDevice    *string                       `json:"checkOutDevice,omitempty"`
 	CheckOutDeviceUID *string                       `json:"checkOutDeviceUid,omitempty"`
+	HasEditHistory    bool                          `json:"hasEditHistory"`
 	WorkedHours       float64                       `json:"workedHours"`
 	LateArrival       bool                          `json:"lateArrival"`
 	EarlyDeparture    bool                          `json:"earlyDeparture"`
@@ -601,6 +607,16 @@ func (h *AttendanceHandler) GetDailySummary(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *AttendanceHandler) CreateLog(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+	if !canManuallyManageAttendanceLogs(claims) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Only IT Managers and Admins can manually edit attendance logs")
+		return
+	}
+
 	req, ok := decodeCreateAttendanceLogRequest(w, r)
 	if !ok {
 		return
@@ -611,6 +627,8 @@ func (h *AttendanceHandler) CreateLog(w http.ResponseWriter, r *http.Request) {
 		DeviceUID:   req.DeviceUID,
 		PunchedAt:   req.PunchedAt,
 		PunchType:   req.PunchType,
+		EditedByUID: claims.UserUID,
+		Reason:      req.Reason,
 	})
 	if err != nil {
 		h.writeUseCaseError(w, err)
@@ -627,16 +645,28 @@ func (h *AttendanceHandler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+	if !canManuallyManageAttendanceLogs(claims) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Only IT Managers and Admins can manually edit attendance logs")
+		return
+	}
+
 	req, ok := decodeUpdateAttendanceLogRequest(w, r)
 	if !ok {
 		return
 	}
 
 	output, err := h.updateLogUC.Execute(r.Context(), usecases.UpdateAttendanceLogInput{
-		UID:       uid,
-		DeviceUID: req.DeviceUID,
-		PunchedAt: req.PunchedAt,
-		PunchType: req.PunchType,
+		UID:         uid,
+		DeviceUID:   req.DeviceUID,
+		PunchedAt:   req.PunchedAt,
+		PunchType:   req.PunchType,
+		EditedByUID: claims.UserUID,
+		Reason:      req.Reason,
 	})
 	if err != nil {
 		h.writeUseCaseError(w, err)
@@ -646,10 +676,10 @@ func (h *AttendanceHandler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, output)
 }
 
-func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
-	employeeUID := r.PathValue("employeeUid")
-	if employeeUID == "" {
-		writeError(w, http.StatusBadRequest, "employeeUid is required")
+func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
 		return
 	}
 
@@ -900,6 +930,19 @@ func canAccessDepartmentAttendance(claims *JWTClaims, departmentUID string) bool
 	return false
 }
 
+func canManuallyManageAttendanceLogs(claims *JWTClaims) bool {
+	if claims == nil {
+		return false
+	}
+	if !claims.HasPermission("attendance:write") {
+		return false
+	}
+	if claims.HasPermission("*") {
+		return true
+	}
+	return claims.HasAnyRole("admin", "it_manager")
+}
+
 func decodeCreateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*parsedCreateAttendanceLogRequest, bool) {
 	var req createAttendanceLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -918,6 +961,7 @@ func decodeCreateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*
 		DeviceUID:   req.DeviceUID,
 		PunchedAt:   punchedAt,
 		PunchType:   req.PunchType,
+		Reason:      normalizeOptionalRequestString(req.Reason),
 	}, true
 }
 
@@ -938,6 +982,7 @@ func decodeUpdateAttendanceLogRequest(w http.ResponseWriter, r *http.Request) (*
 		DeviceUID: req.DeviceUID,
 		PunchedAt: punchedAt,
 		PunchType: req.PunchType,
+		Reason:    normalizeOptionalRequestString(req.Reason),
 	}, true
 }
 
@@ -946,12 +991,25 @@ type parsedCreateAttendanceLogRequest struct {
 	DeviceUID   string
 	PunchedAt   time.Time
 	PunchType   string
+	Reason      *string
 }
 
 type parsedUpdateAttendanceLogRequest struct {
 	DeviceUID string
 	PunchedAt time.Time
 	PunchType string
+	Reason    *string
+}
+
+func normalizeOptionalRequestString(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func parseAttendanceListDateTime(value string, endOfDay bool) (time.Time, error) {
@@ -1166,6 +1224,7 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 			CheckInDeviceUID:  item.CheckInDeviceUID,
 			CheckOutDevice:    item.CheckOutDevice,
 			CheckOutDeviceUID: item.CheckOutDeviceUID,
+			HasEditHistory:    item.HasEditHistory,
 			WorkedHours:       item.WorkedHours,
 			LateArrival:       item.LateArrival,
 			EarlyDeparture:    item.EarlyDeparture,

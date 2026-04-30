@@ -77,6 +77,28 @@ func RequirePermission(permission string) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAnyPermission middleware checks if the user has at least one of the required permissions.
+func RequireAnyPermission(permissions ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(ClaimsContextKey).(*JWTClaims)
+			if !ok || claims == nil {
+				writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+				return
+			}
+
+			for _, permission := range permissions {
+				if claims.HasPermission(permission) {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Insufficient permissions")
+		})
+	}
+}
+
 // GetClaims retrieves JWT claims from the request context
 func GetClaims(r *http.Request) *JWTClaims {
 	claims, _ := r.Context().Value(ClaimsContextKey).(*JWTClaims)

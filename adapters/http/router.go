@@ -115,8 +115,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDepartmentLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyDepartmentLogs)))
+	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/reports", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetDepartmentReport)))
+	protectedMux.Handle("GET /api/v1/attendance/departments/{departmentUid}/reports/export", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ExportDepartmentReport)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListEmployeeLogs)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/daily-logs", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ListDailyEmployeeLogs)))
+	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/reports", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.ExportEmployeeReport)))
 	protectedMux.Handle("POST /api/v1/attendance/logs", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.CreateLog)))
 	protectedMux.Handle("PATCH /api/v1/attendance/logs/{uid}", RequirePermission("attendance:write")(http.HandlerFunc(cfg.AttendanceHandler.UpdateLog)))
 	protectedMux.Handle("GET /api/v1/attendance/logs/{uid}/history", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetLogHistory)))

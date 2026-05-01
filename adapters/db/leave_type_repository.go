@@ -126,6 +126,54 @@ func (r *LeaveTypeRepository) ListSubLeaveTypesByLeaveTypeUID(ctx context.Contex
 	return types, nil
 }
 
+func (r *LeaveTypeRepository) Update(ctx context.Context, q ports.Querier, leaveType *domain.LeaveType) error {
+	query := `
+		UPDATE leave_types
+		SET code = ?, name_en = ?, name_ar = ?, default_balance = ?, max_consecutive = ?,
+		    recording_deadline_days = ?, advance_notice_days = ?, is_active = ?, approval_flow_uid = ?,
+		    updated_at = datetime('now')
+		WHERE uid = ?`
+
+	result, err := q.ExecContext(
+		ctx,
+		query,
+		leaveType.Code,
+		leaveType.NameEN,
+		leaveType.NameAR,
+		leaveType.DefaultBalance,
+		leaveType.MaxConsecutive,
+		leaveType.RecordingDeadlineDays,
+		leaveType.AdvanceNoticeDays,
+		leaveType.IsActive,
+		leaveType.ApprovalFlowUID,
+		leaveType.UID,
+	)
+	if err != nil {
+		slog.Error("leave_type_repository.Update.exec_query", "error", err, "uid", leaveType.UID)
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		slog.Error("leave_type_repository.Update.rows_affected", "error", err, "uid", leaveType.UID)
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return ErrLeaveTypeNotFound
+	}
+
+	updated, err := r.GetByUID(ctx, q, leaveType.UID)
+	if err != nil {
+		return err
+	}
+	if updated != nil {
+		*leaveType = *updated
+	}
+
+	return nil
+}
+
 func (r *LeaveTypeRepository) SetActive(ctx context.Context, q ports.Querier, uid string, isActive bool) error {
 	query := `UPDATE leave_types SET is_active = ?, updated_at = datetime('now') WHERE uid = ?`
 

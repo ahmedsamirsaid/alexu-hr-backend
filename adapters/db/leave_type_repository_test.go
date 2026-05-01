@@ -273,6 +273,43 @@ func TestLeaveTypeRepository_SetActive_NotFound(t *testing.T) {
 	}
 }
 
+func TestLeaveTypeRepository_Update(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	repo := NewLeaveTypeRepository()
+	ctx := context.Background()
+
+	lt := tdb.SeedLeaveType("CASUAL", "Casual Leave", "العارضة", 7)
+	found, err := repo.GetByUID(ctx, tdb.SQLiteDB, lt.UID)
+	if err != nil {
+		t.Fatalf("GetByUID() error = %v", err)
+	}
+
+	recordingDeadlineDays := 4
+	found.DefaultBalance = 10
+	found.RecordingDeadlineDays = &recordingDeadlineDays
+	found.AdvanceNoticeDays = nil
+
+	if err := repo.Update(ctx, tdb.SQLiteDB, found); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	updated, err := repo.GetByUID(ctx, tdb.SQLiteDB, lt.UID)
+	if err != nil {
+		t.Fatalf("GetByUID() after update error = %v", err)
+	}
+	if updated.DefaultBalance != 10 {
+		t.Fatalf("DefaultBalance = %d, want 10", updated.DefaultBalance)
+	}
+	if updated.RecordingDeadlineDays == nil || *updated.RecordingDeadlineDays != 4 {
+		t.Fatalf("RecordingDeadlineDays = %v, want 4", updated.RecordingDeadlineDays)
+	}
+	if updated.AdvanceNoticeDays != nil {
+		t.Fatalf("AdvanceNoticeDays = %v, want nil", updated.AdvanceNoticeDays)
+	}
+}
+
 func TestLeaveTypeRepository_NullableFields(t *testing.T) {
 	tdb := NewTestDB(t)
 	defer tdb.Close()

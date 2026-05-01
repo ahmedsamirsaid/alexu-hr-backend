@@ -94,7 +94,7 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 		return nil, ErrLeaveTypeNotFound
 	}
 
-	totalWorkingDays, err := uc.workingDaysCalc.CalculateWorkingDays(ctx, tx, input.StartDate, input.EndDate)
+	totalWorkingDays, err := calculateLeaveDays(ctx, tx, uc.workingDaysCalc, leaveType, input.StartDate, input.EndDate)
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 
 	var records []*domain.LeaveRecord
 	for _, period := range periods {
-		workingDays, err := uc.workingDaysCalc.CalculateWorkingDays(ctx, tx, period.Start, period.End)
+		workingDays, err := calculateLeaveDays(ctx, tx, uc.workingDaysCalc, leaveType, period.Start, period.End)
 		if err != nil {
 			return nil, err
 		}

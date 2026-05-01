@@ -181,8 +181,11 @@ func main() {
 	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo)
 	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo)
 
+	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(sqliteDB, leaveTypeRepo, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
+	setLeaveTypeApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(sqliteDB, leaveTypeRepo, approvalFlowRepo)
 	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo)
 	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
 	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
@@ -321,7 +324,7 @@ func main() {
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,
 	)
-	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(listLeaveTypesUC, listSubLeaveTypesUC, toggleLeaveTypeUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setLeaveTypeApprovalFlowUC, toggleLeaveTypeUC)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
 	holidayHandler := httpAdapter.NewHolidayHandler(sqliteDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)

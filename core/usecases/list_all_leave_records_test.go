@@ -53,6 +53,10 @@ func (m *mockLeaveTypeRepoForAll) ListSubLeaveTypesByLeaveTypeUID(ctx context.Co
 	return nil, nil
 }
 
+func (m *mockLeaveTypeRepoForAll) Update(ctx context.Context, q ports.Querier, leaveType *domain.LeaveType) error {
+	return nil
+}
+
 func (m *mockLeaveTypeRepoForAll) SetActive(ctx context.Context, q ports.Querier, uid string, isActive bool) error {
 	return nil
 }

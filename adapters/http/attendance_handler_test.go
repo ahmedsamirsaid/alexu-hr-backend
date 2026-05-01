@@ -27,54 +27,19 @@ func (s *stubMonthlyAttendanceStatsUseCase) Execute(ctx context.Context, input u
 	return s.output, s.err
 }
 
-type mockAttendanceDB struct {
-	tx *mockAttendanceTx
+type stubExportEmployeeAttendanceReportUseCase struct {
+	output *usecases.ExportEmployeeAttendanceReportOutput
+	err    error
+	input  *usecases.ExportEmployeeAttendanceReportInput
 }
 
-func (m *mockAttendanceDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (ports.Tx, error) {
-	if m.tx == nil {
-		m.tx = &mockAttendanceTx{}
-	}
-	return m.tx, nil
+func (s *stubExportEmployeeAttendanceReportUseCase) Execute(ctx context.Context, input usecases.ExportEmployeeAttendanceReportInput) (*usecases.ExportEmployeeAttendanceReportOutput, error) {
+	s.input = &input
+	return s.output, s.err
 }
 
-func (m *mockAttendanceDB) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return nil, nil
-}
-
-func (m *mockAttendanceDB) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return &sql.Row{}
-}
-
-func (m *mockAttendanceDB) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return nil, nil
-}
-
-type mockAttendanceTx struct {
-	committed  bool
-	rolledBack bool
-}
-
-func (m *mockAttendanceTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	return nil, nil
-}
-
-func (m *mockAttendanceTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	return &sql.Row{}
-}
-
-func (m *mockAttendanceTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	return nil, nil
-}
-
-func (m *mockAttendanceTx) Commit() error {
-	m.committed = true
-	return nil
-}
-
-func (m *mockAttendanceTx) Rollback() error {
-	m.rolledBack = true
-	return nil
+func timePtr(value time.Time) *time.Time {
+	return &value
 }
 
 type mockDepartmentRepoForAttendance struct {
@@ -1128,6 +1093,25 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 				{Date: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC), WorkedHours: 18},
 				{Date: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), WorkedHours: 0},
 			},
+			LateDaysCount:           1,
+			EarlyDepartureDaysCount: 1,
+			AbsentDaysCount:         1,
+			DaysBreakdown: []usecases.AttendanceDayBreakdown{
+				{
+					Date:                  time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+					CheckIn:               timePtr(time.Date(2026, 4, 1, 9, 30, 0, 0, time.UTC)),
+					CheckOut:              timePtr(time.Date(2026, 4, 1, 16, 20, 0, 0, time.UTC)),
+					WorkedHours:           6.8333333333,
+					IsLate:                true,
+					LateMinutes:           15,
+					IsEarlyDeparture:      true,
+					EarlyDepartureMinutes: 25,
+				},
+				{
+					Date:     time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC),
+					IsAbsent: true,
+				},
+			},
 		},
 	}
 
@@ -1144,17 +1128,33 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 	}
 
 	var response struct {
-		EmployeeUID          string  `json:"employeeUid"`
-		Month                string  `json:"month"`
-		TotalWorkedHours     float64 `json:"totalWorkedHours"`
-		AverageCheckInTime   *string `json:"averageCheckInTime"`
-		AverageCheckOutTime  *string `json:"averageCheckOutTime"`
-		MissingCheckInCount  int     `json:"missingCheckInCount"`
-		MissingCheckOutCount int     `json:"missingCheckOutCount"`
-		WorkingHoursByDay    []struct {
+		EmployeeUID             string  `json:"employeeUid"`
+		Month                   string  `json:"month"`
+		TotalWorkedHours        float64 `json:"totalWorkedHours"`
+		AverageCheckInTime      *string `json:"averageCheckInTime"`
+		AverageCheckOutTime     *string `json:"averageCheckOutTime"`
+		MissingCheckInCount     int     `json:"missingCheckInCount"`
+		MissingCheckOutCount    int     `json:"missingCheckOutCount"`
+		LateDaysCount           int     `json:"late_days_count"`
+		EarlyDepartureDaysCount int     `json:"early_departure_days_count"`
+		AbsentDaysCount         int     `json:"absent_days_count"`
+		WorkingHoursByDay       []struct {
 			Date        string  `json:"date"`
 			WorkedHours float64 `json:"workedHours"`
 		} `json:"workingHoursByDay"`
+		DaysBreakdown []struct {
+			Date                  string  `json:"date"`
+			CheckIn               *string `json:"check_in"`
+			CheckOut              *string `json:"check_out"`
+			WorkedHours           float64 `json:"worked_hours"`
+			IsLate                bool    `json:"is_late"`
+			LateMinutes           int     `json:"late_minutes"`
+			IsEarlyDeparture      bool    `json:"is_early_departure"`
+			EarlyDepartureMinutes int     `json:"early_departure_minutes"`
+			IsAbsent              bool    `json:"is_absent"`
+			IsOnLeave             bool    `json:"is_on_leave"`
+			LeaveTypeName         *string `json:"leave_type_name"`
+		} `json:"days_breakdown"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
@@ -1177,6 +1177,12 @@ func TestAttendanceHandlerGetMonthlyStats(t *testing.T) {
 	}
 	if len(response.WorkingHoursByDay) != 2 || response.WorkingHoursByDay[0].Date != "2026-04-01" || response.WorkingHoursByDay[0].WorkedHours != 18 {
 		t.Fatalf("unexpected WorkingHoursByDay: %+v", response.WorkingHoursByDay)
+	}
+	if response.LateDaysCount != 1 || response.EarlyDepartureDaysCount != 1 || response.AbsentDaysCount != 1 {
+		t.Fatalf("unexpected exception counts: %+v", response)
+	}
+	if len(response.DaysBreakdown) != 2 || response.DaysBreakdown[0].CheckIn == nil || *response.DaysBreakdown[0].CheckIn != "09:30:00Z" || !response.DaysBreakdown[1].IsAbsent {
+		t.Fatalf("unexpected days_breakdown: %+v", response.DaysBreakdown)
 	}
 }
 
@@ -1278,5 +1284,42 @@ func TestAttendanceHandlerGetMonthlyStats_RejectsMixedFilters(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusBadRequest)
+	}
+}
+
+func TestAttendanceHandlerExportEmployeeReport(t *testing.T) {
+	exportUC := &stubExportEmployeeAttendanceReportUseCase{
+		output: &usecases.ExportEmployeeAttendanceReportOutput{
+			Data:        []byte("xlsx"),
+			Filename:    "employee_attendance_report_emp_1_2026-04-01_to_2026-04-30.xlsx",
+			ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		},
+	}
+
+	handler := &AttendanceHandler{exportEmployeeReportUC: exportUC}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/reports?start_date=2026-04-01&end_date=2026-04-30", nil)
+	req = withAdminClaims(req)
+	req.SetPathValue("employeeUid", "emp_1")
+	rr := httptest.NewRecorder()
+	handler.ExportEmployeeReport(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
+	}
+	if exportUC.input == nil || exportUC.input.EmployeeUID != "emp_1" {
+		t.Fatalf("input = %+v, want employee emp_1", exportUC.input)
+	}
+	if exportUC.input.StartDate.Format("2006-01-02") != "2026-04-01" || exportUC.input.EndDate.Format("2006-01-02") != "2026-04-30" {
+		t.Fatalf("date input = %v to %v, want April 2026", exportUC.input.StartDate, exportUC.input.EndDate)
+	}
+	if rr.Header().Get("Content-Type") != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Fatalf("Content-Type = %q", rr.Header().Get("Content-Type"))
+	}
+	if rr.Header().Get("Content-Disposition") == "" {
+		t.Fatal("expected Content-Disposition header")
+	}
+	if rr.Body.String() != "xlsx" {
+		t.Fatalf("body = %q, want xlsx", rr.Body.String())
 	}
 }

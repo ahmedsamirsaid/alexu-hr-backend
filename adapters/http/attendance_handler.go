@@ -16,12 +16,30 @@ import (
 	"github.com/banumusa/backend/core/usecases"
 )
 
+type attendanceLogHistoryExecutor interface {
+	Execute(ctx context.Context, input usecases.GetAttendanceLogHistoryInput) (*usecases.GetAttendanceLogHistoryOutput, error)
+}
+
 type monthlyAttendanceStatsExecutor interface {
 	Execute(ctx context.Context, input usecases.GetMonthlyAttendanceStatsInput) (*usecases.GetMonthlyAttendanceStatsOutput, error)
 }
 
-type attendanceLogHistoryExecutor interface {
-	Execute(ctx context.Context, input usecases.GetAttendanceLogHistoryInput) (*usecases.GetAttendanceLogHistoryOutput, error)
+type departmentAttendanceReportExecutor interface {
+	Execute(ctx context.Context, input usecases.GetDepartmentAttendanceReportInput) (*usecases.DepartmentAttendanceReportOutput, error)
+}
+
+type exportDepartmentAttendanceReportExecutor interface {
+	Execute(ctx context.Context, input usecases.GetDepartmentAttendanceReportInput) (*usecases.ExportDepartmentAttendanceReportOutput, error)
+}
+
+type exportEmployeeAttendanceReportExecutor interface {
+	Execute(ctx context.Context, input usecases.ExportEmployeeAttendanceReportInput) (*usecases.ExportEmployeeAttendanceReportOutput, error)
+}
+
+type AttendanceReportDependencies struct {
+	GetDepartmentReportUC    departmentAttendanceReportExecutor
+	ExportDepartmentReportUC exportDepartmentAttendanceReportExecutor
+	ExportEmployeeReportUC   exportEmployeeAttendanceReportExecutor
 }
 
 type AttendanceHandler struct {
@@ -34,6 +52,9 @@ type AttendanceHandler struct {
 	getLogHistoryUC           attendanceLogHistoryExecutor
 	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
+	getDepartmentReportUC     departmentAttendanceReportExecutor
+	exportDepartmentReportUC  exportDepartmentAttendanceReportExecutor
+	exportEmployeeReportUC    exportEmployeeAttendanceReportExecutor
 }
 
 func NewAttendanceHandler(
@@ -46,8 +67,9 @@ func NewAttendanceHandler(
 	getLogHistoryUC *usecases.GetAttendanceLogHistoryUseCase,
 	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
+	reportDeps ...AttendanceReportDependencies,
 ) *AttendanceHandler {
-	return &AttendanceHandler{
+	handler := &AttendanceHandler{
 		listDepartmentLogsUC:      listDepartmentLogsUC,
 		listEmployeeLogsUC:        listEmployeeLogsUC,
 		listDailyDepartmentLogsUC: listDailyDepartmentLogsUC,
@@ -58,6 +80,12 @@ func NewAttendanceHandler(
 		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
 	}
+	if len(reportDeps) > 0 {
+		handler.getDepartmentReportUC = reportDeps[0].GetDepartmentReportUC
+		handler.exportDepartmentReportUC = reportDeps[0].ExportDepartmentReportUC
+		handler.exportEmployeeReportUC = reportDeps[0].ExportEmployeeReportUC
+	}
+	return handler
 }
 
 type createAttendanceLogRequest struct {
@@ -168,35 +196,58 @@ type workingHoursByDayResponse struct {
 	WorkedHours float64 `json:"workedHours"`
 }
 
+type attendanceDayBreakdownResponse struct {
+	Date                  string  `json:"date"`
+	CheckIn               *string `json:"check_in"`
+	CheckOut              *string `json:"check_out"`
+	WorkedHours           float64 `json:"worked_hours"`
+	IsLate                bool    `json:"is_late"`
+	LateMinutes           int     `json:"late_minutes"`
+	IsEarlyDeparture      bool    `json:"is_early_departure"`
+	EarlyDepartureMinutes int     `json:"early_departure_minutes"`
+	IsAbsent              bool    `json:"is_absent"`
+	IsOnLeave             bool    `json:"is_on_leave"`
+	LeaveTypeName         *string `json:"leave_type_name"`
+}
+
 type monthlyAttendanceStatsResponse struct {
-	EmployeeUID          string                      `json:"employeeUid"`
-	Month                string                      `json:"month"`
-	TotalWorkedHours     float64                     `json:"totalWorkedHours"`
-	AverageCheckInTime   *string                     `json:"averageCheckInTime,omitempty"`
-	AverageCheckOutTime  *string                     `json:"averageCheckOutTime,omitempty"`
-	MissingCheckInCount  int                         `json:"missingCheckInCount"`
-	MissingCheckOutCount int                         `json:"missingCheckOutCount"`
-	WorkingHoursByDay    []workingHoursByDayResponse `json:"workingHoursByDay"`
+	EmployeeUID             string                           `json:"employeeUid"`
+	Month                   string                           `json:"month"`
+	TotalWorkedHours        float64                          `json:"totalWorkedHours"`
+	AverageCheckInTime      *string                          `json:"averageCheckInTime,omitempty"`
+	AverageCheckOutTime     *string                          `json:"averageCheckOutTime,omitempty"`
+	MissingCheckInCount     int                              `json:"missingCheckInCount"`
+	MissingCheckOutCount    int                              `json:"missingCheckOutCount"`
+	WorkingHoursByDay       []workingHoursByDayResponse      `json:"workingHoursByDay"`
+	LateDaysCount           int                              `json:"late_days_count"`
+	EarlyDepartureDaysCount int                              `json:"early_departure_days_count"`
+	AbsentDaysCount         int                              `json:"absent_days_count"`
+	DaysBreakdown           []attendanceDayBreakdownResponse `json:"days_breakdown"`
 }
 
-type attendanceLogHistoryItemResponse struct {
-	UID           string  `json:"uid"`
-	FieldChanged  string  `json:"fieldChanged"`
-	OldValue      *string `json:"oldValue,omitempty"`
-	NewValue      *string `json:"newValue,omitempty"`
-	Reason        *string `json:"reason,omitempty"`
-	EditedByUID   string  `json:"editedByUid"`
-	EditedByEmployeeUID *string `json:"editedByEmployeeUid,omitempty"`
-	EditedByName  string  `json:"editedByName"`
-	EditedByPhone *string `json:"editedByPhone,omitempty"`
-	EditedAt      string  `json:"editedAt"`
+type departmentAttendanceReportEmployeeResponse struct {
+	EmployeeUID         string  `json:"employeeUid"`
+	EmployeeName        string  `json:"employeeName"`
+	TotalWorkingDays    int     `json:"totalWorkingDays"`
+	DaysPresent         int     `json:"daysPresent"`
+	DaysAbsent          int     `json:"daysAbsent"`
+	LateDays            int     `json:"lateDays"`
+	EarlyDepartureDays  int     `json:"earlyDepartureDays"`
+	MissingCheckInDays  int     `json:"missingCheckInDays"`
+	MissingCheckOutDays int     `json:"missingCheckOutDays"`
+	TotalWorkedHours    float64 `json:"totalWorkedHours"`
+	AverageCheckInTime  *string `json:"averageCheckInTime,omitempty"`
+	AverageCheckOutTime *string `json:"averageCheckOutTime,omitempty"`
 }
 
-type attendanceLogHistoryResponse struct {
-	AttendanceLogUID string                             `json:"attendanceLogUid"`
-	EmployeeUID      string                             `json:"employeeUid"`
-	DepartmentUID    *string                            `json:"departmentUid,omitempty"`
-	History          []attendanceLogHistoryItemResponse `json:"history"`
+type departmentAttendanceReportResponse struct {
+	DepartmentUID          string                                       `json:"departmentUid"`
+	StartDate              string                                       `json:"startDate"`
+	EndDate                string                                       `json:"endDate"`
+	TotalHeadcount         int                                          `json:"totalHeadcount"`
+	AverageAttendanceRate  float64                                      `json:"averageAttendanceRate"`
+	AveragePunctualityRate float64                                      `json:"averagePunctualityRate"`
+	Employees              []departmentAttendanceReportEmployeeResponse `json:"employees"`
 }
 
 func (h *AttendanceHandler) ListDepartmentLogs(w http.ResponseWriter, r *http.Request) {
@@ -411,6 +462,97 @@ func (h *AttendanceHandler) ListDailyEmployeeLogs(w http.ResponseWriter, r *http
 	})
 }
 
+func (h *AttendanceHandler) GetDepartmentReport(w http.ResponseWriter, r *http.Request) {
+	departmentUID := r.PathValue("departmentUid")
+	if departmentUID == "" {
+		writeError(w, http.StatusBadRequest, "departmentUid is required")
+		return
+	}
+
+	claims := GetClaims(r)
+	if !canAccessDepartmentAttendance(claims, departmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		return
+	}
+
+	input, ok := h.parseDepartmentReportInput(w, r, departmentUID)
+	if !ok {
+		return
+	}
+	if h.getDepartmentReportUC == nil {
+		writeError(w, http.StatusInternalServerError, "department report use case is not configured")
+		return
+	}
+
+	output, err := h.getDepartmentReportUC.Execute(r.Context(), input)
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildDepartmentAttendanceReportResponse(output))
+}
+
+func (h *AttendanceHandler) ExportDepartmentReport(w http.ResponseWriter, r *http.Request) {
+	departmentUID := r.PathValue("departmentUid")
+	if departmentUID == "" {
+		writeError(w, http.StatusBadRequest, "departmentUid is required")
+		return
+	}
+
+	claims := GetClaims(r)
+	if !canAccessDepartmentAttendance(claims, departmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		return
+	}
+
+	input, ok := h.parseDepartmentReportInput(w, r, departmentUID)
+	if !ok {
+		return
+	}
+	if h.exportDepartmentReportUC == nil {
+		writeError(w, http.StatusInternalServerError, "department report export use case is not configured")
+		return
+	}
+
+	output, err := h.exportDepartmentReportUC.Execute(r.Context(), input)
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeFileResponse(w, output.Data, output.Filename, output.ContentType)
+}
+
+func (h *AttendanceHandler) ExportEmployeeReport(w http.ResponseWriter, r *http.Request) {
+	employeeUID := r.PathValue("employeeUid")
+	if employeeUID == "" {
+		writeError(w, http.StatusBadRequest, "employeeUid is required")
+		return
+	}
+
+	if !h.ensureCanAccessEmployeeAttendance(w, r, employeeUID) {
+		return
+	}
+
+	input, ok := h.parseEmployeeReportInput(w, r, employeeUID)
+	if !ok {
+		return
+	}
+	if h.exportEmployeeReportUC == nil {
+		writeError(w, http.StatusInternalServerError, "employee report export use case is not configured")
+		return
+	}
+
+	output, err := h.exportEmployeeReportUC.Execute(r.Context(), input)
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeFileResponse(w, output.Data, output.Filename, output.ContentType)
+}
+
 func (h *AttendanceHandler) GetDailySummary(w http.ResponseWriter, r *http.Request) {
 	date := time.Now()
 	if dateStr := r.URL.Query().Get("date"); dateStr != "" {
@@ -538,51 +680,6 @@ func (h *AttendanceHandler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, output)
 }
 
-func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request) {
-	uid := r.PathValue("uid")
-	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
-		return
-	}
-
-	output, err := h.getLogHistoryUC.Execute(r.Context(), usecases.GetAttendanceLogHistoryInput{
-		AttendanceLogUID: uid,
-	})
-	if err != nil {
-		h.writeUseCaseError(w, err)
-		return
-	}
-
-	claims := GetClaims(r)
-	if !canAccessEmployeeAttendance(claims, output.EmployeeUID, output.DepartmentUID) {
-		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this attendance log is not permitted")
-		return
-	}
-
-	history := make([]attendanceLogHistoryItemResponse, 0, len(output.History))
-	for _, item := range output.History {
-		history = append(history, attendanceLogHistoryItemResponse{
-			UID:           item.UID,
-			FieldChanged:  item.FieldChanged,
-			OldValue:      item.OldValue,
-			NewValue:      item.NewValue,
-			Reason:        item.Reason,
-			EditedByUID:   item.EditedByUID,
-			EditedByEmployeeUID: item.EditedByEmployeeUID,
-			EditedByName:  item.EditedByName,
-			EditedByPhone: item.EditedByPhone,
-			EditedAt:      item.EditedAt,
-		})
-	}
-
-	writeJSON(w, http.StatusOK, attendanceLogHistoryResponse{
-		AttendanceLogUID: output.AttendanceLogUID,
-		EmployeeUID:      output.EmployeeUID,
-		DepartmentUID:    output.DepartmentUID,
-		History:          history,
-	})
-}
-
 func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	employeeUID := r.PathValue("employeeUid")
 	if employeeUID == "" {
@@ -590,33 +687,14 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	claims := GetClaims(r)
-	if !canAccessRequestedEmployee(claims, employeeUID) {
-		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+	if !h.ensureCanAccessEmployeeAttendance(w, r, employeeUID) {
 		return
-	}
-	if claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope() {
-		accessOutput, err := h.listEmployeeLogsUC.Execute(r.Context(), usecases.ListEmployeeAttendanceLogsInput{
-			EmployeeUID: employeeUID,
-			ListParams: ports.ListParams{
-				Page:     1,
-				PageSize: 1,
-			},
-		})
-		if err != nil {
-			h.writeUseCaseError(w, err)
-			return
-		}
-		if accessOutput.DepartmentUID == nil || !claims.HasDepartmentAccess(*accessOutput.DepartmentUID) {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
-			return
-		}
 	}
 
 	monthValue := strings.TrimSpace(r.URL.Query().Get("month"))
 	yearValue := strings.TrimSpace(r.URL.Query().Get("year"))
-	startDateValue := strings.TrimSpace(r.URL.Query().Get("startDate"))
-	endDateValue := strings.TrimSpace(r.URL.Query().Get("endDate"))
+	startDateValue := firstNonEmptyQueryValue(r, "startDate", "start_date")
+	endDateValue := firstNonEmptyQueryValue(r, "endDate", "end_date", "end_data")
 
 	if monthValue != "" && (yearValue != "" || startDateValue != "" || endDateValue != "") {
 		writeError(w, http.StatusBadRequest, "month cannot be combined with year/startDate/endDate")
@@ -727,16 +805,40 @@ func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Reque
 		})
 	}
 
+	daysBreakdown := buildAttendanceDayBreakdownResponses(output.DaysBreakdown)
+
 	writeJSON(w, http.StatusOK, monthlyAttendanceStatsResponse{
-		EmployeeUID:          employeeUID,
-		Month:                output.Month,
-		TotalWorkedHours:     output.TotalWorkedHours,
-		AverageCheckInTime:   averageCheckInTime,
-		AverageCheckOutTime:  averageCheckOutTime,
-		MissingCheckInCount:  output.MissingCheckInCount,
-		MissingCheckOutCount: output.MissingCheckOutCount,
-		WorkingHoursByDay:    workingHoursByDay,
+		EmployeeUID:             employeeUID,
+		Month:                   output.Month,
+		TotalWorkedHours:        output.TotalWorkedHours,
+		AverageCheckInTime:      averageCheckInTime,
+		AverageCheckOutTime:     averageCheckOutTime,
+		MissingCheckInCount:     output.MissingCheckInCount,
+		MissingCheckOutCount:    output.MissingCheckOutCount,
+		WorkingHoursByDay:       workingHoursByDay,
+		LateDaysCount:           output.LateDaysCount,
+		EarlyDepartureDaysCount: output.EarlyDepartureDaysCount,
+		AbsentDaysCount:         output.AbsentDaysCount,
+		DaysBreakdown:           daysBreakdown,
 	})
+}
+
+func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	output, err := h.getLogHistoryUC.Execute(r.Context(), usecases.GetAttendanceLogHistoryInput{
+		AttendanceLogUID: uid,
+	})
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, output)
 }
 
 func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) {
@@ -753,6 +855,7 @@ func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) 
 		errors.Is(err, usecases.ErrInvalidWorkDayEnd),
 		errors.Is(err, usecases.ErrInvalidWorkHoursRange),
 		errors.Is(err, usecases.ErrInvalidGraceMinutes),
+		errors.Is(err, usecases.ErrInvalidReportDateRange),
 		errors.Is(err, usecases.ErrAttendanceLogEmployeeRequired),
 		errors.Is(err, usecases.ErrAttendanceLogDeviceRequired),
 		errors.Is(err, usecases.ErrAttendanceLogDeviceUserIDReq),
@@ -783,6 +886,38 @@ func canAccessRequestedEmployee(claims *JWTClaims, employeeUID string) bool {
 		return true
 	}
 	return claims.EmployeeUID != nil && *claims.EmployeeUID == employeeUID
+}
+
+func (h *AttendanceHandler) ensureCanAccessEmployeeAttendance(w http.ResponseWriter, r *http.Request, employeeUID string) bool {
+	claims := GetClaims(r)
+	if !canAccessRequestedEmployee(claims, employeeUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+		return false
+	}
+
+	if claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope() {
+		if h.listEmployeeLogsUC == nil {
+			writeError(w, http.StatusInternalServerError, "employee access use case is not configured")
+			return false
+		}
+		accessOutput, err := h.listEmployeeLogsUC.Execute(r.Context(), usecases.ListEmployeeAttendanceLogsInput{
+			EmployeeUID: employeeUID,
+			ListParams: ports.ListParams{
+				Page:     1,
+				PageSize: 1,
+			},
+		})
+		if err != nil {
+			h.writeUseCaseError(w, err)
+			return false
+		}
+		if accessOutput.DepartmentUID == nil || !claims.HasDepartmentAccess(*accessOutput.DepartmentUID) {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this employee is not permitted")
+			return false
+		}
+	}
+
+	return true
 }
 
 func canAccessEmployeeAttendance(claims *JWTClaims, employeeUID string, departmentUID *string) bool {
@@ -912,6 +1047,78 @@ func parseAttendanceListDateTime(value string, endOfDay bool) (time.Time, error)
 		return parsed.Add(24*time.Hour - time.Nanosecond), nil
 	}
 	return parsed, nil
+}
+
+func (h *AttendanceHandler) parseDepartmentReportInput(w http.ResponseWriter, r *http.Request, departmentUID string) (usecases.GetDepartmentAttendanceReportInput, bool) {
+	startDateValue := firstNonEmptyQueryValue(r, "start_date", "startDate")
+	endDateValue := firstNonEmptyQueryValue(r, "end_date", "end_data", "endDate")
+
+	if startDateValue == "" || endDateValue == "" {
+		writeError(w, http.StatusBadRequest, "start_date and end_date are required")
+		return usecases.GetDepartmentAttendanceReportInput{}, false
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateValue)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid start_date format, expected YYYY-MM-DD")
+		return usecases.GetDepartmentAttendanceReportInput{}, false
+	}
+	endDate, err := time.Parse("2006-01-02", endDateValue)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid end_date format, expected YYYY-MM-DD")
+		return usecases.GetDepartmentAttendanceReportInput{}, false
+	}
+	if endDate.Before(startDate) {
+		writeError(w, http.StatusBadRequest, "start_date must be before or equal to end_date")
+		return usecases.GetDepartmentAttendanceReportInput{}, false
+	}
+
+	return usecases.GetDepartmentAttendanceReportInput{
+		DepartmentUID: departmentUID,
+		StartDate:     startDate,
+		EndDate:       endDate,
+	}, true
+}
+
+func (h *AttendanceHandler) parseEmployeeReportInput(w http.ResponseWriter, r *http.Request, employeeUID string) (usecases.ExportEmployeeAttendanceReportInput, bool) {
+	startDateValue := firstNonEmptyQueryValue(r, "start_date", "startDate")
+	endDateValue := firstNonEmptyQueryValue(r, "end_date", "end_data", "endDate")
+
+	if startDateValue == "" || endDateValue == "" {
+		writeError(w, http.StatusBadRequest, "start_date and end_date are required")
+		return usecases.ExportEmployeeAttendanceReportInput{}, false
+	}
+
+	startDate, err := time.Parse("2006-01-02", startDateValue)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid start_date format, expected YYYY-MM-DD")
+		return usecases.ExportEmployeeAttendanceReportInput{}, false
+	}
+	endDate, err := time.Parse("2006-01-02", endDateValue)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid end_date format, expected YYYY-MM-DD")
+		return usecases.ExportEmployeeAttendanceReportInput{}, false
+	}
+	if endDate.Before(startDate) {
+		writeError(w, http.StatusBadRequest, "start_date must be before or equal to end_date")
+		return usecases.ExportEmployeeAttendanceReportInput{}, false
+	}
+
+	return usecases.ExportEmployeeAttendanceReportInput{
+		EmployeeUID: employeeUID,
+		StartDate:   startDate,
+		EndDate:     endDate,
+	}, true
+}
+
+func firstNonEmptyQueryValue(r *http.Request, names ...string) string {
+	for _, name := range names {
+		value := strings.TrimSpace(r.URL.Query().Get(name))
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseAttendanceLogsListQuery(r *http.Request) (listQuery, error) {
@@ -1049,6 +1256,80 @@ func buildDailyAttendanceLogResponses(items []usecases.DailyAttendanceLogItem) [
 		})
 	}
 	return records
+}
+
+func buildAttendanceDayBreakdownResponses(items []usecases.AttendanceDayBreakdown) []attendanceDayBreakdownResponse {
+	records := make([]attendanceDayBreakdownResponse, 0, len(items))
+	for _, item := range items {
+		var checkIn *string
+		if item.CheckIn != nil {
+			value := item.CheckIn.Format("15:04:05Z07:00")
+			checkIn = &value
+		}
+
+		var checkOut *string
+		if item.CheckOut != nil {
+			value := item.CheckOut.Format("15:04:05Z07:00")
+			checkOut = &value
+		}
+
+		records = append(records, attendanceDayBreakdownResponse{
+			Date:                  item.Date.Format("2006-01-02"),
+			CheckIn:               checkIn,
+			CheckOut:              checkOut,
+			WorkedHours:           item.WorkedHours,
+			IsLate:                item.IsLate,
+			LateMinutes:           item.LateMinutes,
+			IsEarlyDeparture:      item.IsEarlyDeparture,
+			EarlyDepartureMinutes: item.EarlyDepartureMinutes,
+			IsAbsent:              item.IsAbsent,
+			IsOnLeave:             item.IsOnLeave,
+			LeaveTypeName:         item.LeaveTypeName,
+		})
+	}
+	return records
+}
+
+func buildDepartmentAttendanceReportResponse(output *usecases.DepartmentAttendanceReportOutput) departmentAttendanceReportResponse {
+	employees := make([]departmentAttendanceReportEmployeeResponse, 0, len(output.Employees))
+	for _, employee := range output.Employees {
+		var averageCheckInTime *string
+		if employee.AverageCheckInTime != nil {
+			value := employee.AverageCheckInTime.Format("15:04:05")
+			averageCheckInTime = &value
+		}
+
+		var averageCheckOutTime *string
+		if employee.AverageCheckOutTime != nil {
+			value := employee.AverageCheckOutTime.Format("15:04:05")
+			averageCheckOutTime = &value
+		}
+
+		employees = append(employees, departmentAttendanceReportEmployeeResponse{
+			EmployeeUID:         employee.EmployeeUID,
+			EmployeeName:        employee.EmployeeName,
+			TotalWorkingDays:    employee.TotalWorkingDays,
+			DaysPresent:         employee.DaysPresent,
+			DaysAbsent:          employee.DaysAbsent,
+			LateDays:            employee.LateDays,
+			EarlyDepartureDays:  employee.EarlyDepartureDays,
+			MissingCheckInDays:  employee.MissingCheckInDays,
+			MissingCheckOutDays: employee.MissingCheckOutDays,
+			TotalWorkedHours:    employee.TotalWorkedHours,
+			AverageCheckInTime:  averageCheckInTime,
+			AverageCheckOutTime: averageCheckOutTime,
+		})
+	}
+
+	return departmentAttendanceReportResponse{
+		DepartmentUID:          output.DepartmentUID,
+		StartDate:              output.StartDate.Format("2006-01-02"),
+		EndDate:                output.EndDate.Format("2006-01-02"),
+		TotalHeadcount:         output.TotalHeadcount,
+		AverageAttendanceRate:  output.AverageAttendanceRate,
+		AveragePunctualityRate: output.AveragePunctualityRate,
+		Employees:              employees,
+	}
 }
 
 func buildAttendanceExceptionResponses(item usecases.DailyAttendanceLogItem) []attendanceExceptionResponse {

@@ -98,6 +98,84 @@ func (m *mockAttendanceRecordRepoForMonthlyStats) ResolveEmployeeUIDByDeviceUser
 	return nil, nil
 }
 
+type mockShiftRepoForMonthlyStats struct{}
+
+func (m *mockShiftRepoForMonthlyStats) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Shift, error) {
+	return nil, nil
+}
+
+func (m *mockShiftRepoForMonthlyStats) List(ctx context.Context, q ports.Querier) ([]*domain.Shift, error) {
+	return nil, nil
+}
+
+func (m *mockShiftRepoForMonthlyStats) Upsert(ctx context.Context, q ports.Querier, shift *domain.Shift) error {
+	return nil
+}
+
+type mockEmployeeRepoForMonthlyStats struct {
+	employee *domain.Employee
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.Employee, error) {
+	if m.employee != nil && m.employee.ID == id {
+		return m.employee, nil
+	}
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Employee, error) {
+	if m.employee != nil && m.employee.UID == uid {
+		return m.employee, nil
+	}
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) Create(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
+	return nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) Update(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
+	return nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) List(ctx context.Context, q ports.Querier, filter *ports.EmployeeListFilter) ([]*domain.Employee, error) {
+	if m.employee == nil {
+		return nil, nil
+	}
+	return []*domain.Employee{m.employee}, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) ExistingGovernmentIDs(ctx context.Context, q ports.Querier, governmentIDs []string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) ExistingMobiles(ctx context.Context, q ports.Querier, mobiles []string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) ExistingUniversityIDs(ctx context.Context, q ports.Querier, universityIDs []string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForMonthlyStats) Count(ctx context.Context, q ports.Querier) (int, error) {
+	if m.employee == nil {
+		return 0, nil
+	}
+	return 1, nil
+}
+
+type monthlyStatsWeekendRepo struct {
+	days []int
+}
+
+func (m *monthlyStatsWeekendRepo) List(ctx context.Context, q ports.Querier) ([]*domain.WeekendConfig, error) {
+	return nil, nil
+}
+
+func (m *monthlyStatsWeekendRepo) GetWeekendDays(ctx context.Context, q ports.Querier) ([]int, error) {
+	return m.days, nil
+}
+
 func TestGetMonthlyAttendanceStatsUseCaseExecute(t *testing.T) {
 	repo := &mockAttendanceRecordRepoForMonthlyStats{
 		records: []*domain.AttendanceRecord{
@@ -248,5 +326,99 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute_WithMissingCheckIn(t *testing.T
 	}
 	if output.AverageCheckOutTime == nil || output.AverageCheckOutTime.Format("15:04:05") != "17:30:00" {
 		t.Fatalf("AverageCheckOutTime = %v, want 17:30:00", output.AverageCheckOutTime)
+	}
+}
+
+func TestGetMonthlyAttendanceStatsUseCaseExecute_WithWorkingDayBreakdown(t *testing.T) {
+	previousLocal := time.Local
+	time.Local = time.UTC
+	defer func() {
+		time.Local = previousLocal
+	}()
+
+	db := newUsecaseTestSQLiteDB(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	for _, statement := range []string{
+		`CREATE TABLE leave_types (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			uid TEXT UNIQUE NOT NULL,
+			name_en TEXT NOT NULL
+		);`,
+		`CREATE TABLE leave_records (
+			uid TEXT UNIQUE NOT NULL,
+			employee_id INTEGER NOT NULL,
+			leave_type_id INTEGER NOT NULL,
+			start_date TEXT NOT NULL,
+			end_date TEXT NOT NULL
+		);`,
+		`INSERT INTO leave_types (id, uid, name_en) VALUES (1, 'lt_annual', 'Annual Leave');`,
+		`INSERT INTO leave_records (uid, employee_id, leave_type_id, start_date, end_date)
+			VALUES ('leave_1', 1, 1, '2026-04-03', '2026-04-03');`,
+	} {
+		if _, err := db.ExecContext(ctx, statement); err != nil {
+			t.Fatalf("failed to prepare leave tables: %v", err)
+		}
+	}
+
+	repo := &mockAttendanceRecordRepoForMonthlyStats{
+		records: []*domain.AttendanceRecord{
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 1, 9, 30, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckIn},
+			{EmployeeUID: "emp_1", PunchedAt: time.Date(2026, 4, 1, 16, 20, 0, 0, time.UTC), PunchType: domain.AttendancePunchTypeCheckOut},
+		},
+	}
+
+	employee := &domain.Employee{
+		ID:       1,
+		UID:      "emp_1",
+		Name:     "Alice",
+		HireDate: time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		Status:   domain.EmployeeStatusActive,
+	}
+	uc := NewGetMonthlyAttendanceStatsUseCase(
+		db,
+		repo,
+		MonthlyAttendanceStatsDependencies{
+			EmployeeRepo: &mockEmployeeRepoForMonthlyStats{employee: employee},
+			ShiftRepo:    &mockShiftRepoForMonthlyStats{},
+			WeekendRepo:  &monthlyStatsWeekendRepo{days: []int{6}},
+		},
+	)
+	uc.now = func() time.Time {
+		return time.Date(2026, 4, 5, 12, 0, 0, 0, time.UTC)
+	}
+
+	start := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 4, 4, 23, 59, 59, 0, time.UTC)
+	output, err := uc.Execute(ctx, GetMonthlyAttendanceStatsInput{
+		EmployeeUID: "emp_1",
+		StartDate:   &start,
+		EndDate:     &end,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if output.LateDaysCount != 1 || output.EarlyDepartureDaysCount != 1 || output.AbsentDaysCount != 1 {
+		t.Fatalf("late/early/absent counts = %d/%d/%d, want 1/1/1", output.LateDaysCount, output.EarlyDepartureDaysCount, output.AbsentDaysCount)
+	}
+	if len(output.DaysBreakdown) != 3 {
+		t.Fatalf("len(DaysBreakdown) = %d, want 3", len(output.DaysBreakdown))
+	}
+
+	day1 := output.DaysBreakdown[0]
+	if day1.Date.Format("2006-01-02") != "2026-04-01" || !day1.IsLate || day1.LateMinutes != 15 || !day1.IsEarlyDeparture || day1.EarlyDepartureMinutes != 25 {
+		t.Fatalf("day 1 breakdown = %+v, want late 15 and early 25", day1)
+	}
+
+	day2 := output.DaysBreakdown[1]
+	if day2.Date.Format("2006-01-02") != "2026-04-02" || !day2.IsAbsent || day2.IsOnLeave {
+		t.Fatalf("day 2 breakdown = %+v, want absent without leave", day2)
+	}
+
+	day3 := output.DaysBreakdown[2]
+	if day3.Date.Format("2006-01-02") != "2026-04-03" || day3.IsAbsent || !day3.IsOnLeave || day3.LeaveTypeName == nil || *day3.LeaveTypeName != "Annual Leave" {
+		t.Fatalf("day 3 breakdown = %+v, want annual leave without absence", day3)
 	}
 }

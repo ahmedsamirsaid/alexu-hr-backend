@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,10 +28,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
 )
 
 func main() {
@@ -246,6 +246,8 @@ func main() {
 	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo)
 	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
+	departmentAttendanceReportUC := usecases.NewGetDepartmentAttendanceReportUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, weekendRepo, holidayDefinitionRepo)
+	exportDepartmentAttendanceReportUC := usecases.NewExportDepartmentAttendanceReportUseCase(departmentAttendanceReportUC)
 
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
@@ -259,7 +261,19 @@ func main() {
 	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
-	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(sqliteDB, attendanceRecordRepo)
+	
+	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
+		sqliteDB,
+		attendanceRecordRepo,
+		usecases.MonthlyAttendanceStatsDependencies{
+			EmployeeRepo: employeeRepo,
+			DeptRepo:     departmentRepo,
+			ShiftRepo:    shiftRepo,
+			WeekendRepo:  weekendRepo,
+			HolidayRepo:  holidayDefinitionRepo,
+		},
+	)
+	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
@@ -325,9 +339,13 @@ func main() {
 		getAttendanceLogHistoryUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,
+		httpAdapter.AttendanceReportDependencies{
+			GetDepartmentReportUC:    departmentAttendanceReportUC,
+			ExportDepartmentReportUC: exportDepartmentAttendanceReportUC,
+			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
+		},
 	)
 
-	// Audit use cases
 	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo)
 	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
 	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB)
@@ -336,6 +354,7 @@ func main() {
 	)
 	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB)
 	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC, listEnrichedAuditLogsUC, getAuditFilterOptionsUC)
+
 
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,

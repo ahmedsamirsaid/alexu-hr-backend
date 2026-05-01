@@ -91,7 +91,10 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("DELETE /api/v1/admin/departments/{uid}/manager", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.RemoveManager)))
 
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
+	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.UpdateLeaveType)))
+	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}/approval-flow", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.SetLeaveTypeApprovalFlow)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}/active", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.ToggleLeaveType)))
+	protectedMux.Handle("GET /api/v1/leave-types/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveTypeHandler.GetLeaveType)))
 	protectedMux.Handle("GET /api/v1/leave-types/{uid}/sub-leave-types", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveTypeHandler.ListSubLeaveTypes)))
 	protectedMux.Handle("GET /api/v1/admin/weekend-config", RequirePermission("departments:read")(http.HandlerFunc(cfg.WeekendHandler.ListWeekendDays)))
 	protectedMux.Handle("GET /api/v1/admin/holidays", RequirePermission("holidays:read")(http.HandlerFunc(cfg.HolidayHandler.ListHolidays)))

@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,16 +27,6 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/sqlite"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
-	"log/slog"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
 )
 
 func main() {
@@ -278,7 +272,6 @@ func main() {
 	)
 	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
 
-
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
 	)
@@ -349,7 +342,6 @@ func main() {
 			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
 		},
 	)
-
 
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,

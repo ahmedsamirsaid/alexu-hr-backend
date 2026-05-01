@@ -1,0 +1,1 @@
+ALTER TABLE leave_types ADD COLUMN is_paid INTEGER DEFAULT 1;

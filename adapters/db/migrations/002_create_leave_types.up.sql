@@ -8,7 +8,6 @@ CREATE TABLE leave_types (
     max_consecutive INTEGER,
     recording_deadline_days INTEGER,
     advance_notice_days INTEGER,
-    is_paid INTEGER DEFAULT 1,
     is_active INTEGER DEFAULT 1,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))

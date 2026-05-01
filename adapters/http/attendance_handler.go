@@ -16,6 +16,10 @@ import (
 	"github.com/banumusa/backend/core/usecases"
 )
 
+type attendanceLogHistoryExecutor interface {
+	Execute(ctx context.Context, input usecases.GetAttendanceLogHistoryInput) (*usecases.GetAttendanceLogHistoryOutput, error)
+}
+
 type monthlyAttendanceStatsExecutor interface {
 	Execute(ctx context.Context, input usecases.GetMonthlyAttendanceStatsInput) (*usecases.GetMonthlyAttendanceStatsOutput, error)
 }
@@ -676,10 +680,10 @@ func (h *AttendanceHandler) UpdateLog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, output)
 }
 
-func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request) {
-	uid := r.PathValue("uid")
-	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+func (h *AttendanceHandler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
+	employeeUID := r.PathValue("employeeUid")
+	if employeeUID == "" {
+		writeError(w, http.StatusBadRequest, "employeeUid is required")
 		return
 	}
 
@@ -817,6 +821,24 @@ func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request
 		AbsentDaysCount:         output.AbsentDaysCount,
 		DaysBreakdown:           daysBreakdown,
 	})
+}
+
+func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeError(w, http.StatusBadRequest, "uid is required")
+		return
+	}
+
+	output, err := h.getLogHistoryUC.Execute(r.Context(), usecases.GetAttendanceLogHistoryInput{
+		AttendanceLogUID: uid,
+	})
+	if err != nil {
+		h.writeUseCaseError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, output)
 }
 
 func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) {

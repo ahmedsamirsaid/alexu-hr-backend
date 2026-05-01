@@ -1,1 +1,2 @@
 ALTER TABLE leave_types ADD COLUMN is_paid INTEGER DEFAULT 1;
+UPDATE leave_types SET is_paid = 0 WHERE code IN ('UNPAID', 'SICK_UNPAID', 'SPECIAL_UNPAID');

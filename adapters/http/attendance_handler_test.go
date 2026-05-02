@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -86,24 +87,6 @@ type mockAttendanceRecordRepo struct {
 	gotEmployeeUID   string
 	gotFilter        ports.DepartmentAttendanceLogsFilter
 	gotListParams    ports.ListParams
-}
-
-type mockAttendanceEditHistoryRepo struct {
-	created    []*domain.AttendanceEditHistory
-	listReturn []*ports.AttendanceEditHistoryWithEditor
-}
-
-func (m *mockAttendanceEditHistoryRepo) Create(ctx context.Context, q ports.Querier, history *domain.AttendanceEditHistory) error {
-	cloned := *history
-	cloned.OldValue = cloneStringPtr(history.OldValue)
-	cloned.NewValue = cloneStringPtr(history.NewValue)
-	cloned.Reason = cloneStringPtr(history.Reason)
-	m.created = append(m.created, &cloned)
-	return nil
-}
-
-func (m *mockAttendanceEditHistoryRepo) ListByAttendanceRecordUID(ctx context.Context, q ports.Querier, attendanceRecordUID string) ([]*ports.AttendanceEditHistoryWithEditor, error) {
-	return m.listReturn, nil
 }
 
 func (m *mockAttendanceRecordRepo) Create(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) (bool, error) {
@@ -902,14 +885,13 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 func TestAttendanceHandlerCreateLog(t *testing.T) {
 	db := &mockAttendanceDB{}
 	recordRepo := &mockAttendanceRecordRepo{createOK: true}
-	historyRepo := &mockAttendanceEditHistoryRepo{}
 	employeeRepo := &mockEmployeeRepoForAttendance{
 		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
 	}
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, historyRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in","reason":"Manual correction"}`
@@ -934,18 +916,6 @@ func TestAttendanceHandlerCreateLog(t *testing.T) {
 	if recordRepo.createdRecord.RawPayload != nil {
 		t.Fatalf("expected raw payload nil, got %v", *recordRepo.createdRecord.RawPayload)
 	}
-	if len(historyRepo.created) != 1 {
-		t.Fatalf("expected 1 history record, got %d", len(historyRepo.created))
-	}
-	if historyRepo.created[0].FieldChanged != "created_manually" {
-		t.Fatalf("fieldChanged = %q, want created_manually", historyRepo.created[0].FieldChanged)
-	}
-	if historyRepo.created[0].EditedByUID != "usr_it_manager" {
-		t.Fatalf("editedByUID = %q, want usr_it_manager", historyRepo.created[0].EditedByUID)
-	}
-	if historyRepo.created[0].Reason == nil || *historyRepo.created[0].Reason != "Manual correction" {
-		t.Fatalf("reason = %v, want Manual correction", historyRepo.created[0].Reason)
-	}
 
 	var resp usecases.AttendanceLogOutput
 	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
@@ -968,14 +938,13 @@ func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDat
 			},
 		},
 	}
-	historyRepo := &mockAttendanceEditHistoryRepo{}
 	employeeRepo := &mockEmployeeRepoForAttendance{
 		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
 	}
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, historyRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
@@ -991,9 +960,6 @@ func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDat
 	if recordRepo.createdRecord != nil {
 		t.Fatal("expected no attendance record to be created")
 	}
-	if len(historyRepo.created) != 0 {
-		t.Fatalf("expected no history records, got %d", len(historyRepo.created))
-	}
 }
 
 func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeCheckin(t *testing.T) {
@@ -1008,14 +974,13 @@ func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeChe
 			},
 		},
 	}
-	historyRepo := &mockAttendanceEditHistoryRepo{}
 	employeeRepo := &mockEmployeeRepoForAttendance{
 		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
 	}
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, historyRepo, employeeRepo, deviceRepo)
+	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
 	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_out"}`
@@ -1030,9 +995,6 @@ func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeChe
 	}
 	if recordRepo.createdRecord != nil {
 		t.Fatal("expected no attendance record to be created")
-	}
-	if len(historyRepo.created) != 0 {
-		t.Fatalf("expected no history records, got %d", len(historyRepo.created))
 	}
 
 	var resp ErrorResponse
@@ -1058,14 +1020,13 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 			UpdatedAt:    time.Date(2026, 4, 9, 8, 0, 0, 0, time.UTC),
 		},
 	}
-	historyRepo := &mockAttendanceEditHistoryRepo{}
 	employeeRepo := &mockEmployeeRepoForAttendance{
 		employee: &domain.Employee{UID: "emp_1", Name: "Alice"},
 	}
 	deviceRepo := &mockAttendanceDeviceRepoForAttendance{
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
-	updateUC := usecases.NewUpdateAttendanceLogUseCase(db, recordRepo, historyRepo, employeeRepo, deviceRepo)
+	updateUC := usecases.NewUpdateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
 	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil, nil)
 
 	body := `{"deviceUid":"dev_1","punchedAt":"2026-04-10T17:30:00Z","punchType":"check_out","reason":"Corrected missed checkout"}`
@@ -1087,31 +1048,6 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 	}
 	if recordRepo.updatedRecord.EmployeeUID != "emp_old" {
 		t.Fatalf("expected employee uid emp_old, got %s", recordRepo.updatedRecord.EmployeeUID)
-	}
-	if len(historyRepo.created) != 3 {
-		t.Fatalf("expected 3 history entries, got %d", len(historyRepo.created))
-	}
-
-	historyByField := make(map[string]*domain.AttendanceEditHistory, len(historyRepo.created))
-	for _, item := range historyRepo.created {
-		historyByField[item.FieldChanged] = item
-		if item.Reason == nil || *item.Reason != "Corrected missed checkout" {
-			t.Fatalf("reason = %v, want Corrected missed checkout", item.Reason)
-		}
-		if item.EditedByUID != "usr_admin" {
-			t.Fatalf("editedByUID = %q, want usr_admin", item.EditedByUID)
-		}
-	}
-	if _, ok := historyByField["device_uid"]; !ok {
-		t.Fatal("expected device_uid history entry")
-	}
-	if punchedAtEntry, ok := historyByField["punched_at"]; !ok {
-		t.Fatal("expected punched_at history entry")
-	} else if punchedAtEntry.NewValue == nil || *punchedAtEntry.NewValue != "2026-04-10T17:30:00Z" {
-		t.Fatalf("punched_at new value = %v, want 2026-04-10T17:30:00Z", punchedAtEntry.NewValue)
-	}
-	if _, ok := historyByField["punch_type"]; !ok {
-		t.Fatal("expected punch_type history entry")
 	}
 
 	var resp usecases.AttendanceLogOutput
@@ -1135,71 +1071,6 @@ func TestAttendanceHandlerCreateLogRejectsNonITManagerAttendanceWriter(t *testin
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected status 403, got %d", rec.Code)
-	}
-}
-
-func TestAttendanceHandlerGetLogHistory(t *testing.T) {
-	recordRepo := &mockAttendanceRecordRepo{
-		recordByUID: &domain.AttendanceRecord{
-			UID:         "atr_1",
-			EmployeeUID: "emp_1",
-		},
-	}
-	employeeRepo := &mockEmployeeRepoForAttendance{
-		employee: &domain.Employee{
-			UID: "emp_1",
-			DepartmentUID: func() *string {
-				v := "dept_1"
-				return &v
-			}(),
-		},
-	}
-	historyRepo := &mockAttendanceEditHistoryRepo{
-		listReturn: []*ports.AttendanceEditHistoryWithEditor{
-			{
-				History: &domain.AttendanceEditHistory{
-					UID:          "aeh_1",
-					FieldChanged: "created_manually",
-					EditedByUID:  "usr_it_manager",
-					Reason: func() *string {
-						v := "Manual import"
-						return &v
-					}(),
-					CreatedAt: time.Date(2026, 4, 10, 9, 0, 0, 0, time.UTC),
-				},
-				EditedByName: "IT Manager",
-			},
-		},
-	}
-	historyUC := usecases.NewGetAttendanceLogHistoryUseCase(nil, recordRepo, historyRepo, employeeRepo)
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, historyUC, nil, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/logs/atr_1/history", nil)
-	req = withAdminClaims(req)
-	req.SetPathValue("uid", "atr_1")
-	rec := httptest.NewRecorder()
-
-	handler.GetLogHistory(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Code)
-	}
-
-	var resp attendanceLogHistoryResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if resp.AttendanceLogUID != "atr_1" {
-		t.Fatalf("attendanceLogUid = %q, want atr_1", resp.AttendanceLogUID)
-	}
-	if len(resp.History) != 1 {
-		t.Fatalf("history length = %d, want 1", len(resp.History))
-	}
-	if resp.History[0].EditedByName != "IT Manager" {
-		t.Fatalf("editedByName = %q, want IT Manager", resp.History[0].EditedByName)
-	}
-	if resp.History[0].Reason == nil || *resp.History[0].Reason != "Manual import" {
-		t.Fatalf("reason = %v, want Manual import", resp.History[0].Reason)
 	}
 }
 

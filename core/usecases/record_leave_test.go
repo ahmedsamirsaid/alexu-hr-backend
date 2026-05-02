@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -109,8 +110,9 @@ func (m *mockEmployeeRepo) Count(ctx context.Context, q ports.Querier) (int, err
 }
 
 type mockLeaveTypeRepo struct {
-	leaveType *domain.LeaveType
+	leaveType *domain.LeaveTypeRe
 }
+
 
 func (m *mockLeaveTypeRepo) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.LeaveType, error) {
 	return m.leaveType, nil
@@ -451,6 +453,7 @@ func TestRecordLeaveUseCase_Execute(t *testing.T) {
 				balanceTxRepo,
 				workingDaysCalc,
 				leaveSync,
+				audit.Noop(),
 			)
 
 			output, err := uc.Execute(context.Background(), tt.input)
@@ -520,6 +523,7 @@ func TestRecordLeaveUseCase_YearBoundarySplit(t *testing.T) {
 		balanceTxRepo,
 		workingDaysCalc,
 		leaveSync,
+		audit.Noop(),
 	)
 
 	input := usecases.RecordLeaveInput{

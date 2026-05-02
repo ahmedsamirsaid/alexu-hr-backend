@@ -2,8 +2,10 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -30,14 +32,16 @@ type UpdateHolidayUseCase struct {
 	db             ports.DB
 	holidayDefRepo ports.HolidayDefinitionRepository
 	weekendRepo    ports.WeekendConfigRepository
+	auditor        audit.Auditor
 }
 
 func NewUpdateHolidayUseCase(
 	db ports.DB,
 	holidayDefRepo ports.HolidayDefinitionRepository,
 	weekendRepo ports.WeekendConfigRepository,
+	auditor audit.Auditor,
 ) *UpdateHolidayUseCase {
-	return &UpdateHolidayUseCase{db: db, holidayDefRepo: holidayDefRepo, weekendRepo: weekendRepo}
+	return &UpdateHolidayUseCase{db: db, holidayDefRepo: holidayDefRepo, weekendRepo: weekendRepo, auditor: auditor}
 }
 
 func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHolidayInput) (*UpdateHolidayOutput, error) {
@@ -59,6 +63,11 @@ func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHoliday
 	if input.NameAR != nil {
 		nameAR = *input.NameAR
 	}
+
+	// Capture old values for audit
+	oldDate := definition.Date
+	oldNameEN := definition.NameEN
+	oldNameAR := definition.NameAR
 
 	dateOnly := normalizeDateOnly(input.Date)
 	departmentUIDs := normalizeInputDepartmentUIDs(input.DepartmentUIDs)
@@ -84,6 +93,34 @@ func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHoliday
 	definition.NameEN = nameEN
 	definition.NameAR = nameAR
 	definition.DepartmentUIDs = departmentUIDs
+
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s updated holiday '%s'",
+		actorName, definition.NameEN,
+	)
+
+	// Build audit metadata with field changes
+	auditBuilder := uc.auditor.From(ctx).
+		Did(audit.ActionUpdate).
+		On(audit.EntityHoliday, definition.UID).
+		WithMeta("action", actionSentence)
+
+	if !oldDate.Equal(dateOnly) {
+		auditBuilder.WithMeta("old_date", oldDate.Format("2006-01-02")).
+			WithMeta("new_date", dateOnly.Format("2006-01-02"))
+	}
+	if oldNameEN != nameEN {
+		auditBuilder.WithMeta("old_name_en", oldNameEN).
+			WithMeta("new_name_en", nameEN)
+	}
+	if oldNameAR != nameAR {
+		auditBuilder.WithMeta("old_name_ar", oldNameAR).
+			WithMeta("new_name_ar", nameAR)
+	}
+
+	defer auditBuilder.Save(ctx)
 
 	if err := uc.holidayDefRepo.Update(ctx, uc.db, definition); err != nil {
 		return nil, err

@@ -2,7 +2,9 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -21,15 +23,18 @@ type CreateApprovalFlowOutput struct {
 type CreateApprovalFlowUseCase struct {
 	db       ports.DB
 	flowRepo ports.ApprovalFlowRepository
+	auditor  audit.Auditor
 }
 
 func NewCreateApprovalFlowUseCase(
 	db ports.DB,
 	flowRepo ports.ApprovalFlowRepository,
+	auditor audit.Auditor,
 ) *CreateApprovalFlowUseCase {
 	return &CreateApprovalFlowUseCase{
 		db:       db,
 		flowRepo: flowRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -54,6 +59,22 @@ func (uc *CreateApprovalFlowUseCase) Execute(ctx context.Context, input CreateAp
 	if err := uc.flowRepo.Create(ctx, tx, flow); err != nil {
 		return nil, err
 	}
+
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s created approval flow '%s' (code: %s)",
+		actorName, input.NameEN, input.Code,
+	)
+
+	// Audit log after successful creation
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityApprovalFlow, flow.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("flow_name", input.NameEN).
+		WithMeta("flow_code", input.Code).
+		Save(ctx)
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

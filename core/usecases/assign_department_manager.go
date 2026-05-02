@@ -3,7 +3,9 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 )
 
@@ -21,6 +23,8 @@ type AssignDepartmentManagerUseCase struct {
 	deptRepo ports.DepartmentRepository
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
+	empRepo  ports.EmployeeRepository
+	auditor  audit.Auditor
 }
 
 func NewAssignDepartmentManagerUseCase(
@@ -28,12 +32,16 @@ func NewAssignDepartmentManagerUseCase(
 	deptRepo ports.DepartmentRepository,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	empRepo ports.EmployeeRepository,
+	auditor audit.Auditor,
 ) *AssignDepartmentManagerUseCase {
 	return &AssignDepartmentManagerUseCase{
 		db:       db,
 		deptRepo: deptRepo,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
+		empRepo:  empRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -59,6 +67,18 @@ func (uc *AssignDepartmentManagerUseCase) Execute(ctx context.Context, input Ass
 		return ErrUserNotFound
 	}
 
+	// Get employee information for audit metadata
+	var managerName string
+	if user.EmployeeUID != nil {
+		employee, err := uc.empRepo.GetByUID(ctx, uc.db, *user.EmployeeUID)
+		if err == nil && employee != nil {
+			managerName = employee.Name
+		}
+	}
+	if managerName == "" {
+		managerName = user.Phone
+	}
+
 	// Get the Department Manager role
 	role, err := uc.roleRepo.GetByUID(ctx, uc.db, DepartmentManagerRoleUID)
 	if err != nil {
@@ -67,6 +87,23 @@ func (uc *AssignDepartmentManagerUseCase) Execute(ctx context.Context, input Ass
 	if role == nil {
 		return errors.New("department_manager_role_not_found")
 	}
+
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s assigned %s as manager of department '%s'",
+		actorName, managerName, department.NameEN,
+	)
+	
+	// Audit log with manager information
+	defer uc.auditor.From(ctx).
+		Did("assign_manager").
+		On(audit.EntityDepartment, input.DepartmentUID).
+		WithMeta("action", actionSentence).
+		WithMeta("department_name", department.NameEN).
+		WithMeta("manager_uid", input.UserUID).
+		WithMeta("manager_name", managerName).
+		Save(ctx)
 
 	// Remove existing manager for this department (if any)
 	if err := uc.roleRepo.RemoveRoleFromUserForDepartment(ctx, uc.db, DepartmentManagerRoleUID, input.DepartmentUID); err != nil {

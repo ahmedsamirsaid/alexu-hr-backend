@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -293,9 +294,9 @@ func TestLeaveTypeHandler_GetLeaveType_Success(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/leave-types/lt_special", nil)
@@ -348,9 +349,9 @@ func TestLeaveTypeHandler_GetLeaveType_NotFound(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/leave-types/missing", nil)
@@ -391,9 +392,9 @@ func TestLeaveTypeHandler_UpdateLeaveType_Success(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/leave-types/lt_casual", strings.NewReader(`{"defaultBalance":10,"recordingDeadlineDays":4,"advanceNoticeDays":null}`))
@@ -445,9 +446,9 @@ func TestLeaveTypeHandler_UpdateLeaveType_InvalidDefaultBalance(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/leave-types/lt_casual", strings.NewReader(`{"defaultBalance":-1}`))
@@ -514,9 +515,9 @@ func TestLeaveTypeHandler_SetLeaveTypeApprovalFlow_Success(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/leave-types/lt_casual/approval-flow", strings.NewReader(`{"approvalFlowUid":"apf_special"}`))
@@ -569,9 +570,9 @@ func TestLeaveTypeHandler_SetLeaveTypeApprovalFlow_Clear(t *testing.T) {
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, stepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(&mockAttendanceDB{}, repo)
 	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(&mockAttendanceDB{}, repo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo)
-	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
+	setApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(&mockAttendanceDB{}, repo, approvalFlowRepo, audit.Noop())
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(&mockAttendanceDB{}, repo, audit.Noop())
 	handler := NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setApprovalFlowUC, toggleLeaveTypeUC)
 
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/leave-types/lt_casual/approval-flow", strings.NewReader(`{"approvalFlowUid":null}`))

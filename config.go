@@ -27,23 +27,23 @@ type AppConfig struct {
 	FCMEnabled            bool
 	FCMServiceAccountPath string
 	// Scheduler config
-	SchedulerEnabled       bool
-	ExpiredLeaveGraceDays  int
-	SchedulerIntervalHours int
-	HolidaySyncEndpoint    string
-	HolidaySyncAPIKey      string
-	HolidaySyncCountry     string
-	HolidaySyncTimezone    string
+	SchedulerEnabled         bool
+	ExpiredLeaveGraceDays    int
+	SchedulerIntervalHours   int
+	HolidaySyncEndpoint      string
+	HolidaySyncAPIKey        string
+	HolidaySyncCountry       string
+	HolidaySyncTimezone      string
 	SchedulerIntervalMinutes int
 	// Storage config
-	MinIOEndpoint                string
-	MinIOAccessKey               string
-	MinIOSecretKey               string
-	MinIOUseSSL                  bool
-	MinIODocumentsBucket         string
-	MinIOAutoCreateBucket        bool
-	MinIOUploadExpiryMinutes     int
-	MinIODownloadExpiryMinutes   int
+	MinIOEndpoint              string
+	MinIOAccessKey             string
+	MinIOSecretKey             string
+	MinIOUseSSL                bool
+	MinIODocumentsBucket       string
+	MinIOAutoCreateBucket      bool
+	MinIOUploadExpiryMinutes   int
+	MinIODownloadExpiryMinutes int
 }
 
 func LoadConfig() *AppConfig {
@@ -69,14 +69,14 @@ func LoadConfig() *AppConfig {
 		FCMEnabled:            getEnvBool("BANU_MUSA_FCM_ENABLED", false),
 		FCMServiceAccountPath: getEnv("BANU_MUSA_FCM_SERVICE_ACCOUNT_PATH", "./firebase/staging-banumusa-firebase-adminsdk-fbsvc-9f7f698d1d.json"),
 		// Scheduler config
-		SchedulerEnabled:       getEnvBool("BANU_MUSA_SCHEDULER_ENABLED", true),
-		ExpiredLeaveGraceDays:  getEnvInt("BANU_MUSA_EXPIRED_LEAVE_GRACE_DAYS", 1),
-		SchedulerIntervalHours: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_HOURS", 1),
+		SchedulerEnabled:         getEnvBool("BANU_MUSA_SCHEDULER_ENABLED", true),
+		ExpiredLeaveGraceDays:    getEnvInt("BANU_MUSA_EXPIRED_LEAVE_GRACE_DAYS", 1),
+		SchedulerIntervalHours:   getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_HOURS", 1),
 		SchedulerIntervalMinutes: getEnvInt("BANU_MUSA_SCHEDULER_INTERVAL_MINUTES", 1),
-		HolidaySyncEndpoint:    getEnv("BANU_MUSA_HOLIDAY_SYNC_ENDPOINT", "https://calendarific.com/api/v2/holidays"),
-		HolidaySyncAPIKey:      getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", "ysvLh7UNdrI0mbH9afetHcsaYcDGBiag"),
-		HolidaySyncCountry:     getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),
-		HolidaySyncTimezone:    getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
+		HolidaySyncEndpoint:      getEnv("BANU_MUSA_HOLIDAY_SYNC_ENDPOINT", "https://calendarific.com/api/v2/holidays"),
+		HolidaySyncAPIKey:        getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", "ysvLh7UNdrI0mbH9afetHcsaYcDGBiag"),
+		HolidaySyncCountry:       getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),
+		HolidaySyncTimezone:      getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
 
 		// Storage config
 		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "34.68.220.78:9000"),

@@ -74,6 +74,52 @@ func (r *AttendanceRecordRepository) GetByUID(ctx context.Context, q ports.Queri
 	return r.scanRecord(q.QueryRowContext(ctx, query, uid))
 }
 
+func (r *AttendanceRecordRepository) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.AttendanceRecord, error) {
+	if len(uids) == 0 {
+		return []*domain.AttendanceRecord{}, nil
+	}
+
+	// Build IN clause with placeholders
+	query := `
+		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
+		FROM attendance_records
+		WHERE uid IN (`
+
+	args := make([]any, len(uids))
+	for i, uid := range uids {
+		if i > 0 {
+			query += ", "
+		}
+		query += "?"
+		args[i] = uid
+	}
+	query += ")"
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("attendance_record_repository.GetByUIDs.query", "error", err, "count", len(uids))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*domain.AttendanceRecord
+	for rows.Next() {
+		rec, err := r.scanRecordRow(rows)
+		if err != nil {
+			slog.Error("attendance_record_repository.GetByUIDs.scan", "error", err)
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("attendance_record_repository.GetByUIDs.rows_err", "error", err)
+		return nil, err
+	}
+
+	return records, nil
+}
+
 func (r *AttendanceRecordRepository) Update(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) error {
 	query := `
 		UPDATE attendance_records
@@ -328,8 +374,8 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -341,8 +387,8 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid
@@ -462,8 +508,8 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -475,8 +521,8 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid
@@ -596,8 +642,8 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 			(
 				EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
 						WHERE ar1.employee_uid = ar.employee_uid
@@ -609,8 +655,8 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 				)
 				OR EXISTS (
 					SELECT 1
-					FROM attendance_edit_history aeh
-					WHERE aeh.attendance_record_uid = (
+					FROM audit_logs al
+					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
 						WHERE ar2.employee_uid = ar.employee_uid

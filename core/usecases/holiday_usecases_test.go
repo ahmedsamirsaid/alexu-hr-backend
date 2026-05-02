@@ -138,8 +138,8 @@ func TestUpdateHolidayUseCase_RejectsPastDate(t *testing.T) {
 	defer db.Close()
 
 	defRepo := dbadapter.NewHolidayDefinitionRepository()
-	createUC := NewCreateManualHolidayUseCase(db, defRepo, nil)
-	updateUC := NewUpdateHolidayUseCase(db, defRepo, nil)
+	createUC := NewCreateManualHolidayUseCase(db, defRepo, nil, nil)
+	updateUC := NewUpdateHolidayUseCase(db, defRepo, nil, nil)
 
 	futureDate := normalizeDateOnly(time.Now().AddDate(0, 0, 2))
 	created, err := createUC.Execute(context.Background(), CreateManualHolidayInput{
@@ -165,7 +165,7 @@ func TestDeleteHolidayUseCase_RejectsPastDate(t *testing.T) {
 	defer db.Close()
 
 	defRepo := dbadapter.NewHolidayDefinitionRepository()
-	deleteUC := NewDeleteHolidayUseCase(db, defRepo)
+	deleteUC := NewDeleteHolidayUseCase(db, defRepo, nil)
 
 	pastDate := normalizeDateOnly(time.Now().AddDate(0, 0, -1))
 	pastHoliday := &domain.HolidayDefinition{

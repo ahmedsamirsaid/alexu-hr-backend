@@ -2,8 +2,10 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -19,6 +21,7 @@ type AssignRoleUseCase struct {
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
 	deptRepo ports.DepartmentRepository
+	auditor  audit.Auditor
 }
 
 func NewAssignRoleUseCase(
@@ -26,12 +29,14 @@ func NewAssignRoleUseCase(
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
 	deptRepo ports.DepartmentRepository,
+	auditor audit.Auditor,
 ) *AssignRoleUseCase {
 	return &AssignRoleUseCase{
 		db:       db,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
 		deptRepo: deptRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -73,7 +78,21 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 		}
 	}
 
+	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionAssign).On(audit.EntityUser, input.UserUID).
+		WithMeta("role_uid", role.UID).
+		WithMeta("role_name", role.Name)
+
 	if departmentUIDInput == "" {
+		actionSentence := fmt.Sprintf("Role '%s' was assigned to user %s (global scope)", role.Name, user.Phone)
+		auditBuilder.
+			WithMeta("action", actionSentence).
+			WithMeta("scope", "global").
+			WithMeta("new_role", map[string]interface{}{
+				"role_uid":  role.UID,
+				"role_name": role.Name,
+				"scope":     "global",
+			})
+		defer auditBuilder.Save(ctx)
 		return uc.roleRepo.AssignRoleToUser(ctx, uc.db, user.ID, role.ID)
 	}
 
@@ -86,6 +105,19 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 	}
 
 	departmentUID := department.UID
+	actionSentence := fmt.Sprintf("Role '%s' was assigned to user %s for department '%s'", role.Name, user.Phone, department.NameEN)
+	auditBuilder.
+		WithMeta("department_uid", departmentUID).
+		WithMeta("department_name", department.NameEN).
+		WithMeta("action", actionSentence).
+		WithMeta("new_role", map[string]interface{}{
+			"role_uid":        role.UID,
+			"role_name":       role.Name,
+			"department_uid":  departmentUID,
+			"department_name": department.NameEN,
+		})
+	defer auditBuilder.Save(ctx)
+
 	return uc.roleRepo.AssignRoleToUserWithDepartment(ctx, uc.db, user.ID, role.ID, &departmentUID)
 }
 
@@ -98,17 +130,20 @@ type RemoveRoleUseCase struct {
 	db       ports.DB
 	userRepo ports.UserRepository
 	roleRepo ports.RoleRepository
+	auditor  audit.Auditor
 }
 
 func NewRemoveRoleUseCase(
 	db ports.DB,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *RemoveRoleUseCase {
 	return &RemoveRoleUseCase{
 		db:       db,
 		userRepo: userRepo,
 		roleRepo: roleRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -128,6 +163,18 @@ func (uc *RemoveRoleUseCase) Execute(ctx context.Context, input RemoveRoleInput)
 	if role == nil {
 		return ErrRoleNotFound
 	}
+
+	actionSentence := fmt.Sprintf("Role '%s' was removed from user %s", role.Name, user.Phone)
+
+	defer uc.auditor.From(ctx).Did(audit.ActionUnassign).On(audit.EntityUser, input.UserUID).
+		WithMeta("action", actionSentence).
+		WithMeta("role_uid", role.UID).
+		WithMeta("role_name", role.Name).
+		WithMeta("removed_role", map[string]interface{}{
+			"role_uid":  role.UID,
+			"role_name": role.Name,
+		}).
+		Save(ctx)
 
 	return uc.roleRepo.RemoveRoleFromUser(ctx, uc.db, user.ID, role.ID)
 }

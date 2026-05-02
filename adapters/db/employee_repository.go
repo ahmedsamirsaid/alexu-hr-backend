@@ -37,6 +37,53 @@ func (r *EmployeeRepository) GetByUID(ctx context.Context, q ports.Querier, uid 
 	return r.scanEmployee(q.QueryRowContext(ctx, query, uid))
 }
 
+func (r *EmployeeRepository) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Employee, error) {
+	if len(uids) == 0 {
+		return []*domain.Employee{}, nil
+	}
+
+	// Build IN clause with placeholders
+	query := `
+		SELECT id, uid, name, mobile, government_id, university_id, email,
+		       hire_date, status, department_uid, shift_uid, created_at, updated_at
+		FROM employees
+		WHERE uid IN (`
+
+	args := make([]any, len(uids))
+	for i, uid := range uids {
+		if i > 0 {
+			query += ", "
+		}
+		query += "?"
+		args[i] = uid
+	}
+	query += ")"
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("employee_repository.GetByUIDs.query", "error", err, "count", len(uids))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var employees []*domain.Employee
+	for rows.Next() {
+		emp, err := r.scanEmployeeRow(rows)
+		if err != nil {
+			slog.Error("employee_repository.GetByUIDs.scan", "error", err)
+			return nil, err
+		}
+		employees = append(employees, emp)
+	}
+
+	if err := rows.Err(); err != nil {
+		slog.Error("employee_repository.GetByUIDs.rows_err", "error", err)
+		return nil, err
+	}
+
+	return employees, nil
+}
+
 func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
 	query := `
 		INSERT INTO employees (uid, name, mobile, government_id, university_id, email,

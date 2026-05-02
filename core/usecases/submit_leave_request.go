@@ -3,10 +3,12 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -73,6 +75,7 @@ type SubmitLeaveRequestUseCase struct {
 	documentUploadURLUC  *GenerateDocumentUploadURLUseCase
 	notificationService  ports.NotificationService
 	roleRepo             ports.RoleRepository
+	auditor              audit.Auditor
 }
 
 func NewSubmitLeaveRequestUseCase(
@@ -92,6 +95,7 @@ func NewSubmitLeaveRequestUseCase(
 	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
 	notificationService ports.NotificationService,
 	roleRepo ports.RoleRepository,
+	auditor audit.Auditor,
 ) *SubmitLeaveRequestUseCase {
 	return &SubmitLeaveRequestUseCase{
 		db:                   db,
@@ -110,6 +114,7 @@ func NewSubmitLeaveRequestUseCase(
 		documentUploadURLUC:  documentUploadURLUC,
 		notificationService:  notificationService,
 		roleRepo:             roleRepo,
+		auditor:              auditor,
 	}
 }
 
@@ -175,7 +180,6 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 		return nil, err
 	}
 
-	// if totalWorkingDays is 0, return error
 	if totalWorkingDays == 0 {
 		return nil, ErrNoWorkingDays
 	}
@@ -210,12 +214,10 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 
 	// Check if leave type has an approval flow
-	// If no approval flow, auto-approve by creating leave record directly
 	if !leaveType.RequiresApproval() {
 		return uc.handleAutoApprove(ctx, tx, employee, leaveType, balance, input, totalWorkingDays)
 	}
 
-	// Normal approval flow
 	return uc.handleApprovalFlow(ctx, tx, employee, leaveType, balance, input, totalWorkingDays)
 }
 
@@ -288,7 +290,7 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		input.StartDate,
 		input.EndDate,
 		totalWorkingDays,
-		&employee.ID, // recorded_by is the employee themselves
+		&employee.ID,
 		input.Notes,
 		&leaveRequest.UID,
 	)
@@ -296,13 +298,11 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		return nil, err
 	}
 
-	// Deduct balance
 	balance.UsedDays += totalWorkingDays
 	if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 		return nil, err
 	}
 
-	// Record balance transaction
 	balanceTx := domain.NewLeaveBalanceTransaction(
 		balance.ID,
 		domain.TransactionTypeDeduct,
@@ -366,7 +366,6 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		currentStep = chain.matchedFlowStep.StepOrder + 1
 	}
 
-	// Create approval request
 	approvalRequest := domain.NewApprovalRequestWithState(
 		*leaveType.ApprovalFlowUID,
 		input.EmployeeUID,
@@ -378,7 +377,6 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		return nil, err
 	}
 
-	// Create leave request
 	leaveRequest := domain.NewLeaveRequest(
 		input.EmployeeUID,
 		input.LeaveTypeUID,
@@ -398,11 +396,30 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		return nil, err
 	}
 
-	// Record submit action
+	// Audit log for leave request submission with human-readable action sentence
+	actionSentence := fmt.Sprintf(
+		"%s (Employee) submitted a %s leave request for %s to %s (%d days)",
+		employee.Name, leaveType.NameEN,
+		input.StartDate.Format("Jan 2, 2006"),
+		input.EndDate.Format("Jan 2, 2006"),
+		totalWorkingDays,
+	)
+	defer uc.auditor.Actor(input.EmployeeUID).
+		Did(audit.ActionSubmit).
+		On(audit.EntityLeaveRequest, leaveRequest.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("leave_type", leaveType.NameEN).
+		WithMeta("start_date", input.StartDate.Format("2006-01-02")).
+		WithMeta("end_date", input.EndDate.Format("2006-01-02")).
+		WithMeta("days", totalWorkingDays).
+		WithMeta("new_status", "pending").
+		WithMeta("approval_request_uid", approvalRequest.UID).
+		Save(ctx)
+
 	submitAction := domain.NewApprovalAction(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
-		nil, // step_order is nil for submit
+		nil,
 		input.EmployeeUID,
 		nil,
 	)
@@ -415,7 +432,6 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		return nil, err
 	}
 
-	// Notify approvers at the raw current step.
 	var step1RoleUID string
 	var departmentUID string
 	if step1, err := uc.approvalFlowStepRepo.GetByFlowAndStep(ctx, tx, *leaveType.ApprovalFlowUID, approvalRequest.CurrentStep); err == nil && step1 != nil {
@@ -427,7 +443,6 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 		return nil, err
 	}
 
-	// Send notification to step 1 approvers (after commit, non-blocking)
 	if step1RoleUID != "" {
 		go uc.notifyApprovers(step1RoleUID, departmentUID, employee.Name, leaveType.NameAR, leaveRequest.UID)
 	}
@@ -623,7 +638,6 @@ func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(
 }
 
 func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeName, requestUID string) {
-	// Get users with the required role for this department
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("submit_leave_request.notifyApprovers.get_approvers", "error", err)
@@ -634,13 +648,11 @@ func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, emp
 		return
 	}
 
-	// Collect user UIDs
 	userUIDs := make([]string, len(approvers))
 	for i, user := range approvers {
 		userUIDs[i] = user.UID
 	}
 
-	// Send notification
 	title := "طلب إجازة جديد"
 	body := "طلب " + employeeName + " " + leaveTypeName
 	data := ports.NotificationData{

@@ -2,8 +2,10 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -34,6 +36,7 @@ type ApproveRequestUseCase struct {
 	roleRepo             ports.RoleRepository
 	notificationService  ports.NotificationService
 	userRepo             ports.UserRepository
+	auditor              audit.Auditor
 }
 
 func NewApproveRequestUseCase(
@@ -50,6 +53,7 @@ func NewApproveRequestUseCase(
 	roleRepo ports.RoleRepository,
 	notificationService ports.NotificationService,
 	userRepo ports.UserRepository,
+	auditor audit.Auditor,
 ) *ApproveRequestUseCase {
 	return &ApproveRequestUseCase{
 		db:                   db,
@@ -65,6 +69,7 @@ func NewApproveRequestUseCase(
 		roleRepo:             roleRepo,
 		notificationService:  notificationService,
 		userRepo:             userRepo,
+		auditor:              auditor,
 	}
 }
 
@@ -113,6 +118,55 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		return nil, ErrNotAuthorizedApprover
 	}
 
+	// Fetch actor employee name and role name for the audit action sentence
+	actorName := input.ActorEmployeeUID
+	if actor, err := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID); err == nil && actor != nil {
+		actorName = actor.Name
+	}
+	actorRoleName := "Approver"
+	if role, err := uc.roleRepo.GetByUID(ctx, tx, step.RoleUID); err == nil && role != nil {
+		actorRoleName = role.Name
+	}
+
+	// Fetch leave request and leave type for context in the audit message
+	leaveRequest, _ := uc.leaveRequestRepo.GetByApprovalRequestUID(ctx, tx, approvalRequest.UID)
+	leaveTypeName := "Leave"
+	var leaveStartDate, leaveEndDate string
+	leaveRequestUID := ""
+	leaveDays := 0
+	if leaveRequest != nil {
+		leaveRequestUID = leaveRequest.UID
+		leaveStartDate = leaveRequest.StartDate.Format("Jan 2, 2006")
+		leaveEndDate = leaveRequest.EndDate.Format("Jan 2, 2006")
+		leaveDays = leaveRequest.Days
+		if lt, err := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID); err == nil && lt != nil {
+			leaveTypeName = lt.NameEN
+		}
+	}
+
+	// Build audit entry (deferred save fires on function return)
+	actionSentence := fmt.Sprintf(
+		"%s (%s) approved %s (Employee)'s %s leave request for %s to %s (%d days)",
+		actorName, actorRoleName, requester.Name, leaveTypeName,
+		leaveStartDate, leaveEndDate, leaveDays,
+	)
+	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionApprove).
+		On(audit.EntityLeaveRequest, leaveRequestUID).
+		WithMeta("action", actionSentence).
+		WithMeta("comments", input.Comments).
+		// WithMeta("approval_request_uid", input.ApprovalRequestUID).
+		// WithMeta("requester_uid", approvalRequest.RequesterUID).
+		WithMeta("requester_name", requester.Name).
+		WithMeta("leave_type", leaveTypeName).
+		WithMeta("start_date", leaveStartDate).
+		WithMeta("end_date", leaveEndDate).
+		WithMeta("days", leaveDays).
+		WithMeta("old_status", "pending").
+		WithMeta("new_status", "approved").
+		WithMeta("step_order", approvalRequest.CurrentStep)
+	defer auditBuilder.Save(ctx)
+
 	// Record the approve action
 	currentStep := approvalRequest.CurrentStep
 	action := domain.NewApprovalAction(
@@ -137,10 +191,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// If final approval, create leave record and deduct balance
 	if isFinalApproval {
-		leaveRequest, err := uc.leaveRequestRepo.GetByApprovalRequestUID(ctx, tx, approvalRequest.UID)
-		if err != nil {
-			return nil, err
-		}
 		if leaveRequest == nil {
 			return nil, ErrLeaveRequestNotFound
 		}
@@ -162,6 +212,8 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		}
 
 		// Re-check balance at approval time
+		oldUsedDays := balance.UsedDays
+		oldRemainingDays := balance.TotalDays - balance.UsedDays
 		remaining := balance.TotalDays - balance.UsedDays
 		if leaveRequest.Days > remaining {
 			// Reject due to insufficient balance at approval time
@@ -183,7 +235,7 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 			leaveRequest.StartDate,
 			leaveRequest.EndDate,
 			leaveRequest.Days,
-			&requester.ID, // recorded_by is the approver's employee ID
+			&requester.ID,
 			leaveRequest.Notes,
 			&leaveRequest.UID,
 		)
@@ -196,6 +248,29 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 			return nil, err
 		}
+
+		// Audit log for balance deduction with old/new values
+		uc.auditor.Actor(input.ActorEmployeeUID).
+			Did(audit.ActionDeductBalance).
+			On(audit.EntityLeaveBalance, balance.UID).
+			WithMeta("action", fmt.Sprintf(
+				"%s approved %s's %s leave — deducted %.1f days from balance (was %.1f used, now %.1f used)",
+				actorName, requester.Name, leaveTypeName,
+				float64(leaveRequest.Days), float64(oldUsedDays), float64(balance.UsedDays),
+			)).
+			WithMeta("employee_uid", approvalRequest.RequesterUID).
+			WithMeta("leave_type_uid", leaveRequest.LeaveTypeUID).
+			WithMeta("leave_type_name", leaveType.NameAR).
+			WithMeta("deduction_amount", leaveRequest.Days).
+			WithMeta("old_used_days", oldUsedDays).
+			WithMeta("new_used_days", balance.UsedDays).
+			WithMeta("old_remaining_days", oldRemainingDays).
+			WithMeta("new_remaining_days", balance.TotalDays-balance.UsedDays).
+			WithMeta("start_date", leaveRequest.StartDate.Format("2006-01-02")).
+			WithMeta("end_date", leaveRequest.EndDate.Format("2006-01-02")).
+			WithMeta("year", year).
+			WithMeta("leave_request_uid", leaveRequest.UID).
+			Save(ctx)
 
 		// Record balance transaction
 		balanceTx := domain.NewLeaveBalanceTransaction(
@@ -219,31 +294,26 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Get data for notification before commit
 	var requesterUID string
-	var leaveTypeName string
-	var leaveRequestUID string
+	var leaveTypeNameNotif string
 	var nextStepRoleUID string
 	var departmentUID string
-	var requesterName string
+	var requesterNameNotif string
 
-	lr, _ := uc.leaveRequestRepo.GetByApprovalRequestUID(ctx, tx, approvalRequest.UID)
-	if lr != nil {
-		leaveRequestUID = lr.UID
-		lt, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, lr.LeaveTypeUID)
+	if leaveRequest != nil {
+		lt, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if lt != nil {
-			leaveTypeName = lt.NameAR
+			leaveTypeNameNotif = lt.NameAR
 		}
 	}
 
 	if isFinalApproval {
 		requesterUID = approvalRequest.RequesterUID
 	} else {
-		// Intermediate approval - get next step approvers
-		// Note: approvalRequest.CurrentStep has already been incremented by Approve()
 		nextStep, err := uc.approvalFlowStepRepo.GetByFlowAndStep(ctx, tx, approvalRequest.ApprovalFlowUID, approvalRequest.CurrentStep)
 		if err == nil && nextStep != nil {
 			nextStepRoleUID = nextStep.RoleUID
 			departmentUID = *requester.DepartmentUID
-			requesterName = requester.Name
+			requesterNameNotif = requester.Name
 		}
 	}
 
@@ -253,9 +323,9 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Send notification after commit (non-blocking, uses background context)
 	if isFinalApproval && requesterUID != "" {
-		go uc.notifyRequesterApproved(requesterUID, leaveTypeName, leaveRequestUID)
+		go uc.notifyRequesterApproved(requesterUID, leaveTypeNameNotif, leaveRequestUID)
 	} else if nextStepRoleUID != "" {
-		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterName, leaveTypeName, leaveRequestUID)
+		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterNameNotif, leaveTypeNameNotif, leaveRequestUID)
 	}
 
 	return &ApproveRequestOutput{
@@ -265,7 +335,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 }
 
 func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeName, requestUID string) {
-	// Get the user linked to this employee
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("approve_request.notifyRequesterApproved.no_user", "employee_uid", employeeUID)
@@ -286,7 +355,6 @@ func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeN
 }
 
 func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID, requesterName, leaveTypeName, requestUID string) {
-	// Get users with the required role for this department
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("approve_request.notifyNextStepApprovers.get_approvers", "error", err, "role_uid", roleUID)
@@ -298,7 +366,6 @@ func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID,
 		return
 	}
 
-	// Collect user UIDs
 	userUIDs := make([]string, len(approvers))
 	for i, user := range approvers {
 		userUIDs[i] = user.UID

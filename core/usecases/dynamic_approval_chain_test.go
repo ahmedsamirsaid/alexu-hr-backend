@@ -86,6 +86,7 @@ func newApprovalChainTestEnv(t *testing.T) *approvalChainTestEnv {
 		nil,
 		notificationService,
 		roleRepo,
+		nil,
 	)
 
 	approveUC := usecases.NewApproveRequestUseCase(
@@ -102,6 +103,7 @@ func newApprovalChainTestEnv(t *testing.T) *approvalChainTestEnv {
 		roleRepo,
 		notificationService,
 		userRepo,
+		nil,
 	)
 
 	listPendingUC := usecases.NewListPendingApprovalsUseCase(

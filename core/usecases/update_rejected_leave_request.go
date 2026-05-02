@@ -208,7 +208,7 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 		}
 	}
 
-	totalWorkingDays, err := uc.workingDaysCalc.CalculateWorkingDays(ctx, tx, leaveRequest.StartDate, leaveRequest.EndDate)
+	totalWorkingDays, err := calculateLeaveDays(ctx, tx, uc.workingDaysCalc, leaveType, leaveRequest.StartDate, leaveRequest.EndDate)
 	if err != nil {
 		return nil, err
 	}

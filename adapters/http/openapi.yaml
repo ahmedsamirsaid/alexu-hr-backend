@@ -560,6 +560,16 @@ components:
           format: date-time
           example: "2026-04-23T10:30:00Z"
 
+    ApprovalFlowWithSteps:
+      allOf:
+        - $ref: "#/components/schemas/ApprovalFlow"
+        - type: object
+          properties:
+            steps:
+              type: array
+              items:
+                $ref: "#/components/schemas/ApprovalFlowStep"
+
     ApprovalFlowStep:
       type: object
       properties:
@@ -602,16 +612,46 @@ components:
         nameAr:
           type: string
           example: "إجازة سنوية"
-        maxDaysPerYear:
+        defaultBalance:
           type: integer
           example: 21
-        maxConsecutiveDays:
+        maxConsecutive:
           type: integer
           nullable: true
           example: 14
+        recordingDeadlineDays:
+          type: integer
+          nullable: true
+          example: 30
+        advanceNoticeDays:
+          type: integer
+          nullable: true
+          example: 7
         isActive:
           type: boolean
           example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-30T10:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-30T10:00:00Z"
+
+    LeaveTypeDetailsResponse:
+      type: object
+      properties:
+        leaveType:
+          $ref: "#/components/schemas/LeaveType"
+        approvalFlow:
+          allOf:
+            - $ref: "#/components/schemas/ApprovalFlowWithSteps"
+          nullable: true
+        subLeaveTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubLeaveType"
 
     DashboardStats:
       type: object
@@ -3108,6 +3148,79 @@ paths:
                     items:
                       $ref: "#/components/schemas/LeaveType"
 
+  /api/v1/admin/leave-types/{uid}:
+    patch:
+      tags: [Leave Types]
+      summary: Update editable leave type fields
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "lt_annual"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                defaultBalance:
+                  type: integer
+                  example: 21
+                recordingDeadlineDays:
+                  type: integer
+                  nullable: true
+                  example: 30
+                advanceNoticeDays:
+                  type: integer
+                  nullable: true
+                  example: 7
+      responses:
+        "200":
+          description: Leave type updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveType"
+        "400":
+          description: Invalid request body or invalid field values
+        "404":
+          description: Leave type not found
+
+  /api/v1/admin/leave-types/{uid}/approval-flow:
+    patch:
+      tags: [Leave Types]
+      summary: Assign or replace the approval flow for a leave type
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "lt_special"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approvalFlowUid:
+                  type: string
+                  nullable: true
+                  example: "apf_special"
+      responses:
+        "200":
+          description: Leave type approval flow updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveTypeDetailsResponse"
+        "404":
+          description: Leave type or approval flow not found
+
   /api/v1/admin/leave-types/{uid}/active:
     patch:
       tags: [Leave Types]
@@ -3137,6 +3250,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LeaveType"
+
+  /api/v1/leave-types/{uid}:
+    get:
+      tags: [Leave Types]
+      summary: Get leave type details with sub leave types
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "lt_special"
+      responses:
+        "200":
+          description: Leave type details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaveTypeDetailsResponse"
+        "404":
+          description: Leave type not found
 
   /api/v1/leave-types/{uid}/sub-leave-types:
     get:

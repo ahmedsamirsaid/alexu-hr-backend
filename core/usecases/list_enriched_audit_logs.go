@@ -305,6 +305,16 @@ func (uc *ListEnrichedAuditLogsUseCase) fetchEntityDescriptions(ctx context.Cont
 		}
 	}
 
+	// Fetch leave types for leave_type entities
+	if leaveTypeUIDs, ok := entityUIDsByType["leave_type"]; ok && len(leaveTypeUIDs) > 0 {
+		for _, ltUID := range leaveTypeUIDs {
+			leaveType, err := uc.leaveTypeRepo.GetByUID(ctx, uc.db, ltUID)
+			if err == nil && leaveType != nil {
+				descMap[ltUID] = leaveType.NameEN + " (" + leaveType.Code + ")"
+			}
+		}
+	}
+
 	return descMap, nil
 }
 

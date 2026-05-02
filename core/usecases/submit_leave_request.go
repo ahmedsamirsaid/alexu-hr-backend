@@ -175,7 +175,7 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 
 	// Calculate working days
-	totalWorkingDays, err := uc.workingDaysCalc.CalculateWorkingDays(ctx, tx, input.StartDate, input.EndDate)
+	totalWorkingDays, err := calculateLeaveDays(ctx, tx, uc.workingDaysCalc, leaveType, input.StartDate, input.EndDate)
 	if err != nil {
 		return nil, err
 	}

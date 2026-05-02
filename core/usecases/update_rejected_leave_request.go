@@ -2,10 +2,12 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -42,6 +44,7 @@ type UpdateRejectedLeaveRequestUseCase struct {
 	approvalActionRepo  ports.ApprovalActionRepository
 	workingDaysCalc     *WorkingDaysCalculator
 	documentUploadURLUC *GenerateDocumentUploadURLUseCase
+	auditor             audit.Auditor
 }
 
 func NewUpdateRejectedLeaveRequestUseCase(
@@ -54,6 +57,7 @@ func NewUpdateRejectedLeaveRequestUseCase(
 	approvalActionRepo ports.ApprovalActionRepository,
 	workingDaysCalc *WorkingDaysCalculator,
 	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
+	auditor audit.Auditor,
 ) *UpdateRejectedLeaveRequestUseCase {
 	return &UpdateRejectedLeaveRequestUseCase{
 		db:                  db,
@@ -65,6 +69,7 @@ func NewUpdateRejectedLeaveRequestUseCase(
 		approvalActionRepo:  approvalActionRepo,
 		workingDaysCalc:     workingDaysCalc,
 		documentUploadURLUC: documentUploadURLUC,
+		auditor:             auditor,
 	}
 }
 
@@ -105,6 +110,29 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 		return nil, ErrNoDepartmentAssigned
 	}
 
+	// Capture old values for audit
+	oldLeaveTypeUID := leaveRequest.LeaveTypeUID
+	oldStartDate := leaveRequest.StartDate
+	oldEndDate := leaveRequest.EndDate
+
+	// Build human-readable action sentence
+	actorName := input.ActorEmployeeUID
+	if employee != nil {
+		actorName = employee.Name
+	}
+	
+	actionSentence := fmt.Sprintf(
+		"%s (Employee) updated and resubmitted their rejected leave request",
+		actorName,
+	)
+	
+	// Build audit metadata with field changes
+	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionUpdate).
+		On(audit.EntityLeaveRequest, input.LeaveRequestUID).
+		WithMeta("action", actionSentence).
+		WithMeta("resubmit_after_rejection", true)
+
 	if input.LeaveTypeUID != nil && *input.LeaveTypeUID != "" {
 		leaveRequest.LeaveTypeUID = *input.LeaveTypeUID
 	}
@@ -132,6 +160,22 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 	if input.SpouseWorkCountry != nil {
 		leaveRequest.SpouseWorkCountry = input.SpouseWorkCountry
 	}
+
+	// Add field changes to audit metadata
+	if oldLeaveTypeUID != leaveRequest.LeaveTypeUID {
+		auditBuilder.WithMeta("old_leave_type_uid", oldLeaveTypeUID).
+			WithMeta("new_leave_type_uid", leaveRequest.LeaveTypeUID)
+	}
+	if !oldStartDate.Equal(leaveRequest.StartDate) {
+		auditBuilder.WithMeta("old_start_date", oldStartDate.Format("2006-01-02")).
+			WithMeta("new_start_date", leaveRequest.StartDate.Format("2006-01-02"))
+	}
+	if !oldEndDate.Equal(leaveRequest.EndDate) {
+		auditBuilder.WithMeta("old_end_date", oldEndDate.Format("2006-01-02")).
+			WithMeta("new_end_date", leaveRequest.EndDate.Format("2006-01-02"))
+	}
+
+	defer auditBuilder.Save(ctx)
 
 	if leaveRequest.EndDate.Before(leaveRequest.StartDate) {
 		return nil, ErrInvalidDateRange

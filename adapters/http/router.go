@@ -22,6 +22,7 @@ type RouterConfig struct {
 	AttendanceHandler       *AttendanceHandler
 	HolidayHandler          *HolidayHandler
 	DebugHandler            *DebugHandler
+	AuditHandler            *AuditHandler
 	JWTService              *JWTService
 	AuthEnabled             bool
 	DocumentHandler         *DocumentHandler
@@ -139,6 +140,14 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("DELETE /api/v1/admin/attendance-devices/{uid}", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Delete)))
 	protectedMux.Handle("PATCH /api/v1/admin/attendance-devices/{uid}/activate", RequirePermission("attendance-devices:write")(http.HandlerFunc(cfg.AttendanceDeviceHandler.Activate)))
 	protectedMux.Handle("GET /api/v1/attendance/employees/{employeeUid}/logs/stats/monthly", RequirePermission("attendance:read")(http.HandlerFunc(cfg.AttendanceHandler.GetMonthlyStats)))
+
+	// Audit endpoints
+	protectedMux.Handle("GET /api/v1/audit/logs", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.ListAllAuditLogs)))
+	protectedMux.Handle("GET /api/v1/audit/logs/enriched", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.ListEnrichedAuditLogs)))
+	protectedMux.Handle("GET /api/v1/audit/filter-options", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetFilterOptions)))
+	protectedMux.Handle("GET /api/v1/audit/entity/{entityType}/{entityUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetAuditTrail)))
+	protectedMux.Handle("GET /api/v1/audit/actor/{actorUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetActorAuditEvents)))
+
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)
 	mux.Handle("/api/v1/", authMiddleware(protectedMux))
 

@@ -3,9 +3,11 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -52,26 +54,26 @@ type AttendanceLogOutput struct {
 }
 
 type CreateAttendanceLogUseCase struct {
-	db              ports.DB
-	recordRepo      ports.AttendanceRecordRepository
-	editHistoryRepo ports.AttendanceEditHistoryRepository
-	employeeRepo    ports.EmployeeRepository
-	deviceRepo      ports.AttendanceDeviceRepository
+	db           ports.DB
+	recordRepo   ports.AttendanceRecordRepository
+	employeeRepo ports.EmployeeRepository
+	deviceRepo   ports.AttendanceDeviceRepository
+	auditor      audit.Auditor
 }
 
 func NewCreateAttendanceLogUseCase(
 	db ports.DB,
 	recordRepo ports.AttendanceRecordRepository,
-	editHistoryRepo ports.AttendanceEditHistoryRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
+	auditor audit.Auditor,
 ) *CreateAttendanceLogUseCase {
 	return &CreateAttendanceLogUseCase{
-		db:              db,
-		recordRepo:      recordRepo,
-		editHistoryRepo: editHistoryRepo,
-		employeeRepo:    employeeRepo,
-		deviceRepo:      deviceRepo,
+		db:           db,
+		recordRepo:   recordRepo,
+		employeeRepo: employeeRepo,
+		deviceRepo:   deviceRepo,
+		auditor:      auditor,
 	}
 }
 
@@ -87,14 +89,35 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	}
 	defer tx.Rollback()
 
+	// Get employee name for human-readable action sentence
+	employee, _ := uc.employeeRepo.GetByUID(ctx, uc.db, record.EmployeeUID)
+	employeeName := record.EmployeeUID
+	if employee != nil {
+		employeeName = employee.Name
+	}
+
+	actorName := audit.ActorFromContext(ctx)
+	
+	// Format time in Cairo timezone for audit log display
+	cairoLoc, _ := time.LoadLocation("Africa/Cairo")
+	if cairoLoc == nil {
+		cairoLoc = time.FixedZone("Africa/Cairo", 2*60*60) // Fallback to UTC+2
+	}
+	localTime := record.PunchedAt.In(cairoLoc)
+	
+	actionSentence := fmt.Sprintf(
+		"%s created attendance record for %s (Employee) — %s at %s",
+		actorName, employeeName, string(record.PunchType), localTime.Format("Jan 2, 2006 3:04 PM"),
+	)
+
+	// Audit log will fire after successful creation
+	// we will save the audit log only if the transaction commits successfully
+
 	existingRecords, err := uc.recordRepo.ListByDate(ctx, tx, record.PunchedAt, &record.EmployeeUID)
 	if err != nil {
 		return nil, err
 	}
 	for _, existing := range existingRecords {
-		if existing.PunchType == record.PunchType {
-			return nil, ErrAttendanceLogConflict
-		}
 		if record.PunchType == domain.AttendancePunchTypeCheckOut &&
 			existing.PunchType == domain.AttendancePunchTypeCheckIn &&
 			record.PunchedAt.Before(existing.PunchedAt) {
@@ -113,22 +136,51 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 		return nil, ErrAttendanceLogConflict
 	}
 
-	editReason := normalizeOptionalString(input.Reason)
-	history := domain.NewAttendanceEditHistory(record.UID, "created_manually", strings.TrimSpace(input.EditedByUID), nil, nil, editReason)
-	history.CreatedAt = record.CreatedAt
-	if err := uc.editHistoryRepo.Create(ctx, tx, history); err != nil {
-		return nil, err
-	}
+	// Note: Audit logging is handled after successful transaction commit
+	// No need to write to attendance_edit_history table - audit_logs table is used instead
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+	// device name not uid 
+	device, _ := uc.deviceRepo.GetByUID(ctx, uc.db, record.DeviceUID)
+
+	uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("employee_name", employeeName).
+		WithMeta("device_uid", record.DeviceUID).
+		WithMeta("device_name", device.Name).
+		WithMeta("punched_at", record.PunchedAt.Format(time.RFC3339)).
+		WithMeta("punch_type", string(record.PunchType)).
+		WithMeta("reason", normalizeOptionalString(input.Reason)).
+		SaveSync(ctx)
 
 	return buildAttendanceLogOutput(record), nil
 }
 
 func (uc *CreateAttendanceLogUseCase) buildNewRecord(ctx context.Context, employeeUID, deviceUID string, punchedAt time.Time, punchType string) (*domain.AttendanceRecord, error) {
-	deviceUserID := domain.GenerateUID("dusr")
+	// For manually created attendance logs, use the employee's university ID as device_user_id
+	// to ensure the unique constraint works properly and prevents duplicate entries
+	employee, err := uc.employeeRepo.GetByUID(ctx, uc.db, employeeUID)
+	if err != nil {
+		return nil, err
+	}
+	if employee == nil {
+		return nil, ErrEmployeeNotFound
+	}
+	
+	deviceUserID := employee.UniversityID
+	if deviceUserID == "" {
+		deviceUserID = employee.GovernmentID
+	}
+	if deviceUserID == "" {
+		// Fallback to generating a UID if neither ID is available
+		deviceUserID = domain.GenerateUID("dusr")
+	}
+	
 	return uc.buildRecord(ctx, employeeUID, deviceUID, deviceUserID, punchedAt, punchType, nil, nil)
 }
 
@@ -191,26 +243,26 @@ func (uc *CreateAttendanceLogUseCase) buildRecord(ctx context.Context, employeeU
 }
 
 type UpdateAttendanceLogUseCase struct {
-	db              ports.DB
-	recordRepo      ports.AttendanceRecordRepository
-	editHistoryRepo ports.AttendanceEditHistoryRepository
-	employeeRepo    ports.EmployeeRepository
-	deviceRepo      ports.AttendanceDeviceRepository
+	db           ports.DB
+	recordRepo   ports.AttendanceRecordRepository
+	employeeRepo ports.EmployeeRepository
+	deviceRepo   ports.AttendanceDeviceRepository
+	auditor      audit.Auditor
 }
 
 func NewUpdateAttendanceLogUseCase(
 	db ports.DB,
 	recordRepo ports.AttendanceRecordRepository,
-	editHistoryRepo ports.AttendanceEditHistoryRepository,
 	employeeRepo ports.EmployeeRepository,
 	deviceRepo ports.AttendanceDeviceRepository,
+	auditor audit.Auditor,
 ) *UpdateAttendanceLogUseCase {
 	return &UpdateAttendanceLogUseCase{
-		db:              db,
-		recordRepo:      recordRepo,
-		editHistoryRepo: editHistoryRepo,
-		employeeRepo:    employeeRepo,
-		deviceRepo:      deviceRepo,
+		db:           db,
+		recordRepo:   recordRepo,
+		employeeRepo: employeeRepo,
+		deviceRepo:   deviceRepo,
+		auditor:      auditor,
 	}
 }
 
@@ -234,12 +286,41 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 		return nil, ErrAttendanceLogNotFound
 	}
 
-	before := *existing
+	// Capture old values for audit metadata
+	oldDeviceUID := existing.DeviceUID
+	oldPunchedAt := existing.PunchedAt
+	oldPunchType := existing.PunchType
+
 	record, err := uc.buildUpdatedRecord(ctx, existing, input.DeviceUID, input.PunchedAt, input.PunchType)
 	if err != nil {
 		return nil, err
 	}
+	// Get employee name for human-readable action sentence
+	employee, _ := uc.employeeRepo.GetByUID(ctx, tx, record.EmployeeUID)
+	employeeName := record.EmployeeUID
+	if employee != nil {
+		employeeName = employee.Name
+	}
 
+	actorName := audit.ActorFromContext(ctx)
+	
+	// Format times in Cairo timezone for audit log display
+	cairoLoc, _ := time.LoadLocation("Africa/Cairo")
+	if cairoLoc == nil {
+		cairoLoc = time.FixedZone("Africa/Cairo", 2*60*60) // Fallback to UTC+2
+	}
+	oldLocalTime := oldPunchedAt.In(cairoLoc)
+	newLocalTime := record.PunchedAt.In(cairoLoc)
+	
+	actionSentence := fmt.Sprintf(
+		"%s updated attendance record for %s (Employee) — changed from %s at %s to %s at %s",
+		actorName, employeeName,
+		string(oldPunchType), oldLocalTime.Format("Jan 2, 3:04 PM"),
+		string(record.PunchType), newLocalTime.Format("Jan 2, 3:04 PM"),
+	)
+
+	// Audit log will fire after successful update
+	// we will save the audit log only if the transaction commits successfully
 	if err := uc.recordRepo.Update(ctx, tx, record); err != nil {
 		if isAttendanceRecordConflictError(err) {
 			return nil, ErrAttendanceLogConflict
@@ -247,16 +328,27 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 		return nil, err
 	}
 
-	historyItems := buildAttendanceUpdateHistory(&before, record, strings.TrimSpace(input.EditedByUID), normalizeOptionalString(input.Reason))
-	for _, history := range historyItems {
-		if err := uc.editHistoryRepo.Create(ctx, tx, history); err != nil {
-			return nil, err
-		}
-	}
+	// Note: Audit logging is handled below
+	// No need to write to attendance_edit_history table - audit_logs table is used instead
 
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
+
+	uc.auditor.From(ctx).
+		Did(audit.ActionUpdate).
+		On(audit.EntityAttendanceRecord, record.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("employee_name", employeeName).
+		WithMeta("old_device_uid", oldDeviceUID).
+		WithMeta("new_device_uid", record.DeviceUID).
+		WithMeta("old_punched_at", oldPunchedAt.Format(time.RFC3339)).
+		WithMeta("new_punched_at", record.PunchedAt.Format(time.RFC3339)).
+		WithMeta("old_punch_type", string(oldPunchType)).
+		WithMeta("new_punch_type", string(record.PunchType)).
+		WithMeta("reason", normalizeOptionalString(input.Reason)).
+		SaveSync(ctx)
 
 	return buildAttendanceLogOutput(record), nil
 }
@@ -304,37 +396,6 @@ func parseAttendancePunchType(value string) (domain.AttendancePunchType, error) 
 	}
 }
 
-func buildAttendanceUpdateHistory(before, after *domain.AttendanceRecord, editedByUID string, reason *string) []*domain.AttendanceEditHistory {
-	entries := make([]*domain.AttendanceEditHistory, 0, 3)
-	editedAt := after.UpdatedAt
-
-	if before.DeviceUID != after.DeviceUID {
-		entry := domain.NewAttendanceEditHistory(after.UID, "device_uid", editedByUID, stringPtr(before.DeviceUID), stringPtr(after.DeviceUID), reason)
-		entry.CreatedAt = editedAt
-		entries = append(entries, entry)
-	}
-
-	if !before.PunchedAt.Equal(after.PunchedAt) {
-		entry := domain.NewAttendanceEditHistory(after.UID, "punched_at", editedByUID, stringPtr(before.PunchedAt.Format(time.RFC3339)), stringPtr(after.PunchedAt.Format(time.RFC3339)), reason)
-		entry.CreatedAt = editedAt
-		entries = append(entries, entry)
-	}
-
-	if before.PunchType != after.PunchType {
-		entry := domain.NewAttendanceEditHistory(after.UID, "punch_type", editedByUID, stringPtr(string(before.PunchType)), stringPtr(string(after.PunchType)), reason)
-		entry.CreatedAt = editedAt
-		entries = append(entries, entry)
-	}
-
-	if len(entries) == 0 {
-		entry := domain.NewAttendanceEditHistory(after.UID, "updated_manually", editedByUID, nil, nil, reason)
-		entry.CreatedAt = editedAt
-		entries = append(entries, entry)
-	}
-
-	return entries
-}
-
 func normalizeOptionalString(value *string) *string {
 	if value == nil {
 		return nil
@@ -344,10 +405,6 @@ func normalizeOptionalString(value *string) *string {
 		return nil
 	}
 	return &trimmed
-}
-
-func stringPtr(value string) *string {
-	return &value
 }
 
 func buildAttendanceLogOutput(record *domain.AttendanceRecord) *AttendanceLogOutput {

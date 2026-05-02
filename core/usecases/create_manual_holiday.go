@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -34,17 +35,20 @@ type CreateManualHolidayUseCase struct {
 	db             ports.DB
 	holidayDefRepo ports.HolidayDefinitionRepository
 	weekendRepo    ports.WeekendConfigRepository
+	auditor        audit.Auditor
 }
 
 func NewCreateManualHolidayUseCase(
 	db ports.DB,
 	holidayDefRepo ports.HolidayDefinitionRepository,
 	weekendRepo ports.WeekendConfigRepository,
+	auditor audit.Auditor,
 ) *CreateManualHolidayUseCase {
 	return &CreateManualHolidayUseCase{
 		db:             db,
 		holidayDefRepo: holidayDefRepo,
 		weekendRepo:    weekendRepo,
+		auditor:        auditor,
 	}
 }
 
@@ -98,6 +102,25 @@ func (uc *CreateManualHolidayUseCase) Execute(ctx context.Context, input CreateM
 		DepartmentUIDs: departmentUIDs,
 		IsManual:       true,
 	}
+	
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s created manual holiday '%s' on %s",
+		actorName, nameEN, dateOnly.Format("Jan 2, 2006"),
+	)
+	
+	// Audit log will fire after successful transaction commit
+	defer uc.auditor.From(ctx).
+		Did(audit.ActionCreate).
+		On(audit.EntityHoliday, definition.UID).
+		WithMeta("action", actionSentence).
+		WithMeta("date", definition.Date.Format("2006-01-02")).
+		WithMeta("name_en", definition.NameEN).
+		WithMeta("name_ar", definition.NameAR).
+		WithMeta("is_manual", true).
+		Save(ctx)
+	
 	if err := uc.holidayDefRepo.Create(ctx, tx, definition); err != nil {
 		return nil, err
 	}

@@ -17,6 +17,7 @@ type EmployeeListFilter struct {
 type EmployeeRepository interface {
 	GetByID(ctx context.Context, q Querier, id int64) (*domain.Employee, error)
 	GetByUID(ctx context.Context, q Querier, uid string) (*domain.Employee, error)
+	GetByUIDs(ctx context.Context, q Querier, uids []string) ([]*domain.Employee, error)
 	Create(ctx context.Context, q Querier, employee *domain.Employee) error
 	Update(ctx context.Context, q Querier, employee *domain.Employee) error
 

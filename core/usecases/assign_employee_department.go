@@ -2,7 +2,9 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 )
 
@@ -16,17 +18,20 @@ type AssignEmployeeDepartmentUseCase struct {
 	db       ports.DB
 	empRepo  ports.EmployeeRepository
 	deptRepo ports.DepartmentRepository
+	auditor  audit.Auditor
 }
 
 func NewAssignEmployeeDepartmentUseCase(
 	db ports.DB,
 	empRepo ports.EmployeeRepository,
 	deptRepo ports.DepartmentRepository,
+	auditor audit.Auditor,
 ) *AssignEmployeeDepartmentUseCase {
 	return &AssignEmployeeDepartmentUseCase{
 		db:       db,
 		empRepo:  empRepo,
 		deptRepo: deptRepo,
+		auditor:  auditor,
 	}
 }
 
@@ -51,6 +56,25 @@ func (uc *AssignEmployeeDepartmentUseCase) Execute(ctx context.Context, input As
 	if !department.IsActive {
 		return ErrDepartmentInactive
 	}
+
+	// Build human-readable action sentence
+	actorName := audit.ActorFromContext(ctx)
+	actionSentence := fmt.Sprintf(
+		"%s assigned %s (Employee) to department '%s'",
+		actorName, employee.Name, department.NameEN,
+	)
+	
+	// Audit log with department information
+	defer uc.auditor.From(ctx).
+		Did("assign_department").
+		On(audit.EntityEmployee, input.EmployeeUID).
+		WithMeta("action", actionSentence).
+		WithMeta("employee_name", employee.Name).
+		WithMeta("department_uid", input.DepartmentUID).
+		WithMeta("department_name", department.NameEN).
+		WithMeta("old_department_uid", employee.DepartmentUID).
+		WithMeta("new_department_uid", input.DepartmentUID).
+		Save(ctx)
 
 	// Update employee's department
 	employee.DepartmentUID = &input.DepartmentUID

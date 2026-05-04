@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -42,6 +41,8 @@ func timePtr(value time.Time) *time.Time {
 	return &value
 }
 
+type mockAttendanceDB = mockDB
+
 type mockDepartmentRepoForAttendance struct {
 	department *domain.Department
 }
@@ -53,6 +54,18 @@ func (m *mockDepartmentRepoForAttendance) GetByID(ctx context.Context, q ports.Q
 func (m *mockDepartmentRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Department, error) {
 	if m.department != nil && m.department.UID == uid {
 		return m.department, nil
+	}
+	return nil, nil
+}
+
+func (m *mockDepartmentRepoForAttendance) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Department, error) {
+	if m.department == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.department.UID == uid {
+			return []*domain.Department{m.department}, nil
+		}
 	}
 	return nil, nil
 }
@@ -100,6 +113,18 @@ func (m *mockAttendanceRecordRepo) Create(ctx context.Context, q ports.Querier, 
 func (m *mockAttendanceRecordRepo) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceRecord, error) {
 	if m.recordByUID != nil && m.recordByUID.UID == uid {
 		return m.recordByUID, nil
+	}
+	return nil, nil
+}
+
+func (m *mockAttendanceRecordRepo) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.AttendanceRecord, error) {
+	if m.recordByUID == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.recordByUID.UID == uid {
+			return []*domain.AttendanceRecord{m.recordByUID}, nil
+		}
 	}
 	return nil, nil
 }
@@ -190,6 +215,18 @@ func (m *mockEmployeeRepoForAttendance) GetByID(ctx context.Context, q ports.Que
 func (m *mockEmployeeRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Employee, error) {
 	if m.employee != nil && m.employee.UID == uid {
 		return m.employee, nil
+	}
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForAttendance) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Employee, error) {
+	if m.employee == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.employee.UID == uid {
+			return []*domain.Employee{m.employee}, nil
+		}
 	}
 	return nil, nil
 }

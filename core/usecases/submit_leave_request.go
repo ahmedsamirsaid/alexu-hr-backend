@@ -24,6 +24,7 @@ const autoApprovedLeaveFlowUID = "apf_leave_default"
 type SubmitLeaveRequestInput struct {
 	UserUID           string
 	EmployeeUID       string
+	ActorEmployeeUID  *string
 	LeaveTypeUID      string
 	SubLeaveTypeUID   *string
 	OtherSubLeaveName *string
@@ -272,7 +273,7 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
 		nil,
-		input.EmployeeUID,
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -345,7 +346,7 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	}
 
 	resolver := newApprovalChainResolver(uc.employeeRepo, uc.userRepo, uc.approvalFlowStepRepo, uc.roleRepo)
-	chain, err := resolver.resolveForSubmit(ctx, tx, *leaveType.ApprovalFlowUID, requesterUser.ID, employee)
+	chain, err := resolver.resolveForSubmit(ctx, tx, *leaveType.ApprovalFlowUID, employee)
 	if err != nil {
 		return nil, err
 	}
@@ -419,8 +420,8 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	submitAction := domain.NewApprovalAction(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
-		nil,
-		input.EmployeeUID,
+		nil, // step_order is nil for submit
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -501,7 +502,7 @@ func (uc *SubmitLeaveRequestUseCase) handleTopRoleAutoApprove(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
 		nil,
-		input.EmployeeUID,
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -565,6 +566,13 @@ func isOtherSubLeaveType(subLeaveType *domain.SubLeaveType) bool {
 	nameAR := strings.TrimSpace(subLeaveType.NameAR)
 
 	return nameEN == "other" || nameAR == "أخرى" || nameAR == "أخرى."
+}
+
+func submitActorEmployeeUID(input SubmitLeaveRequestInput) string {
+	if input.ActorEmployeeUID != nil && *input.ActorEmployeeUID != "" {
+		return *input.ActorEmployeeUID
+	}
+	return input.EmployeeUID
 }
 
 func validateLeaveRequestRecordingDeadline(leaveType *domain.LeaveType, startDate, now time.Time) error {

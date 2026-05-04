@@ -19,6 +19,7 @@ type LeaveRequestHandler struct {
 	cancelUC               *usecases.CancelLeaveRequestUseCase
 	listUC                 *usecases.ListLeaveRequestsUseCase
 	getUC                  *usecases.GetLeaveRequestUseCase
+	getEmployeeUC          *usecases.GetEmployeeUseCase
 	listPendingApprovalsUC *usecases.ListPendingApprovalsUseCase
 	approveUC              *usecases.ApproveRequestUseCase
 	rejectUC               *usecases.RejectRequestUseCase
@@ -32,6 +33,7 @@ func NewLeaveRequestHandler(
 	cancelUC *usecases.CancelLeaveRequestUseCase,
 	listUC *usecases.ListLeaveRequestsUseCase,
 	getUC *usecases.GetLeaveRequestUseCase,
+	getEmployeeUC *usecases.GetEmployeeUseCase,
 	listPendingApprovalsUC *usecases.ListPendingApprovalsUseCase,
 	approveUC *usecases.ApproveRequestUseCase,
 	rejectUC *usecases.RejectRequestUseCase,
@@ -44,6 +46,7 @@ func NewLeaveRequestHandler(
 		cancelUC:               cancelUC,
 		listUC:                 listUC,
 		getUC:                  getUC,
+		getEmployeeUC:          getEmployeeUC,
 		listPendingApprovalsUC: listPendingApprovalsUC,
 		approveUC:              approveUC,
 		rejectUC:               rejectUC,
@@ -55,6 +58,7 @@ func NewLeaveRequestHandler(
 // Request types
 
 type SubmitLeaveRequestRequest struct {
+	EmployeeUID         *string                          `json:"employeeUid,omitempty"`
 	LeaveTypeUID        string                           `json:"leaveTypeUid"`
 	SubLeaveTypeUID     *string                          `json:"subLeaveTypeUid,omitempty"`
 	SubLeaveTypeUIDV2   *string                          `json:"sub_leave_type_uid,omitempty"`
@@ -188,13 +192,6 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Get current user to find employee UID
-	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
-		return
-	}
-
 	var req SubmitLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.Error("leave_request_handler.SubmitLeaveRequest.decode_request", "error", err)
@@ -219,9 +216,58 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 		return
 	}
 
+	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+	if err != nil {
+		slog.Error("leave_request_handler.SubmitLeaveRequest.get_current_user", "error", err, "user_id", claims.UserID)
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+
+	var employeeUID string
+	switch {
+	case req.EmployeeUID != nil && *req.EmployeeUID != "":
+		employeeUID = *req.EmployeeUID
+
+		if currentUser.EmployeeUID != nil && *currentUser.EmployeeUID == employeeUID {
+			break
+		}
+
+		if claims.HasPermission("*") || claims.IsGlobalScope() {
+			break
+		}
+
+		if claims.IsDepartmentScope() {
+			employee, getEmployeeErr := h.getEmployeeUC.Execute(r.Context(), usecases.GetEmployeeInput{UID: employeeUID})
+			if getEmployeeErr != nil {
+				switch {
+				case errors.Is(getEmployeeErr, usecases.ErrEmployeeNotFound):
+					writeJSONError(w, http.StatusBadRequest, "employee_not_found", "Employee not found")
+				default:
+					slog.Error("leave_request_handler.SubmitLeaveRequest.get_target_employee", "error", getEmployeeErr, "employee_uid", employeeUID)
+					writeJSONError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+				}
+				return
+			}
+			if employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*employee.DepartmentUID) {
+				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope")
+				return
+			}
+			break
+		}
+
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope")
+		return
+	case currentUser.EmployeeUID == nil:
+		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		return
+	default:
+		employeeUID = *currentUser.EmployeeUID
+	}
+
 	input := usecases.SubmitLeaveRequestInput{
 		UserUID:           claims.UserUID,
-		EmployeeUID:       *currentUser.EmployeeUID,
+		EmployeeUID:       employeeUID,
+		ActorEmployeeUID:  currentUser.EmployeeUID,
 		LeaveTypeUID:      req.LeaveTypeUID,
 		SubLeaveTypeUID:   firstNonNilString(req.SubLeaveTypeUID, req.SubLeaveTypeUIDV2),
 		OtherSubLeaveName: firstNonNilString(req.OtherSubLeaveName, req.OtherSubLeaveNameV2),
@@ -549,13 +595,6 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var err error
-	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
-	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
-		return
-	}
-
 	page := 1
 	pageSize := 20
 
@@ -574,12 +613,60 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		Limit:  pageSize,
 		Offset: (page - 1) * pageSize,
 	}
-	employeeUID := *currentUser.EmployeeUID
-	input.EmployeeUID = &employeeUID
 
 	if status := r.URL.Query().Get("status"); status != "" {
 		s := domain.ApprovalRequestStatus(status)
 		input.Status = &s
+	}
+
+	requestedEmployeeUID := r.URL.Query().Get("employeeUid")
+	switch {
+	case requestedEmployeeUID != "":
+		if claims.HasPermission("*") || claims.IsGlobalScope() {
+			input.EmployeeUID = &requestedEmployeeUID
+			break
+		}
+
+		if claims.IsDepartmentScope() {
+			employee, err := h.getEmployeeUC.Execute(r.Context(), usecases.GetEmployeeInput{UID: requestedEmployeeUID})
+			if err != nil {
+				switch {
+				case errors.Is(err, usecases.ErrEmployeeNotFound):
+					writeJSONError(w, http.StatusBadRequest, "employee_not_found", "Employee not found")
+				default:
+					slog.Error("leave_request_handler.ListLeaveRequests.get_target_employee", "error", err, "employee_uid", requestedEmployeeUID)
+					writeJSONError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+				}
+				return
+			}
+			if employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*employee.DepartmentUID) {
+				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				return
+			}
+			input.EmployeeUID = &requestedEmployeeUID
+			break
+		}
+
+		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+		if err != nil || currentUser.EmployeeUID == nil {
+			writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+			return
+		}
+		if *currentUser.EmployeeUID != requestedEmployeeUID {
+			writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+			return
+		}
+		input.EmployeeUID = &requestedEmployeeUID
+	case claims.HasPermission("*") || claims.IsGlobalScope():
+		// No additional filter.
+	default:
+		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
+		if err != nil || currentUser.EmployeeUID == nil {
+			writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+			return
+		}
+		employeeUID := *currentUser.EmployeeUID
+		input.EmployeeUID = &employeeUID
 	}
 
 	output, err := h.listUC.Execute(r.Context(), input)
@@ -589,6 +676,63 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	writeJSON(w, http.StatusOK, buildListLeaveRequestsResponse(output, page, pageSize))
+}
+
+// ListDepartmentLeaveRequests handles GET /api/v1/departments/{departmentUid}/leave-requests
+func (h *LeaveRequestHandler) ListDepartmentLeaveRequests(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+
+	departmentUID := r.PathValue("departmentUid")
+	if departmentUID == "" {
+		writeError(w, http.StatusBadRequest, "departmentUid is required")
+		return
+	}
+	if !canAccessDepartment(claims, departmentUID) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		return
+	}
+
+	page := 1
+	pageSize := 20
+
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+	if ps := r.URL.Query().Get("pageSize"); ps != "" {
+		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 && parsed <= 100 {
+			pageSize = parsed
+		}
+	}
+
+	input := usecases.ListLeaveRequestsInput{
+		ManagedDepartmentUIDs: []string{departmentUID},
+		Limit:                 pageSize,
+		Offset:                (page - 1) * pageSize,
+	}
+
+	if status := r.URL.Query().Get("status"); status != "" {
+		s := domain.ApprovalRequestStatus(status)
+		input.Status = &s
+	}
+
+	output, err := h.listUC.Execute(r.Context(), input)
+	if err != nil {
+		slog.Error("leave_request_handler.ListDepartmentLeaveRequests.execute_usecase", "error", err, "department_uid", departmentUID)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildListLeaveRequestsResponse(output, page, pageSize))
+}
+
+func buildListLeaveRequestsResponse(output *usecases.ListLeaveRequestsOutput, page, pageSize int) ListLeaveRequestsResponse {
 	requests := make([]LeaveRequestResponse, 0, len(output.Requests))
 	for _, req := range output.Requests {
 		var decidedAt *string
@@ -630,12 +774,12 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 		requests = append(requests, resp)
 	}
 
-	writeJSON(w, http.StatusOK, ListLeaveRequestsResponse{
+	return ListLeaveRequestsResponse{
 		Requests: requests,
 		Total:    output.Total,
 		Page:     page,
 		PageSize: pageSize,
-	})
+	}
 }
 
 // GetLeaveRequest handles GET /api/v1/leave-requests/{uid}

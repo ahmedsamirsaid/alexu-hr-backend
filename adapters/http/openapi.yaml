@@ -2116,6 +2116,11 @@ paths:
               type: object
               required: [leaveTypeUid, startDate, endDate]
               properties:
+                employeeUid:
+                  type: string
+                  nullable: true
+                  description: Optional target employee UID for delegated submission. If omitted, the authenticated user's linked employee is used.
+                  example: "emp_xyz789"
                 leaveTypeUid:
                   type: string
                   example: "lt_annual"

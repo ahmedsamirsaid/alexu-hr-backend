@@ -105,6 +105,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("POST /api/v1/leave-requests", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.SubmitLeaveRequest)))
 	protectedMux.Handle("GET /api/v1/leave-requests", RequireAnyPermission("leave:request", "leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ListLeaveRequests)))
+	protectedMux.Handle("GET /api/v1/departments/{departmentUid}/leave-requests", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ListDepartmentLeaveRequests)))
 	protectedMux.Handle("GET /api/v1/leave-requests/{uid}", RequireAnyPermission("leave:request", "leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.GetLeaveRequest)))
 	protectedMux.Handle("PATCH /api/v1/leave-requests/{uid}", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.UpdateRejectedLeaveRequest)))
 	protectedMux.Handle("POST /api/v1/leave-requests/{uid}/cancel", RequirePermission("leave:request")(http.HandlerFunc(cfg.LeaveRequestHandler.CancelLeaveRequest)))

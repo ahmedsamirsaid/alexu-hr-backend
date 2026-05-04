@@ -35,15 +35,24 @@ func newApprovalChainResolver(
 	}
 }
 
-func (r *approvalChainResolver) resolveForSubmit(ctx context.Context, q ports.Querier, approvalFlowUID string, requesterUserID int64, requester *domain.Employee) (*effectiveApprovalChain, error) {
+func (r *approvalChainResolver) resolveForSubmit(ctx context.Context, q ports.Querier, approvalFlowUID string, requester *domain.Employee) (*effectiveApprovalChain, error) {
 	steps, err := r.approvalFlowStepRepo.ListByFlow(ctx, q, approvalFlowUID)
 	if err != nil {
 		return nil, err
 	}
 
-	matchedStep, err := r.findHighestMatchingFlowStep(ctx, q, requesterUserID, requester, steps)
-	if err != nil {
-		return nil, err
+	var matchedStep *domain.ApprovalFlowStep
+	if requester != nil {
+		requesterUser, err := r.userRepo.GetByEmployeeUID(ctx, q, requester.UID)
+		if err != nil {
+			return nil, err
+		}
+		if requesterUser != nil {
+			matchedStep, err = r.findHighestMatchingFlowStep(ctx, q, requesterUser.ID, requester, steps)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return &effectiveApprovalChain{

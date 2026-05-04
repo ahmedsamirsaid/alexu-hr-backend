@@ -81,6 +81,10 @@ func (m *mockEmployeeRepo) GetByUID(ctx context.Context, q ports.Querier, uid st
 	return nil, nil
 }
 
+func (m *mockEmployeeRepo) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Employee, error) {
+	return nil, nil
+}
+
 func (m *mockEmployeeRepo) Create(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
 	m.createdEmployees = append(m.createdEmployees, employee)
 	return nil

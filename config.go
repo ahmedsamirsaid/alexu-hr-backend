@@ -79,10 +79,10 @@ func LoadConfig() *AppConfig {
 		HolidaySyncTimezone:      getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
 
 		// Storage config
-		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "34.68.220.78:9000"),
-		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "minioadmin"),
-		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "minioadmin"),
-		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", false),
+		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "bucket-production-62aa.up.railway.app"),
+		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "hgZN6FTEHjaeg0nJX8H5NmCc1IHOIcqp"),
+		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "vkiYoESOd5vr0wdo1J34t9JOzphCkoh3mBMqQ7V739UOCr4K"),
+		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", true),
 		MinIODocumentsBucket:       getEnv("BANU_MUSA_MINIO_DOCUMENTS_BUCKET", "documents"),
 		MinIOAutoCreateBucket:      getEnvBool("BANU_MUSA_MINIO_AUTO_CREATE_BUCKET", true),
 		MinIOUploadExpiryMinutes:   getEnvInt("BANU_MUSA_MINIO_UPLOAD_EXPIRY_MINUTES", 15),

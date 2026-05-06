@@ -21,6 +21,38 @@ var (
 
 const autoApprovedLeaveFlowUID = "apf_leave_default"
 
+type leaveRequestOutsideDeadlineError struct {
+	recordingDeadlineDays int
+}
+
+func (e leaveRequestOutsideDeadlineError) Error() string {
+	return fmt.Sprintf("You must record this leave at least %d days before the start date.", e.recordingDeadlineDays)
+}
+
+func (e leaveRequestOutsideDeadlineError) RecordingDeadlineDays() int {
+	return e.recordingDeadlineDays
+}
+
+func (e leaveRequestOutsideDeadlineError) Unwrap() error {
+	return ErrLeaveRequestOutsideDeadline
+}
+
+type exceedsConsecutiveDaysError struct {
+	maxConsecutiveDays int
+}
+
+func (e exceedsConsecutiveDaysError) Error() string {
+	return fmt.Sprintf("You cannot request more than %d consecutive days for this leave type.", e.maxConsecutiveDays)
+}
+
+func (e exceedsConsecutiveDaysError) MaxConsecutiveDays() int {
+	return e.maxConsecutiveDays
+}
+
+func (e exceedsConsecutiveDaysError) Unwrap() error {
+	return ErrExceedsConsecutiveDays
+}
+
 type SubmitLeaveRequestInput struct {
 	UserUID           string
 	EmployeeUID       string
@@ -186,7 +218,7 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 
 	if leaveType.MaxConsecutive != nil && totalWorkingDays > *leaveType.MaxConsecutive {
-		return nil, ErrExceedsConsecutiveDays
+		return nil, exceedsConsecutiveDaysError{maxConsecutiveDays: *leaveType.MaxConsecutive}
 	}
 
 	// Check for overlapping requests
@@ -584,23 +616,24 @@ func validateLeaveRequestRecordingDeadline(leaveType *domain.LeaveType, startDat
 	nowUTC := now.UTC()
 	submitDay := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 	deadlineDays := *leaveType.RecordingDeadlineDays
+	outsideDeadlineErr := leaveRequestOutsideDeadlineError{recordingDeadlineDays: deadlineDays}
 
 	switch leaveType.Code {
 	case leaveTypeCodeCasual:
 		if submitDay.After(startDay) {
 			daysLate := int(submitDay.Sub(startDay).Hours() / 24)
 			if daysLate > deadlineDays {
-				return ErrLeaveRequestOutsideDeadline
+				return outsideDeadlineErr
 			}
 		}
 	default:
 		if !startDay.After(submitDay) {
-			return ErrLeaveRequestOutsideDeadline
+			return outsideDeadlineErr
 		}
 
 		daysAhead := int(startDay.Sub(submitDay).Hours() / 24)
 		if daysAhead < deadlineDays {
-			return ErrLeaveRequestOutsideDeadline
+			return outsideDeadlineErr
 		}
 	}
 

@@ -184,42 +184,137 @@ type GetApprovalHistoryResponse struct {
 	History []ApprovalHistoryItemResponse `json:"history"`
 }
 
+type LeaveRequestErrorResponse struct {
+	Error     string `json:"error"`
+	MessageEN string `json:"messageEn"`
+	MessageAR string `json:"messageAr"`
+}
+
+type leaveRequestDeadlineDaysProvider interface {
+	RecordingDeadlineDays() int
+}
+
+type leaveRequestMaxConsecutiveDaysProvider interface {
+	MaxConsecutiveDays() int
+}
+
+func writeLeaveRequestError(w http.ResponseWriter, status int, code, messageEN, messageAR string) {
+	writeJSON(w, status, LeaveRequestErrorResponse{
+		Error:     code,
+		MessageEN: messageEN,
+		MessageAR: messageAR,
+	})
+}
+
+func writeLeaveRequestErrorFromUseCase(w http.ResponseWriter, status int, err error) {
+	code, messageEN, messageAR := leaveRequestErrorDetails(err)
+	writeLeaveRequestError(w, status, code, messageEN, messageAR)
+}
+
+func leaveRequestErrorDetails(err error) (string, string, string) {
+	switch {
+	case errors.Is(err, usecases.ErrEmployeeNotFound):
+		return "employee_not_found", "Employee not found", "الموظف غير موجود"
+	case errors.Is(err, usecases.ErrLeaveTypeNotFound):
+		return "leave_type_not_found", "Leave type not found", "نوع الإجازة غير موجود"
+	case errors.Is(err, usecases.ErrSubLeaveTypeNotFound):
+		return "sub_leave_type_not_found", "Sub leave type not found", "النوع الفرعي للإجازة غير موجود"
+	case errors.Is(err, usecases.ErrSubLeaveTypeDoesNotBelongToLeaveType):
+		return "sub_leave_type_mismatch", "Sub leave type does not belong to the selected leave type", "النوع الفرعي لا ينتمي إلى نوع الإجازة المحدد"
+	case errors.Is(err, usecases.ErrInsufficientBalance):
+		return "insufficient_balance", "Insufficient leave balance", "رصيد الإجازات غير كافٍ"
+	case errors.Is(err, usecases.ErrInvalidDateRange):
+		return "invalid_date_range", "Invalid date range", "نطاق التاريخ غير صالح"
+	case errors.Is(err, usecases.ErrLeaveRequestOutsideDeadline):
+		messageEN := err.Error()
+		messageAR := "يجب تسجيل هذه الإجازة قبل تاريخ البدء بمدة كافية."
+		if deadlineErr, ok := err.(leaveRequestDeadlineDaysProvider); ok {
+			messageAR = "يجب تسجيل هذه الإجازة قبل تاريخ البدء بـ " + strconv.Itoa(deadlineErr.RecordingDeadlineDays()) + " يومًا على الأقل."
+		}
+		return "leave_request_outside_deadline", messageEN, messageAR
+	case errors.Is(err, usecases.ErrExceedsConsecutiveDays):
+		messageEN := "Requested leave exceeds the maximum consecutive days allowed"
+		messageAR := "عدد أيام الإجازة المطلوبة يتجاوز الحد الأقصى للأيام المتتالية المسموح بها"
+		if maxDaysErr, ok := err.(leaveRequestMaxConsecutiveDaysProvider); ok {
+			messageEN = err.Error()
+			messageAR = "لا يمكنك طلب أكثر من " + strconv.Itoa(maxDaysErr.MaxConsecutiveDays()) + " أيام متتالية لهذا النوع من الإجازات."
+		}
+		return "exceeds_consecutive_days", messageEN, messageAR
+	case errors.Is(err, usecases.ErrNoDepartmentAssigned):
+		return "no_department_assigned", "Employee has no department assigned", "الموظف غير مرتبط بقسم"
+	case errors.Is(err, usecases.ErrOverlappingRequest):
+		return "overlapping_leave_request", "Overlapping leave request exists", "يوجد طلب إجازة متداخل"
+	case errors.Is(err, usecases.ErrLeaveRequestDocumentsRequired):
+		return "leave_request_documents_required", "Documents array is required when documents_attached is true", "حقل documents مطلوب عندما تكون قيمة documents_attached هي true"
+	case errors.Is(err, usecases.ErrLeaveRequestDocumentsUnsupported):
+		return "leave_request_documents_unsupported", "Document attachments are only supported for leave requests that require approval", "مرفقات المستندات مدعومة فقط لطلبات الإجازة التي تتطلب موافقة"
+	case errors.Is(err, usecases.ErrInvalidFilename):
+		return "invalid_filename", err.Error(), "اسم الملف غير صالح"
+	case errors.Is(err, usecases.ErrInvalidContentType):
+		return "invalid_content_type", err.Error(), "نوع المحتوى غير صالح"
+	case errors.Is(err, usecases.ErrLeaveRequestNotFound):
+		return "leave_request_not_found", "Leave request not found", "طلب الإجازة غير موجود"
+	case errors.Is(err, usecases.ErrRequestNotPending):
+		return "request_not_pending", "Request is not pending", "الطلب ليس قيد الانتظار"
+	case errors.Is(err, usecases.ErrNotRequestOwner):
+		return "not_request_owner", "Not the owner of this request", "أنت لست مالك هذا الطلب"
+	case errors.Is(err, usecases.ErrCannotCancelApproved):
+		return "cannot_cancel_approved", "Cannot cancel approved request", "لا يمكن إلغاء طلب تمت الموافقة عليه"
+	case errors.Is(err, usecases.ErrApprovalRequestNotFound):
+		return "approval_request_not_found", "Approval request not found", "طلب الموافقة غير موجود"
+	case errors.Is(err, usecases.ErrLeaveRequestDocumentNotFound):
+		return "leave_request_document_not_found", "Leave request document not found", "مستند طلب الإجازة غير موجود"
+	case errors.Is(err, usecases.ErrRequestNotRejected):
+		return "request_not_rejected", "Request is not rejected", "الطلب ليس مرفوضًا"
+	case errors.Is(err, usecases.ErrLeaveTypeNoApprovalRequired):
+		return "leave_type_no_approval_required", "Leave type does not require approval", "نوع الإجازة لا يتطلب موافقة"
+	case errors.Is(err, usecases.ErrApprovalFlowMismatch):
+		return "approval_flow_mismatch", "Leave type approval flow does not match existing approval request", "مسار الموافقة لنوع الإجازة لا يطابق طلب الموافقة الحالي"
+	case errors.Is(err, usecases.ErrNoWorkingDays):
+		return "no_working_days", "No working days in selected date range", "لا توجد أيام عمل ضمن نطاق التاريخ المحدد"
+	case errors.Is(err, usecases.ErrNotAuthorizedApprover):
+		return "not_authorized_approver", "Not authorized to approve this request", "غير مصرح لك باتخاذ إجراء على هذا الطلب"
+	default:
+		return "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم"
+	}
+}
+
 // SubmitLeaveRequest handles POST /api/v1/leave-requests
 func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	var req SubmitLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.Error("leave_request_handler.SubmitLeaveRequest.decode_request", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_request", "Invalid request body", "نص الطلب غير صالح")
 		return
 	}
 
 	if req.LeaveTypeUID == "" {
-		writeError(w, http.StatusBadRequest, "leaveTypeUid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "leave_type_uid_required", "leaveTypeUid is required", "حقل leaveTypeUid مطلوب")
 		return
 	}
 
 	startDate, err := time.Parse("2006-01-02", req.StartDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid startDate format, expected YYYY-MM-DD")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_start_date", "Invalid startDate format, expected YYYY-MM-DD", "تنسيق startDate غير صالح، ويجب أن يكون YYYY-MM-DD")
 		return
 	}
 
 	endDate, err := time.Parse("2006-01-02", req.EndDate)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid endDate format, expected YYYY-MM-DD")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_end_date", "Invalid endDate format, expected YYYY-MM-DD", "تنسيق endDate غير صالح، ويجب أن يكون YYYY-MM-DD")
 		return
 	}
 
 	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 	if err != nil {
 		slog.Error("leave_request_handler.SubmitLeaveRequest.get_current_user", "error", err, "user_id", claims.UserID)
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
@@ -241,24 +336,24 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 			if getEmployeeErr != nil {
 				switch {
 				case errors.Is(getEmployeeErr, usecases.ErrEmployeeNotFound):
-					writeJSONError(w, http.StatusBadRequest, "employee_not_found", "Employee not found")
+					writeLeaveRequestError(w, http.StatusBadRequest, "employee_not_found", "Employee not found", "الموظف غير موجود")
 				default:
 					slog.Error("leave_request_handler.SubmitLeaveRequest.get_target_employee", "error", getEmployeeErr, "employee_uid", employeeUID)
-					writeJSONError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+					writeLeaveRequestError(w, http.StatusInternalServerError, "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم")
 				}
 				return
 			}
 			if employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*employee.DepartmentUID) {
-				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope")
+				writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope", "يمكنك تقديم طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 				return
 			}
 			break
 		}
 
-		writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope")
+		writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only submit leave requests within your scope", "يمكنك تقديم طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 		return
 	case currentUser.EmployeeUID == nil:
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 		return
 	default:
 		employeeUID = *currentUser.EmployeeUID
@@ -323,7 +418,7 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 		default:
 			slog.Error("leave_request_handler.SubmitLeaveRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -421,20 +516,20 @@ func firstNonNilString(values ...*string) *string {
 func (h *LeaveRequestHandler) CancelLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	// Get current user to find employee UID
 	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 		return
 	}
 
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
@@ -458,7 +553,7 @@ func (h *LeaveRequestHandler) CancelLeaveRequest(w http.ResponseWriter, r *http.
 		default:
 			slog.Error("leave_request_handler.CancelLeaveRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -471,26 +566,26 @@ func (h *LeaveRequestHandler) CancelLeaveRequest(w http.ResponseWriter, r *http.
 func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 		return
 	}
 
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
 	var req UpdateLeaveRequestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		slog.Error("leave_request_handler.UpdateRejectedLeaveRequest.decode_request", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_request", "Invalid request body", "نص الطلب غير صالح")
 		return
 	}
 
@@ -498,7 +593,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 	if req.StartDate != nil {
 		parsed, err := time.Parse("2006-01-02", *req.StartDate)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid startDate format, expected YYYY-MM-DD")
+			writeLeaveRequestError(w, http.StatusBadRequest, "invalid_start_date", "Invalid startDate format, expected YYYY-MM-DD", "تنسيق startDate غير صالح، ويجب أن يكون YYYY-MM-DD")
 			return
 		}
 		startDate = &parsed
@@ -508,7 +603,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 	if req.EndDate != nil {
 		parsed, err := time.Parse("2006-01-02", *req.EndDate)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid endDate format, expected YYYY-MM-DD")
+			writeLeaveRequestError(w, http.StatusBadRequest, "invalid_end_date", "Invalid endDate format, expected YYYY-MM-DD", "تنسيق endDate غير صالح، ويجب أن يكون YYYY-MM-DD")
 			return
 		}
 		endDate = &parsed
@@ -551,7 +646,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 		default:
 			slog.Error("leave_request_handler.UpdateRejectedLeaveRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -591,7 +686,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
@@ -632,15 +727,15 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 			if err != nil {
 				switch {
 				case errors.Is(err, usecases.ErrEmployeeNotFound):
-					writeJSONError(w, http.StatusBadRequest, "employee_not_found", "Employee not found")
+					writeLeaveRequestError(w, http.StatusBadRequest, "employee_not_found", "Employee not found", "الموظف غير موجود")
 				default:
 					slog.Error("leave_request_handler.ListLeaveRequests.get_target_employee", "error", err, "employee_uid", requestedEmployeeUID)
-					writeJSONError(w, http.StatusInternalServerError, "internal_error", "Internal server error")
+					writeLeaveRequestError(w, http.StatusInternalServerError, "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم")
 				}
 				return
 			}
 			if employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*employee.DepartmentUID) {
-				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope", "يمكنك عرض طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 				return
 			}
 			input.EmployeeUID = &requestedEmployeeUID
@@ -649,11 +744,11 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 
 		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 		if err != nil || currentUser.EmployeeUID == nil {
-			writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+			writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 			return
 		}
 		if *currentUser.EmployeeUID != requestedEmployeeUID {
-			writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+			writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope", "يمكنك عرض طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 			return
 		}
 		input.EmployeeUID = &requestedEmployeeUID
@@ -662,7 +757,7 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 	default:
 		currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 		if err != nil || currentUser.EmployeeUID == nil {
-			writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+			writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 			return
 		}
 		employeeUID := *currentUser.EmployeeUID
@@ -672,7 +767,7 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 	output, err := h.listUC.Execute(r.Context(), input)
 	if err != nil {
 		slog.Error("leave_request_handler.ListLeaveRequests.execute_usecase", "error", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeLeaveRequestError(w, http.StatusInternalServerError, "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم")
 		return
 	}
 
@@ -683,17 +778,17 @@ func (h *LeaveRequestHandler) ListLeaveRequests(w http.ResponseWriter, r *http.R
 func (h *LeaveRequestHandler) ListDepartmentLeaveRequests(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	departmentUID := r.PathValue("departmentUid")
 	if departmentUID == "" {
-		writeError(w, http.StatusBadRequest, "departmentUid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "department_uid_required", "departmentUid is required", "حقل departmentUid مطلوب")
 		return
 	}
 	if !canAccessDepartment(claims, departmentUID) {
-		writeJSONError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted")
+		writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "Access to this department is not permitted", "غير مسموح لك بالوصول إلى هذا القسم")
 		return
 	}
 
@@ -725,7 +820,7 @@ func (h *LeaveRequestHandler) ListDepartmentLeaveRequests(w http.ResponseWriter,
 	output, err := h.listUC.Execute(r.Context(), input)
 	if err != nil {
 		slog.Error("leave_request_handler.ListDepartmentLeaveRequests.execute_usecase", "error", err, "department_uid", departmentUID)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeLeaveRequestError(w, http.StatusInternalServerError, "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم")
 		return
 	}
 
@@ -786,13 +881,13 @@ func buildListLeaveRequestsResponse(output *usecases.ListLeaveRequestsOutput, pa
 func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
@@ -804,7 +899,7 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 		} else {
 			slog.Error("leave_request_handler.GetLeaveRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -852,13 +947,13 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 	if !claims.HasPermission("*") {
 		if claims.IsDepartmentScope() {
 			if output.Employee == nil || output.Employee.DepartmentUID == nil || !claims.HasDepartmentAccess(*output.Employee.DepartmentUID) {
-				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope", "يمكنك عرض طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 				return
 			}
 		} else if claims.IsSelfScope() {
 			currentUser, currentUserErr := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 			if currentUserErr != nil || currentUser.EmployeeUID == nil || *currentUser.EmployeeUID != output.LeaveRequest.EmployeeUID {
-				writeJSONError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope")
+				writeLeaveRequestError(w, http.StatusForbidden, "permission_denied", "You can only view leave requests within your scope", "يمكنك عرض طلبات الإجازة فقط ضمن نطاق صلاحياتك")
 				return
 			}
 		}
@@ -871,14 +966,14 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 func (h *LeaveRequestHandler) ListPendingApprovals(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	output, err := h.listPendingApprovalsUC.Execute(r.Context(), claims.UserID)
 	if err != nil {
 		slog.Error("leave_request_handler.ListPendingApprovals.execute_usecase", "error", err)
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeLeaveRequestError(w, http.StatusInternalServerError, "internal_error", "Internal server error", "حدث خطأ داخلي في الخادم")
 		return
 	}
 
@@ -920,27 +1015,27 @@ func (h *LeaveRequestHandler) ListPendingApprovals(w http.ResponseWriter, r *htt
 func (h *LeaveRequestHandler) ApproveRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	// Get current user to find employee UID
 	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 		return
 	}
 
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
 	var req ApprovalActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		slog.Error("leave_request_handler.ApproveRequest.decode_request", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_request", "Invalid request body", "نص الطلب غير صالح")
 		return
 	}
 
@@ -966,7 +1061,7 @@ func (h *LeaveRequestHandler) ApproveRequest(w http.ResponseWriter, r *http.Requ
 		default:
 			slog.Error("leave_request_handler.ApproveRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -982,27 +1077,27 @@ func (h *LeaveRequestHandler) ApproveRequest(w http.ResponseWriter, r *http.Requ
 func (h *LeaveRequestHandler) RejectRequest(w http.ResponseWriter, r *http.Request) {
 	claims := GetClaims(r)
 	if claims == nil {
-		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		writeLeaveRequestError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated", "غير مصرح لك. يرجى تسجيل الدخول")
 		return
 	}
 
 	// Get current user to find employee UID
 	currentUser, err := h.getCurrentUserUC.Execute(r.Context(), usecases.GetCurrentUserInput{UserID: claims.UserID})
 	if err != nil || currentUser.EmployeeUID == nil {
-		writeJSONError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user")
+		writeLeaveRequestError(w, http.StatusBadRequest, "no_employee_linked", "No employee profile linked to user", "لا يوجد ملف موظف مرتبط بالمستخدم")
 		return
 	}
 
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
 	var req ApprovalActionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
 		slog.Error("leave_request_handler.RejectRequest.decode_request", "error", err)
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		writeLeaveRequestError(w, http.StatusBadRequest, "invalid_request", "Invalid request body", "نص الطلب غير صالح")
 		return
 	}
 
@@ -1026,7 +1121,7 @@ func (h *LeaveRequestHandler) RejectRequest(w http.ResponseWriter, r *http.Reque
 		default:
 			slog.Error("leave_request_handler.RejectRequest.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 
@@ -1040,7 +1135,7 @@ func (h *LeaveRequestHandler) RejectRequest(w http.ResponseWriter, r *http.Reque
 func (h *LeaveRequestHandler) GetApprovalHistory(w http.ResponseWriter, r *http.Request) {
 	uid := r.PathValue("uid")
 	if uid == "" {
-		writeError(w, http.StatusBadRequest, "uid is required")
+		writeLeaveRequestError(w, http.StatusBadRequest, "uid_required", "uid is required", "حقل uid مطلوب")
 		return
 	}
 
@@ -1052,7 +1147,7 @@ func (h *LeaveRequestHandler) GetApprovalHistory(w http.ResponseWriter, r *http.
 		} else {
 			slog.Error("leave_request_handler.GetApprovalHistory.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
 		return
 	}
 

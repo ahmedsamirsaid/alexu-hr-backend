@@ -160,6 +160,12 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 	}, nil
 }
 
+// attendanceLoc is the fixed UTC+2 offset used for all shift-time arithmetic.
+// We deliberately use a fixed zone rather than time.LoadLocation("Africa/Cairo")
+// because IANA tzdata may classify Cairo as UTC+3 during summer (EEST), but the
+// HR system's shift times, frontend display, and device punches all use UTC+2.
+var attendanceLoc = time.FixedZone("Africa/Cairo", 2*60*60)
+
 func buildTimeOnDate(date time.Time, hhmm string) (time.Time, error) {
 	parsed, err := time.Parse("15:04", hhmm)
 	if err != nil {
@@ -174,6 +180,6 @@ func buildTimeOnDate(date time.Time, hhmm string) (time.Time, error) {
 		parsed.Minute(),
 		0,
 		0,
-		time.Local,
+		attendanceLoc,
 	), nil
 }

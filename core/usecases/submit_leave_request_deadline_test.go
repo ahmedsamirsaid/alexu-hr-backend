@@ -106,3 +106,22 @@ func TestValidateLeaveRequestRecordingDeadline(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateLeaveRequestRecordingDeadline_ReturnsUserFacingMessage(t *testing.T) {
+	two := 2
+	now := time.Date(2026, 4, 27, 10, 30, 0, 0, time.UTC)
+	leaveType := &domain.LeaveType{
+		Code:                  leaveTypeCodeRegular,
+		RecordingDeadlineDays: &two,
+	}
+
+	err := validateLeaveRequestRecordingDeadline(leaveType, time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC), now)
+	if !errors.Is(err, ErrLeaveRequestOutsideDeadline) {
+		t.Fatalf("validateLeaveRequestRecordingDeadline() error = %v, want %v", err, ErrLeaveRequestOutsideDeadline)
+	}
+
+	want := "You must record this leave at least 2 days before the start date."
+	if err == nil || err.Error() != want {
+		t.Fatalf("validateLeaveRequestRecordingDeadline() message = %v, want %q", err, want)
+	}
+}

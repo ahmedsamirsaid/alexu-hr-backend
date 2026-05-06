@@ -9,20 +9,22 @@ import (
 )
 
 type Scheduler struct {
-	autoRejectUC        *usecases.AutoRejectExpiredRequestsUseCase
-	holidaySyncUC       *usecases.SyncEgyptPublicHolidaysUseCase
-	absenceSyncUC       *usecases.SyncDailyAbsencesUseCase
-	missingCheckOutsUC  *usecases.NotifyMissingCheckOutsUseCase
-	interval            time.Duration
-	location            *time.Location
-	lastHolidaySyncDate string
-	lastAbsenceSyncDate string
-	stopCh              chan struct{}
-	doneCh              chan struct{}
+	autoRejectUC                 *usecases.AutoRejectExpiredRequestsUseCase
+	autoRejectPermissionsUC      *usecases.AutoRejectExpiredPermissionRequestsUseCase
+	holidaySyncUC                *usecases.SyncEgyptPublicHolidaysUseCase
+	absenceSyncUC                *usecases.SyncDailyAbsencesUseCase
+	missingCheckOutsUC           *usecases.NotifyMissingCheckOutsUseCase
+	interval                     time.Duration
+	location                     *time.Location
+	lastHolidaySyncDate          string
+	lastAbsenceSyncDate          string
+	stopCh                       chan struct{}
+	doneCh                       chan struct{}
 }
 
 func New(
 	autoRejectUC *usecases.AutoRejectExpiredRequestsUseCase,
+	autoRejectPermissionsUC *usecases.AutoRejectExpiredPermissionRequestsUseCase,
 	holidaySyncUC *usecases.SyncEgyptPublicHolidaysUseCase,
 	absenceSyncUC *usecases.SyncDailyAbsencesUseCase,
 	missingCheckOutsUC *usecases.NotifyMissingCheckOutsUseCase,
@@ -35,14 +37,15 @@ func New(
 	}
 
 	return &Scheduler{
-		autoRejectUC:       autoRejectUC,
-		holidaySyncUC:      holidaySyncUC,
-		absenceSyncUC:      absenceSyncUC,
-		missingCheckOutsUC: missingCheckOutsUC,
-		interval:           interval,
-		location:           loc,
-		stopCh:             make(chan struct{}),
-		doneCh:             make(chan struct{}),
+		autoRejectUC:            autoRejectUC,
+		autoRejectPermissionsUC: autoRejectPermissionsUC,
+		holidaySyncUC:           holidaySyncUC,
+		absenceSyncUC:           absenceSyncUC,
+		missingCheckOutsUC:      missingCheckOutsUC,
+		interval:                interval,
+		location:                loc,
+		stopCh:                  make(chan struct{}),
+		doneCh:                  make(chan struct{}),
 	}
 }
 
@@ -88,6 +91,15 @@ func (s *Scheduler) runJobs(ctx context.Context) {
 			slog.Error("scheduler.runJobs.auto_reject", "error", err)
 		} else if output.RejectedCount > 0 {
 			slog.Info("scheduler.runJobs.auto_reject.completed", "rejected_count", output.RejectedCount)
+		}
+	}
+
+	if s.autoRejectPermissionsUC != nil {
+		output, err := s.autoRejectPermissionsUC.Execute(ctx)
+		if err != nil {
+			slog.Error("scheduler.runJobs.auto_reject_permissions", "error", err)
+		} else if output.RejectedCount > 0 {
+			slog.Info("scheduler.runJobs.auto_reject_permissions.completed", "rejected_count", output.RejectedCount)
 		}
 	}
 

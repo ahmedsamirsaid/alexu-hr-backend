@@ -26,6 +26,7 @@ type RouterConfig struct {
 	JWTService              *JWTService
 	AuthEnabled             bool
 	DocumentHandler         *DocumentHandler
+	PermissionRequestHandler *PermissionRequestHandler
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -114,6 +115,20 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/approvals/{uid}/approve", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ApproveRequest)))
 	protectedMux.Handle("POST /api/v1/approvals/{uid}/reject", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.RejectRequest)))
 	protectedMux.Handle("GET /api/v1/approvals/{uid}/history", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.GetApprovalHistory)))
+
+	protectedMux.Handle("GET /api/v1/permission-requests/eligibility", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Eligibility)))
+	protectedMux.Handle("POST /api/v1/permission-requests", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Submit)))
+	protectedMux.Handle("GET /api/v1/permission-requests", RequireAnyPermission("permission:request", "permission:approve", "permission:read")(http.HandlerFunc(cfg.PermissionRequestHandler.List)))
+	protectedMux.Handle("GET /api/v1/permission-requests/{uid}", RequireAnyPermission("permission:request", "permission:approve", "permission:read")(http.HandlerFunc(cfg.PermissionRequestHandler.Get)))
+	protectedMux.Handle("PATCH /api/v1/permission-requests/{uid}", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Update)))
+	protectedMux.Handle("POST /api/v1/permission-requests/{uid}/cancel", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Cancel)))
+
+	protectedMux.Handle("GET /api/v1/permission-approvals/pending", RequirePermission("permission:approve")(http.HandlerFunc(cfg.PermissionRequestHandler.ListPending)))
+	protectedMux.Handle("POST /api/v1/permission-approvals/{uid}/approve", RequirePermission("permission:approve")(http.HandlerFunc(cfg.PermissionRequestHandler.Approve)))
+	protectedMux.Handle("POST /api/v1/permission-approvals/{uid}/reject", RequirePermission("permission:approve")(http.HandlerFunc(cfg.PermissionRequestHandler.Reject)))
+	protectedMux.Handle("GET /api/v1/permission-approvals/{uid}/history", RequirePermission("permission:approve")(http.HandlerFunc(cfg.PermissionRequestHandler.History)))
+
+	protectedMux.Handle("GET /api/v1/employees/{uid}/permission-requests", RequireAnyPermission("employees:read", "permission:approve", "permission:read")(http.HandlerFunc(cfg.PermissionRequestHandler.ListByEmployee)))
 
 	protectedMux.HandleFunc("POST /api/v1/device-tokens", cfg.DeviceTokenHandler.Register)
 	protectedMux.HandleFunc("DELETE /api/v1/device-tokens/{uid}", cfg.DeviceTokenHandler.Unregister)

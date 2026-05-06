@@ -32,6 +32,7 @@ type DailyAttendanceLogItem struct {
 	LateMinutes       *int
 	EarlyMinutes      *int
 	Exceptions        []domain.AttendanceExceptionType
+	PermissionUIDs    []string
 }
 
 type ListDailyDepartmentAttendanceLogsOutput struct {
@@ -64,6 +65,7 @@ type ListDailyDepartmentAttendanceLogsUseCase struct {
 	leaveRepo    ports.LeaveRecordRepository
 	weekendRepo  ports.WeekendConfigRepository
 	holidayRepo  ports.HolidayDefinitionRepository
+	permRepo     ports.PermissionRequestRepository
 }
 
 func NewListDailyDepartmentAttendanceLogsUseCase(
@@ -75,6 +77,7 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 	leaveRepo ports.LeaveRecordRepository,
 	weekendRepo ports.WeekendConfigRepository,
 	holidayRepo ports.HolidayDefinitionRepository,
+	permRepo ports.PermissionRequestRepository,
 ) *ListDailyDepartmentAttendanceLogsUseCase {
 	return &ListDailyDepartmentAttendanceLogsUseCase{
 		db:           db,
@@ -85,6 +88,7 @@ func NewListDailyDepartmentAttendanceLogsUseCase(
 		leaveRepo:    leaveRepo,
 		weekendRepo:  weekendRepo,
 		holidayRepo:  holidayRepo,
+		permRepo:     permRepo,
 	}
 }
 
@@ -130,7 +134,7 @@ func (uc *ListDailyDepartmentAttendanceLogsUseCase) Execute(ctx context.Context,
 		return nil, err
 	}
 
-	records, err := buildDailyAttendanceLogItems(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, groups)
+	records, err := buildDailyAttendanceLogItemsWithPermissions(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, uc.permRepo, groups)
 	if err != nil {
 		return nil, err
 	}

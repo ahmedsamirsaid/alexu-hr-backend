@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/xuri/excelize/v2"
@@ -13,6 +14,7 @@ type ExportEmployeeAttendanceReportInput struct {
 	EmployeeUID string
 	StartDate   time.Time
 	EndDate     time.Time
+	Language    string
 }
 
 type ExportEmployeeAttendanceReportOutput struct {
@@ -35,7 +37,9 @@ func (uc *ExportEmployeeAttendanceReportUseCase) Execute(ctx context.Context, in
 		return nil, err
 	}
 
-	label := fmt.Sprintf("%s to %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	language := normalizeReportLanguage(input.Language)
+
+	label := formatReportDateRange(start, end, language)
 	report, err := uc.statsUC.Execute(ctx, GetMonthlyAttendanceStatsInput{
 		EmployeeUID: input.EmployeeUID,
 		StartDate:   &start,
@@ -49,15 +53,21 @@ func (uc *ExportEmployeeAttendanceReportUseCase) Execute(ctx context.Context, in
 	f := excelize.NewFile()
 	defer f.Close()
 
-	sheetName := "Employee Report"
+	sheetName := employeeAttendanceReportSheetName(language)
 	index, err := f.NewSheet(sheetName)
 	if err != nil {
 		return nil, err
 	}
 	f.SetActiveSheet(index)
 	f.DeleteSheet("Sheet1")
+	if isArabicLanguage(language) {
+		rightToLeft := true
+		if err := f.SetSheetView(sheetName, 0, &excelize.ViewOptions{RightToLeft: &rightToLeft}); err != nil {
+			return nil, err
+		}
+	}
 
-	if err := writeEmployeeAttendanceReportWorkbook(f, sheetName, input.EmployeeUID, start, end, report); err != nil {
+	if err := writeEmployeeAttendanceReportWorkbook(f, sheetName, input.EmployeeUID, start, end, report, language); err != nil {
 		return nil, err
 	}
 
@@ -73,17 +83,18 @@ func (uc *ExportEmployeeAttendanceReportUseCase) Execute(ctx context.Context, in
 	}, nil
 }
 
-func writeEmployeeAttendanceReportWorkbook(f *excelize.File, sheetName string, employeeUID string, start, end time.Time, report *GetMonthlyAttendanceStatsOutput) error {
+func writeEmployeeAttendanceReportWorkbook(f *excelize.File, sheetName string, employeeUID string, start, end time.Time, report *GetMonthlyAttendanceStatsOutput, language string) error {
+	labels := employeeAttendanceReportLabelsForLanguage(language)
 	summaryRows := [][]any{
-		{"Employee UID", employeeUID},
-		{"Employee Name", report.EmployeeName},
-		{"Date Range", fmt.Sprintf("%s to %s", start.Format("2006-01-02"), end.Format("2006-01-02"))},
-		{"Total Worked Hours", report.TotalWorkedHours},
-		{"Late Days", report.LateDaysCount},
-		{"Early Departure Days", report.EarlyDepartureDaysCount},
-		{"Absent Days", report.AbsentDaysCount},
-		{"Missing Check-In Days", report.MissingCheckInCount},
-		{"Missing Check-Out Days", report.MissingCheckOutCount},
+		{labels.SummaryEmployeeUID, employeeUID},
+		{labels.SummaryEmployeeName, report.EmployeeName},
+		{labels.SummaryDateRange, formatReportDateRange(start, end, language)},
+		{labels.SummaryTotalWorkedHours, report.TotalWorkedHours},
+		{labels.SummaryLateDays, report.LateDaysCount},
+		{labels.SummaryEarlyDepartureDays, report.EarlyDepartureDaysCount},
+		{labels.SummaryAbsentDays, report.AbsentDaysCount},
+		{labels.SummaryMissingCheckInDays, report.MissingCheckInCount},
+		{labels.SummaryMissingCheckOutDays, report.MissingCheckOutCount},
 	}
 	for rowIndex, row := range summaryRows {
 		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", rowIndex+1), &row); err != nil {
@@ -92,17 +103,17 @@ func writeEmployeeAttendanceReportWorkbook(f *excelize.File, sheetName string, e
 	}
 
 	headers := []any{
-		"Date",
-		"Check-In",
-		"Check-Out",
-		"Worked Hours",
-		"Late",
-		"Late Minutes",
-		"Early Departure",
-		"Early Departure Minutes",
-		"Absent",
-		"On Leave",
-		"Leave Type",
+		labels.HeaderDate,
+		labels.HeaderCheckIn,
+		labels.HeaderCheckOut,
+		labels.HeaderWorkedHours,
+		labels.HeaderLate,
+		labels.HeaderLateMinutes,
+		labels.HeaderEarlyDeparture,
+		labels.HeaderEarlyDepartureMinutes,
+		labels.HeaderAbsent,
+		labels.HeaderOnLeave,
+		labels.HeaderLeaveType,
 	}
 	headerRow := 11
 	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", headerRow), &headers); err != nil {
@@ -116,12 +127,12 @@ func writeEmployeeAttendanceReportWorkbook(f *excelize.File, sheetName string, e
 			formatOptionalReportDateTime(day.CheckIn),
 			formatOptionalReportDateTime(day.CheckOut),
 			day.WorkedHours,
-			formatReportBool(day.IsLate),
+			formatReportBool(day.IsLate, language),
 			day.LateMinutes,
-			formatReportBool(day.IsEarlyDeparture),
+			formatReportBool(day.IsEarlyDeparture, language),
 			day.EarlyDepartureMinutes,
-			formatReportBool(day.IsAbsent),
-			formatReportBool(day.IsOnLeave),
+			formatReportBool(day.IsAbsent, language),
+			formatReportBool(day.IsOnLeave, language),
 			formatOptionalReportString(day.LeaveTypeName),
 		}
 		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", rowIndex), &row); err != nil {
@@ -183,9 +194,15 @@ func formatOptionalReportString(value *string) string {
 	return *value
 }
 
-func formatReportBool(value bool) string {
+func formatReportBool(value bool, language string) string {
 	if value {
+		if isArabicLanguage(language) {
+			return "نعم"
+		}
 		return "Yes"
+	}
+	if isArabicLanguage(language) {
+		return "لا"
 	}
 	return "No"
 }
@@ -197,4 +214,103 @@ func employeeAttendanceReportFilename(employeeUID string, start, end time.Time) 
 		start.Format("2006-01-02"),
 		end.Format("2006-01-02"),
 	)
+}
+
+type employeeAttendanceReportLabels struct {
+	SummaryEmployeeUID          string
+	SummaryEmployeeName         string
+	SummaryDateRange            string
+	SummaryTotalWorkedHours     string
+	SummaryLateDays             string
+	SummaryEarlyDepartureDays   string
+	SummaryAbsentDays           string
+	SummaryMissingCheckInDays   string
+	SummaryMissingCheckOutDays  string
+	HeaderDate                  string
+	HeaderCheckIn               string
+	HeaderCheckOut              string
+	HeaderWorkedHours           string
+	HeaderLate                  string
+	HeaderLateMinutes           string
+	HeaderEarlyDeparture        string
+	HeaderEarlyDepartureMinutes string
+	HeaderAbsent                string
+	HeaderOnLeave               string
+	HeaderLeaveType             string
+}
+
+func employeeAttendanceReportLabelsForLanguage(language string) employeeAttendanceReportLabels {
+	if isArabicLanguage(language) {
+		return employeeAttendanceReportLabels{
+			SummaryEmployeeUID:          "معرف الموظف",
+			SummaryEmployeeName:         "اسم الموظف",
+			SummaryDateRange:            "نطاق التاريخ",
+			SummaryTotalWorkedHours:     "إجمالي ساعات العمل",
+			SummaryLateDays:             "أيام التأخر",
+			SummaryEarlyDepartureDays:   "أيام الانصراف المبكر",
+			SummaryAbsentDays:           "أيام الغياب",
+			SummaryMissingCheckInDays:   "أيام نسيان الدخول",
+			SummaryMissingCheckOutDays:  "أيام نسيان الخروج",
+			HeaderDate:                  "التاريخ",
+			HeaderCheckIn:               "الدخول",
+			HeaderCheckOut:              "الخروج",
+			HeaderWorkedHours:           "ساعات العمل",
+			HeaderLate:                  "تأخير",
+			HeaderLateMinutes:           "دقائق التأخر",
+			HeaderEarlyDeparture:        "انصراف مبكر",
+			HeaderEarlyDepartureMinutes: "دقائق الانصراف المبكر",
+			HeaderAbsent:                "غياب",
+			HeaderOnLeave:               "في إجازة",
+			HeaderLeaveType:             "نوع الإجازة",
+		}
+	}
+
+	return employeeAttendanceReportLabels{
+		SummaryEmployeeUID:          "Employee UID",
+		SummaryEmployeeName:         "Employee Name",
+		SummaryDateRange:            "Date Range",
+		SummaryTotalWorkedHours:     "Total Worked Hours",
+		SummaryLateDays:             "Late Days",
+		SummaryEarlyDepartureDays:   "Early Departure Days",
+		SummaryAbsentDays:           "Absent Days",
+		SummaryMissingCheckInDays:   "Missing Check-In Days",
+		SummaryMissingCheckOutDays:  "Missing Check-Out Days",
+		HeaderDate:                  "Date",
+		HeaderCheckIn:               "Check-In",
+		HeaderCheckOut:              "Check-Out",
+		HeaderWorkedHours:           "Worked Hours",
+		HeaderLate:                  "Late",
+		HeaderLateMinutes:           "Late Minutes",
+		HeaderEarlyDeparture:        "Early Departure",
+		HeaderEarlyDepartureMinutes: "Early Departure Minutes",
+		HeaderAbsent:                "Absent",
+		HeaderOnLeave:               "On Leave",
+		HeaderLeaveType:             "Leave Type",
+	}
+}
+
+func employeeAttendanceReportSheetName(language string) string {
+	if isArabicLanguage(language) {
+		return "تقرير الحضور والانصراف"
+	}
+	return "Employee Report"
+}
+
+func formatReportDateRange(start, end time.Time, language string) string {
+	if isArabicLanguage(language) {
+		return fmt.Sprintf("%s إلى %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+	}
+	return fmt.Sprintf("%s to %s", start.Format("2006-01-02"), end.Format("2006-01-02"))
+}
+
+func normalizeReportLanguage(language string) string {
+	value := strings.ToLower(strings.TrimSpace(language))
+	if strings.HasPrefix(value, "ar") {
+		return "ar"
+	}
+	return "en"
+}
+
+func isArabicLanguage(language string) bool {
+	return normalizeReportLanguage(language) == "ar"
 }

@@ -49,6 +49,7 @@ type AttendanceHandler struct {
 	listDailyEmployeeLogsUC   *usecases.ListDailyEmployeeAttendanceLogsUseCase
 	createLogUC               *usecases.CreateAttendanceLogUseCase
 	updateLogUC               *usecases.UpdateAttendanceLogUseCase
+	importLogsUC              *usecases.ImportAttendanceLogsUseCase
 	getLogHistoryUC           attendanceLogHistoryExecutor
 	getMonthlyStatsUC         monthlyAttendanceStatsExecutor
 	getDailySummaryUC         *usecases.GetDailyAttendanceSummaryUseCase
@@ -64,6 +65,7 @@ func NewAttendanceHandler(
 	listDailyEmployeeLogsUC *usecases.ListDailyEmployeeAttendanceLogsUseCase,
 	createLogUC *usecases.CreateAttendanceLogUseCase,
 	updateLogUC *usecases.UpdateAttendanceLogUseCase,
+	importLogsUC *usecases.ImportAttendanceLogsUseCase,
 	getLogHistoryUC *usecases.GetAttendanceLogHistoryUseCase,
 	getMonthlyStatsUC *usecases.GetMonthlyAttendanceStatsUseCase,
 	getDailySummaryUC *usecases.GetDailyAttendanceSummaryUseCase,
@@ -76,6 +78,7 @@ func NewAttendanceHandler(
 		listDailyEmployeeLogsUC:   listDailyEmployeeLogsUC,
 		createLogUC:               createLogUC,
 		updateLogUC:               updateLogUC,
+		importLogsUC:              importLogsUC,
 		getLogHistoryUC:           getLogHistoryUC,
 		getMonthlyStatsUC:         getMonthlyStatsUC,
 		getDailySummaryUC:         getDailySummaryUC,
@@ -841,6 +844,73 @@ func (h *AttendanceHandler) GetLogHistory(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, output)
 }
 
+// ImportAttendanceLogs handles POST /api/v1/attendance/logs/import
+func (h *AttendanceHandler) ImportAttendanceLogs(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+	if claims == nil {
+		writeJSONError(w, http.StatusUnauthorized, "authentication_required", "Not authenticated")
+		return
+	}
+	if !canManuallyManageAttendanceLogs(claims) {
+		writeJSONError(w, http.StatusForbidden, "permission_denied", "Only IT Managers and Admins can import attendance logs")
+		return
+	}
+
+	// Limit request body size
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+
+	// Parse multipart form
+	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
+		if err.Error() == "http: request body too large" {
+			writeError(w, http.StatusRequestEntityTooLarge, "file exceeds maximum size of 20MB")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "failed to parse form: "+err.Error())
+		return
+	}
+
+	// Get uploaded file
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+
+	// Validate file extension
+	if !isXLSXFile(header.Filename) {
+		writeError(w, http.StatusBadRequest, "only .xlsx files are supported")
+		return
+	}
+
+	input := usecases.ImportAttendanceLogsInput{
+		File:     file,
+		FileSize: header.Size,
+	}
+
+	output, err := h.importLogsUC.Execute(r.Context(), input)
+	if err != nil {
+		switch {
+		case errors.Is(err, usecases.ErrAttendanceImportInvalidFile):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, usecases.ErrAttendanceImportFileTooLarge):
+			writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		case errors.Is(err, usecases.ErrAttendanceImportEmptyFile):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, usecases.ErrAttendanceImportInvalidHeaders):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, usecases.ErrAttendanceImportValidation):
+			writeJSON(w, http.StatusBadRequest, output)
+		default:
+			slog.Error("attendance_handler.ImportAttendanceLogs.execute_usecase", "error", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, output)
+}
+
 func (h *AttendanceHandler) writeUseCaseError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, usecases.ErrDepartmentNotFound):
@@ -1049,7 +1119,20 @@ func parseAttendanceListDateTime(value string, endOfDay bool) (time.Time, error)
 	return parsed, nil
 }
 
+func parseReportLanguage(r *http.Request) string {
+	value := strings.TrimSpace(r.URL.Query().Get("lang"))
+	if value == "" {
+		value = strings.TrimSpace(r.Header.Get("Accept-Language"))
+	}
+	value = strings.ToLower(value)
+	if strings.HasPrefix(value, "ar") {
+		return "ar"
+	}
+	return "en"
+}
+
 func (h *AttendanceHandler) parseDepartmentReportInput(w http.ResponseWriter, r *http.Request, departmentUID string) (usecases.GetDepartmentAttendanceReportInput, bool) {
+	language := parseReportLanguage(r)
 	startDateValue := firstNonEmptyQueryValue(r, "start_date", "startDate")
 	endDateValue := firstNonEmptyQueryValue(r, "end_date", "end_data", "endDate")
 
@@ -1077,10 +1160,12 @@ func (h *AttendanceHandler) parseDepartmentReportInput(w http.ResponseWriter, r 
 		DepartmentUID: departmentUID,
 		StartDate:     startDate,
 		EndDate:       endDate,
+		Language:      language,
 	}, true
 }
 
 func (h *AttendanceHandler) parseEmployeeReportInput(w http.ResponseWriter, r *http.Request, employeeUID string) (usecases.ExportEmployeeAttendanceReportInput, bool) {
+	language := parseReportLanguage(r)
 	startDateValue := firstNonEmptyQueryValue(r, "start_date", "startDate")
 	endDateValue := firstNonEmptyQueryValue(r, "end_date", "end_data", "endDate")
 
@@ -1108,6 +1193,7 @@ func (h *AttendanceHandler) parseEmployeeReportInput(w http.ResponseWriter, r *h
 		EmployeeUID: employeeUID,
 		StartDate:   startDate,
 		EndDate:     endDate,
+		Language:    language,
 	}, true
 }
 

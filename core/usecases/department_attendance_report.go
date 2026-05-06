@@ -33,6 +33,7 @@ type GetDepartmentAttendanceReportInput struct {
 	DepartmentUID string
 	StartDate     time.Time
 	EndDate       time.Time
+	Language      string
 }
 
 type DepartmentAttendanceReportOutput struct {
@@ -261,15 +262,22 @@ func (uc *ExportDepartmentAttendanceReportUseCase) Execute(ctx context.Context, 
 	f := excelize.NewFile()
 	defer f.Close()
 
-	sheetName := "Department Report"
+	language := normalizeReportLanguage(input.Language)
+	sheetName := departmentAttendanceReportSheetName(language)
 	index, err := f.NewSheet(sheetName)
 	if err != nil {
 		return nil, err
 	}
 	f.SetActiveSheet(index)
 	f.DeleteSheet("Sheet1")
+	if isArabicLanguage(language) {
+		rightToLeft := true
+		if err := f.SetSheetView(sheetName, 0, &excelize.ViewOptions{RightToLeft: &rightToLeft}); err != nil {
+			return nil, err
+		}
+	}
 
-	if err := writeDepartmentAttendanceReportWorkbook(f, sheetName, report); err != nil {
+	if err := writeDepartmentAttendanceReportWorkbook(f, sheetName, report, language); err != nil {
 		return nil, err
 	}
 
@@ -686,30 +694,31 @@ func ratio(numerator, denominator int) float64 {
 	return float64(numerator) / float64(denominator)
 }
 
-func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string, report *DepartmentAttendanceReportOutput) error {
+func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string, report *DepartmentAttendanceReportOutput, language string) error {
+	labels := departmentAttendanceReportLabelsForLanguage(language)
 	summaryRows := [][]any{
-		{"Department attendance overview", ""},
-		{"Date Range", fmt.Sprintf("%s to %s", report.StartDate.Format("2006-01-02"), report.EndDate.Format("2006-01-02"))},
-		{"Attendance Rate", report.OverviewAttendanceRate},
-		{"Late Arrival Rate", report.OverviewLateArrivalRate},
-		{"Missing Punch Rate", report.OverviewMissingPunchRate},
-		{"Total Records", report.OverviewTotalRecords},
-		{"Records Analyzed", report.OverviewTotalRecords},
-		{"Days Covered", len(report.OverviewDailyTrend)},
-		{"Total Exceptions", report.OverviewTotalExceptions},
-		{"Best Attendance Day", formatOverviewDay(report.OverviewBestAttendanceDay)},
-		{"Worst Attendance Day", formatOverviewDay(report.OverviewWorstAttendanceDay)},
+		{labels.OverviewTitle, ""},
+		{labels.DateRange, formatReportDateRange(report.StartDate, report.EndDate, language)},
+		{labels.AttendanceRate, report.OverviewAttendanceRate},
+		{labels.LateArrivalRate, report.OverviewLateArrivalRate},
+		{labels.MissingPunchRate, report.OverviewMissingPunchRate},
+		{labels.TotalRecords, report.OverviewTotalRecords},
+		{labels.RecordsAnalyzed, report.OverviewTotalRecords},
+		{labels.DaysCovered, len(report.OverviewDailyTrend)},
+		{labels.TotalExceptions, report.OverviewTotalExceptions},
+		{labels.BestAttendanceDay, formatOverviewDay(report.OverviewBestAttendanceDay, language)},
+		{labels.WorstAttendanceDay, formatOverviewDay(report.OverviewWorstAttendanceDay, language)},
 	}
 
 	if len(report.OverviewTopExceptions) == 0 {
-		summaryRows = append(summaryRows, []any{"Top Exceptions", "-"})
+		summaryRows = append(summaryRows, []any{labels.TopExceptions, labels.NoExceptions})
 	} else {
 		for index, exception := range report.OverviewTopExceptions {
-			label := "Top Exceptions"
+			label := labels.TopExceptions
 			if index > 0 {
 				label = ""
 			}
-			summaryRows = append(summaryRows, []any{label, fmt.Sprintf("%s: %d", formatOverviewExceptionType(exception.Type), exception.Count)})
+			summaryRows = append(summaryRows, []any{label, fmt.Sprintf("%s: %d", formatOverviewExceptionType(exception.Type, language), exception.Count)})
 		}
 	}
 
@@ -720,20 +729,20 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	}
 
 	trendTitleRow := len(summaryRows) + 2
-	trendTitle := []any{"Attendance Trend"}
+	trendTitle := []any{labels.AttendanceTrendTitle}
 	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendTitleRow), &trendTitle); err != nil {
 		return err
 	}
 
 	trendHeaderRow := trendTitleRow + 1
 	trendHeaders := []any{
-		"Date",
-		"Attendance Rate",
-		"Absence Rate",
-		"Late Arrival Rate",
-		"Missing Punch Rate",
-		"Exceptions",
-		"Records",
+		labels.TrendDate,
+		labels.TrendAttendanceRate,
+		labels.TrendAbsenceRate,
+		labels.TrendLateArrivalRate,
+		labels.TrendMissingPunchRate,
+		labels.TrendExceptions,
+		labels.TrendRecords,
 	}
 	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendHeaderRow), &trendHeaders); err != nil {
 		return err
@@ -741,7 +750,7 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 
 	trendDataStartRow := trendHeaderRow + 1
 	if len(report.OverviewDailyTrend) == 0 {
-		emptyTrend := []any{"No trend data"}
+		emptyTrend := []any{labels.NoTrendData}
 		if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", trendDataStartRow), &emptyTrend); err != nil {
 			return err
 		}
@@ -763,23 +772,23 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	}
 
 	headers := []any{
-		"Employee",
-		"Working Days",
-		"Present",
-		"Absent",
-		"Late",
-		"Early Departure",
-		"Missing In/Out",
-		"Total Hours",
-		"Average Check-In",
-		"Average Check-Out",
+		labels.Employee,
+		labels.WorkingDays,
+		labels.Present,
+		labels.Absent,
+		labels.Late,
+		labels.EarlyDeparture,
+		labels.MissingInOut,
+		labels.TotalHours,
+		labels.AverageCheckIn,
+		labels.AverageCheckOut,
 	}
 	trendRowsCount := len(report.OverviewDailyTrend)
 	if trendRowsCount == 0 {
 		trendRowsCount = 1
 	}
 	employeeTitleRow := trendDataStartRow + trendRowsCount + 2
-	employeeTitle := []any{"Employee Breakdown"}
+	employeeTitle := []any{labels.EmployeeBreakdownTitle}
 	if err := f.SetSheetRow(sheetName, fmt.Sprintf("A%d", employeeTitleRow), &employeeTitle); err != nil {
 		return err
 	}
@@ -864,14 +873,31 @@ func writeDepartmentAttendanceReportWorkbook(f *excelize.File, sheetName string,
 	return nil
 }
 
-func formatOverviewDay(value *DepartmentAttendanceOverviewDay) string {
+func formatOverviewDay(value *DepartmentAttendanceOverviewDay, language string) string {
 	if value == nil {
 		return "-"
 	}
 	return fmt.Sprintf("%s (%.2f%%)", value.Date.Format("2006-01-02"), value.AttendanceRate*100)
 }
 
-func formatOverviewExceptionType(value domain.AttendanceExceptionType) string {
+func formatOverviewExceptionType(value domain.AttendanceExceptionType, language string) string {
+	if isArabicLanguage(language) {
+		switch value {
+		case domain.AttendanceExceptionTypeAbsence:
+			return "غياب"
+		case domain.AttendanceExceptionTypeLateArrival:
+			return "تأخر في الحضور"
+		case domain.AttendanceExceptionTypeEarlyDeparture:
+			return "انصراف مبكر"
+		case domain.AttendanceExceptionTypeMissedPunchIn:
+			return "بصمة دخول مفقودة"
+		case domain.AttendanceExceptionTypeMissedPunchOut:
+			return "بصمة خروج مفقودة"
+		default:
+			return string(value)
+		}
+	}
+
 	switch value {
 	case domain.AttendanceExceptionTypeAbsence:
 		return "Absence"
@@ -902,4 +928,123 @@ func departmentAttendanceReportFilename(report *DepartmentAttendanceReportOutput
 		report.StartDate.Format("2006-01-02"),
 		report.EndDate.Format("2006-01-02"),
 	)
+}
+
+type departmentAttendanceReportLabels struct {
+	OverviewTitle         string
+	DateRange             string
+	AttendanceRate        string
+	LateArrivalRate       string
+	MissingPunchRate      string
+	TotalRecords          string
+	RecordsAnalyzed       string
+	DaysCovered           string
+	TotalExceptions       string
+	BestAttendanceDay     string
+	WorstAttendanceDay    string
+	TopExceptions         string
+	NoExceptions          string
+	AttendanceTrendTitle  string
+	NoTrendData           string
+	TrendDate             string
+	TrendAttendanceRate   string
+	TrendAbsenceRate      string
+	TrendLateArrivalRate  string
+	TrendMissingPunchRate string
+	TrendExceptions       string
+	TrendRecords          string
+	EmployeeBreakdownTitle string
+	Employee              string
+	WorkingDays           string
+	Present               string
+	Absent                string
+	Late                  string
+	EarlyDeparture        string
+	MissingInOut          string
+	TotalHours            string
+	AverageCheckIn        string
+	AverageCheckOut       string
+}
+
+func departmentAttendanceReportLabelsForLanguage(language string) departmentAttendanceReportLabels {
+	if isArabicLanguage(language) {
+		return departmentAttendanceReportLabels{
+			OverviewTitle:         "نظرة عامة على حضور القسم",
+			DateRange:             "نطاق التاريخ",
+			AttendanceRate:        "معدل الحضور",
+			LateArrivalRate:       "معدل التأخر",
+			MissingPunchRate:      "معدل البصمات المفقودة",
+			TotalRecords:          "إجمالي السجلات",
+			RecordsAnalyzed:       "السجلات المحللة",
+			DaysCovered:           "الأيام المغطاة",
+			TotalExceptions:       "إجمالي الاستثناءات",
+			BestAttendanceDay:     "أفضل يوم حضور",
+			WorstAttendanceDay:    "أضعف يوم حضور",
+			TopExceptions:         "أعلى الاستثناءات",
+			NoExceptions:          "لا توجد استثناءات",
+			AttendanceTrendTitle:  "اتجاه الحضور",
+			NoTrendData:           "لا توجد بيانات للاتجاه",
+			TrendDate:             "التاريخ",
+			TrendAttendanceRate:   "معدل الحضور",
+			TrendAbsenceRate:      "معدل الغياب",
+			TrendLateArrivalRate:  "معدل التأخر",
+			TrendMissingPunchRate: "معدل البصمات المفقودة",
+			TrendExceptions:       "الاستثناءات",
+			TrendRecords:          "السجلات",
+			EmployeeBreakdownTitle: "تفاصيل الموظفين",
+			Employee:              "الموظف",
+			WorkingDays:           "أيام العمل",
+			Present:               "حضور",
+			Absent:                "غياب",
+			Late:                  "تأخير",
+			EarlyDeparture:        "انصراف مبكر",
+			MissingInOut:          "دخول/خروج مفقود",
+			TotalHours:            "إجمالي الساعات",
+			AverageCheckIn:        "متوسط الدخول",
+			AverageCheckOut:       "متوسط الخروج",
+		}
+	}
+
+	return departmentAttendanceReportLabels{
+		OverviewTitle:         "Department attendance overview",
+		DateRange:             "Date Range",
+		AttendanceRate:        "Attendance Rate",
+		LateArrivalRate:       "Late Arrival Rate",
+		MissingPunchRate:      "Missing Punch Rate",
+		TotalRecords:          "Total Records",
+		RecordsAnalyzed:       "Records Analyzed",
+		DaysCovered:           "Days Covered",
+		TotalExceptions:       "Total Exceptions",
+		BestAttendanceDay:     "Best Attendance Day",
+		WorstAttendanceDay:    "Worst Attendance Day",
+		TopExceptions:         "Top Exceptions",
+		NoExceptions:          "No exceptions",
+		AttendanceTrendTitle:  "Attendance Trend",
+		NoTrendData:           "No trend data",
+		TrendDate:             "Date",
+		TrendAttendanceRate:   "Attendance Rate",
+		TrendAbsenceRate:      "Absence Rate",
+		TrendLateArrivalRate:  "Late Arrival Rate",
+		TrendMissingPunchRate: "Missing Punch Rate",
+		TrendExceptions:       "Exceptions",
+		TrendRecords:          "Records",
+		EmployeeBreakdownTitle: "Employee Breakdown",
+		Employee:              "Employee",
+		WorkingDays:           "Working Days",
+		Present:               "Present",
+		Absent:                "Absent",
+		Late:                  "Late",
+		EarlyDeparture:        "Early Departure",
+		MissingInOut:          "Missing In/Out",
+		TotalHours:            "Total Hours",
+		AverageCheckIn:        "Average Check-In",
+		AverageCheckOut:       "Average Check-Out",
+	}
+}
+
+func departmentAttendanceReportSheetName(language string) string {
+	if isArabicLanguage(language) {
+		return "تقرير القسم"
+	}
+	return "Department Report"
 }

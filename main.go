@@ -302,6 +302,7 @@ func main() {
 	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
 	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	importAttendanceLogsUC := usecases.NewImportAttendanceLogsUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
 	
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
@@ -384,6 +385,7 @@ func main() {
 		listDailyEmployeeAttendanceLogsUC,
 		createAttendanceLogUC,
 		updateAttendanceLogUC,
+		importAttendanceLogsUC,
 		getAttendanceLogHistoryUC,
 		getMonthlyAttendanceStatsUC,
 		getDailyAttendanceSummaryUC,

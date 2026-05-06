@@ -397,7 +397,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req = withAdminClaims(req)
@@ -478,7 +478,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
 	req = withAdminClaims(req)
@@ -499,7 +499,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
 	req = withAdminClaims(req)
@@ -514,7 +514,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
 	req = withAdminClaims(req)
@@ -557,7 +557,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req = withAdminClaims(req)
@@ -678,7 +678,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -777,7 +777,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs_IncludesCheckoutOnlyRecord(t *
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -858,7 +858,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -929,7 +929,7 @@ func TestAttendanceHandlerCreateLog(t *testing.T) {
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in","reason":"Manual correction"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -982,7 +982,7 @@ func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDat
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -1018,7 +1018,7 @@ func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeChe
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_out"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -1064,7 +1064,7 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	updateUC := usecases.NewUpdateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil, nil, nil)
 
 	body := `{"deviceUid":"dev_1","punchedAt":"2026-04-10T17:30:00Z","punchType":"check_out","reason":"Corrected missed checkout"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/attendance/logs/atr_1", strings.NewReader(body))
@@ -1097,7 +1097,7 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 }
 
 func TestAttendanceHandlerCreateLogRejectsNonITManagerAttendanceWriter(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))

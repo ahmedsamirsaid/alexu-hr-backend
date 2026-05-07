@@ -96,7 +96,6 @@ func (uc *CancelLeaveRequestUseCase) Execute(ctx context.Context, input CancelLe
 		return ErrRequestNotPending
 	}
 
-	// Resolve names for the human-readable audit action sentence
 	actorName := input.ActorEmployeeUID
 	if uc.employeeRepo != nil {
 		if emp, err := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID); err == nil && emp != nil {
@@ -133,7 +132,6 @@ func (uc *CancelLeaveRequestUseCase) Execute(ctx context.Context, input CancelLe
 		WithMeta("old_status", "pending").
 		WithMeta("new_status", "cancelled").
 		Save(ctx)
-
 	// Cancel the approval request
 	approvalRequest.Cancel()
 	if err := uc.approvalRequestRepo.Update(ctx, tx, approvalRequest); err != nil {

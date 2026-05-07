@@ -152,6 +152,22 @@ func (r *reportHolidayRepo) Create(ctx context.Context, q ports.Querier, def *do
 	return nil
 }
 
+func (r *reportHolidayRepo) Update(ctx context.Context, q ports.Querier, def *domain.HolidayDefinition) error {
+	return nil
+}
+
+func (r *reportHolidayRepo) Delete(ctx context.Context, q ports.Querier, id int64) error {
+	return nil
+}
+
+func (r *reportHolidayRepo) ListAllByDateRange(ctx context.Context, q ports.Querier, start, end time.Time) ([]*domain.HolidayDefinition, error) {
+	return r.holidays, nil
+}
+
+func (r *reportHolidayRepo) ListByDateRangeForDepartment(ctx context.Context, q ports.Querier, start, end time.Time, departmentUID string) ([]*domain.HolidayDefinition, error) {
+	return r.holidays, nil
+}
+
 func TestGetDepartmentAttendanceReportUseCase(t *testing.T) {
 	previousLocal := time.Local
 	time.Local = time.FixedZone("Africa/Cairo", 2*60*60)

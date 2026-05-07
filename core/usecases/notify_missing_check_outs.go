@@ -56,7 +56,7 @@ func NewNotifyMissingCheckOutsUseCase(
 
 func (uc *NotifyMissingCheckOutsUseCase) Execute(ctx context.Context) (*NotifyMissingCheckOutsOutput, error) {
 	now := uc.now()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 
 	params := ports.ListParams{Page: 1, PageSize: 10000, SortBy: "date", SortOrder: ports.SortOrderAsc}
 	groups, err := uc.attendanceRecordRepo.ListDaily(ctx, uc.db, ports.DepartmentAttendanceLogsFilter{

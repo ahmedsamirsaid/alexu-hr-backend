@@ -332,8 +332,11 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute_WithMissingCheckIn(t *testing.T
 func TestGetMonthlyAttendanceStatsUseCaseExecute_WithWorkingDayBreakdown(t *testing.T) {
 	previousLocal := time.Local
 	time.Local = time.UTC
+	previousAttendanceLoc := attendanceLoc
+	attendanceLoc = time.UTC
 	defer func() {
 		time.Local = previousLocal
+		attendanceLoc = previousAttendanceLoc
 	}()
 
 	db := newUsecaseTestSQLiteDB(t)

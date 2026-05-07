@@ -63,7 +63,7 @@ func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHoliday
 		nameAR = *input.NameAR
 	}
 
-	// Capture old values for audit
+
 	oldDate := definition.Date
 	oldNameEN := definition.NameEN
 	oldNameAR := definition.NameAR

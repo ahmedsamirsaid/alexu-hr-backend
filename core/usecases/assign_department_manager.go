@@ -86,8 +86,6 @@ func (uc *AssignDepartmentManagerUseCase) Execute(ctx context.Context, input Ass
 	if role == nil {
 		return errors.New("department_manager_role_not_found")
 	}
-
-	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
 	actionParams := map[string]interface{}{
 		"Actor":      actorName,

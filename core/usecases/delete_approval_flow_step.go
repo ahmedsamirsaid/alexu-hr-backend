@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
 )

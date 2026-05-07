@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -20,9 +21,42 @@ var (
 
 const autoApprovedLeaveFlowUID = "apf_leave_default"
 
+type leaveRequestOutsideDeadlineError struct {
+	recordingDeadlineDays int
+}
+
+func (e leaveRequestOutsideDeadlineError) Error() string {
+	return fmt.Sprintf("You must record this leave at least %d days before the start date.", e.recordingDeadlineDays)
+}
+
+func (e leaveRequestOutsideDeadlineError) RecordingDeadlineDays() int {
+	return e.recordingDeadlineDays
+}
+
+func (e leaveRequestOutsideDeadlineError) Unwrap() error {
+	return ErrLeaveRequestOutsideDeadline
+}
+
+type exceedsConsecutiveDaysError struct {
+	maxConsecutiveDays int
+}
+
+func (e exceedsConsecutiveDaysError) Error() string {
+	return fmt.Sprintf("You cannot request more than %d consecutive days for this leave type.", e.maxConsecutiveDays)
+}
+
+func (e exceedsConsecutiveDaysError) MaxConsecutiveDays() int {
+	return e.maxConsecutiveDays
+}
+
+func (e exceedsConsecutiveDaysError) Unwrap() error {
+	return ErrExceedsConsecutiveDays
+}
+
 type SubmitLeaveRequestInput struct {
 	UserUID           string
 	EmployeeUID       string
+	ActorEmployeeUID  *string
 	LeaveTypeUID      string
 	SubLeaveTypeUID   *string
 	OtherSubLeaveName *string
@@ -184,7 +218,7 @@ func (uc *SubmitLeaveRequestUseCase) Execute(ctx context.Context, input SubmitLe
 	}
 
 	if leaveType.MaxConsecutive != nil && totalWorkingDays > *leaveType.MaxConsecutive {
-		return nil, ErrExceedsConsecutiveDays
+		return nil, exceedsConsecutiveDaysError{maxConsecutiveDays: *leaveType.MaxConsecutive}
 	}
 
 	// Check for overlapping requests
@@ -271,7 +305,7 @@ func (uc *SubmitLeaveRequestUseCase) handleAutoApprove(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
 		nil,
-		input.EmployeeUID,
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -344,7 +378,7 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	}
 
 	resolver := newApprovalChainResolver(uc.employeeRepo, uc.userRepo, uc.approvalFlowStepRepo, uc.roleRepo)
-	chain, err := resolver.resolveForSubmit(ctx, tx, *leaveType.ApprovalFlowUID, requesterUser.ID, employee)
+	chain, err := resolver.resolveForSubmit(ctx, tx, *leaveType.ApprovalFlowUID, employee)
 	if err != nil {
 		return nil, err
 	}
@@ -418,8 +452,8 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	submitAction := domain.NewApprovalAction(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
-		nil,
-		input.EmployeeUID,
+		nil, // step_order is nil for submit
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -500,7 +534,7 @@ func (uc *SubmitLeaveRequestUseCase) handleTopRoleAutoApprove(
 		approvalRequest.UID,
 		domain.ApprovalActionTypeSubmit,
 		nil,
-		input.EmployeeUID,
+		submitActorEmployeeUID(input),
 		nil,
 	)
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
@@ -566,6 +600,13 @@ func isOtherSubLeaveType(subLeaveType *domain.SubLeaveType) bool {
 	return nameEN == "other" || nameAR == "أخرى" || nameAR == "أخرى."
 }
 
+func submitActorEmployeeUID(input SubmitLeaveRequestInput) string {
+	if input.ActorEmployeeUID != nil && *input.ActorEmployeeUID != "" {
+		return *input.ActorEmployeeUID
+	}
+	return input.EmployeeUID
+}
+
 func validateLeaveRequestRecordingDeadline(leaveType *domain.LeaveType, startDate, now time.Time) error {
 	if leaveType == nil || leaveType.RecordingDeadlineDays == nil {
 		return nil
@@ -575,23 +616,24 @@ func validateLeaveRequestRecordingDeadline(leaveType *domain.LeaveType, startDat
 	nowUTC := now.UTC()
 	submitDay := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 	deadlineDays := *leaveType.RecordingDeadlineDays
+	outsideDeadlineErr := leaveRequestOutsideDeadlineError{recordingDeadlineDays: deadlineDays}
 
 	switch leaveType.Code {
 	case leaveTypeCodeCasual:
 		if submitDay.After(startDay) {
 			daysLate := int(submitDay.Sub(startDay).Hours() / 24)
 			if daysLate > deadlineDays {
-				return ErrLeaveRequestOutsideDeadline
+				return outsideDeadlineErr
 			}
 		}
 	default:
 		if !startDay.After(submitDay) {
-			return ErrLeaveRequestOutsideDeadline
+			return outsideDeadlineErr
 		}
 
 		daysAhead := int(startDay.Sub(submitDay).Hours() / 24)
 		if daysAhead < deadlineDays {
-			return ErrLeaveRequestOutsideDeadline
+			return outsideDeadlineErr
 		}
 	}
 

@@ -2116,6 +2116,11 @@ paths:
               type: object
               required: [leaveTypeUid, startDate, endDate]
               properties:
+                employeeUid:
+                  type: string
+                  nullable: true
+                  description: Optional target employee UID for delegated submission. If omitted, the authenticated user's linked employee is used.
+                  example: "emp_xyz789"
                 leaveTypeUid:
                   type: string
                   example: "lt_annual"
@@ -4779,3 +4784,408 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  # ─── PERMISSION REQUESTS ───────────────────────────────────────────────────
+
+  /api/v1/permission-requests/eligibility:
+    get:
+      tags: [Permissions]
+      summary: Get permission eligibility
+      description: |
+        Returns the calling employee's effective shift and eligibility per permission type:
+        allowed submission dates, whether the weekly cap is hit, and the resolved time window.
+        Requires `permission:request`.
+      responses:
+        "200":
+          description: Eligibility data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionEligibility"
+        "400":
+          description: No employee profile linked to user
+
+  /api/v1/permission-requests:
+    post:
+      tags: [Permissions]
+      summary: Submit a permission request
+      description: |
+        Creates a new permission request for the calling employee.
+        The time window is resolved at submission from the employee's shift:
+        - **morning / personal** — system constants (10:00 / 13:00); caller-supplied times are ignored.
+        - **official / health_insurance** — caller must supply `startTime` and `endTime` inside the shift.
+
+        Requires `permission:request`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, permissionDate]
+              properties:
+                type:
+                  type: string
+                  enum: [morning, personal, official, health_insurance]
+                  example: "morning"
+                permissionDate:
+                  type: string
+                  format: date
+                  example: "2026-05-05"
+                startTime:
+                  type: string
+                  description: "HH:MM. Required for official / health_insurance."
+                  example: "10:00"
+                  nullable: true
+                endTime:
+                  type: string
+                  description: "HH:MM. Required for official / health_insurance."
+                  example: "12:00"
+                  nullable: true
+                reason:
+                  type: string
+                  nullable: true
+                  example: "Medical check-up"
+      responses:
+        "201":
+          description: Permission request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRequest"
+        "400":
+          description: Validation error (deadline passed, window outside shift, weekly cap exceeded, overlap, etc.)
+
+    get:
+      tags: [Permissions]
+      summary: List permission requests
+      description: |
+        Lists permission requests. Without `scope=all` returns only the calling employee's requests.
+        `scope=all` requires `permission:approve` or `permission:read`.
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [self, all]
+          example: "self"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [morning, personal, official, health_insurance]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PermissionRequest"
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+
+  /api/v1/permission-requests/{uid}:
+    get:
+      tags: [Permissions]
+      summary: Get a permission request
+      description: Returns a single permission request with `actorCanApprove` set for the calling user.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "prq_90dbbad336c74acf8f80b26644139b9d"
+      responses:
+        "200":
+          description: Permission request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRequest"
+        "404":
+          description: Not found
+
+    patch:
+      tags: [Permissions]
+      summary: Update a pending permission request
+      description: |
+        Edits a **pending** permission request owned by the calling employee.
+        Requires `permission:request`.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, permissionDate]
+              properties:
+                type:
+                  type: string
+                  enum: [morning, personal, official, health_insurance]
+                permissionDate:
+                  type: string
+                  format: date
+                startTime:
+                  type: string
+                  nullable: true
+                endTime:
+                  type: string
+                  nullable: true
+                reason:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Updated permission request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRequest"
+        "400":
+          description: Validation error or request not editable
+        "403":
+          description: Not the request owner
+        "404":
+          description: Not found
+
+  /api/v1/permission-requests/{uid}/cancel:
+    post:
+      tags: [Permissions]
+      summary: Cancel a permission request
+      description: |
+        Cancels a pending or approved permission request owned by the calling employee.
+        If the request was already approved, attendance for that day is recomputed.
+        Requires `permission:request`.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "permission cancelled"
+        "400":
+          description: Request cannot be cancelled (already rejected/cancelled)
+        "403":
+          description: Not the request owner
+
+  # ─── PERMISSION APPROVALS ──────────────────────────────────────────────────
+
+  /api/v1/permission-approvals/pending:
+    get:
+      tags: [Permissions]
+      summary: List pending permission approvals
+      description: Returns all pending permission requests the calling user is authorized to approve. Requires `permission:approve`.
+      responses:
+        "200":
+          description: Pending approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PendingPermissionApproval"
+
+  /api/v1/permission-approvals/{uid}/approve:
+    post:
+      tags: [Permissions]
+      summary: Approve a permission request
+      description: |
+        Approves the permission request linked to the given approval-request UID.
+        On final approval, attendance for the permission date is recomputed immediately.
+        Requires `permission:approve`.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: approval-request UID
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comments:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRequest"
+        "400":
+          description: Request is not pending
+        "403":
+          description: Not an authorized approver
+        "404":
+          description: Not found
+
+  /api/v1/permission-approvals/{uid}/reject:
+    post:
+      tags: [Permissions]
+      summary: Reject a permission request
+      description: Requires `permission:approve`. Comments are mandatory.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: approval-request UID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [comments]
+              properties:
+                comments:
+                  type: string
+                  example: "Insufficient justification"
+      responses:
+        "200":
+          description: Rejected
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "permission rejected"
+        "400":
+          description: Comments missing or request not pending
+        "403":
+          description: Not an authorized approver
+
+  /api/v1/permission-approvals/{uid}/history:
+    get:
+      tags: [Permissions]
+      summary: Get approval history for a permission request
+      description: Returns the full action log (submit → approve/reject/cancel). Requires `permission:approve`.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: approval-request UID
+          schema:
+            type: string
+      responses:
+        "200":
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PermissionApprovalHistoryItem"
+        "404":
+          description: Not found
+
+  /api/v1/employees/{uid}/permission-requests:
+    get:
+      tags: [Permissions]
+      summary: List permission requests for an employee
+      description: |
+        Returns permission requests for a specific employee.
+        Requires `employees:read`, `permission:approve`, or `permission:read`.
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          description: Employee UID
+          schema:
+            type: string
+          example: "emp_00000000000000000000000000000002"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, cancelled]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [morning, personal, official, health_insurance]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PermissionRequest"
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+        "404":
+          description: Employee not found

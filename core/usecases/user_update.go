@@ -100,6 +100,14 @@ func (uc *UpdateUserUseCase) Execute(ctx context.Context, input UpdateUserInput)
 			}
 			changedFields = append(changedFields, status)
 		}
+		auditBuilder.WithMeta("old_is_active", oldIsActive).WithMeta("new_is_active", *input.IsActive)
+		if *input.IsActive != oldIsActive {
+			status := "deactivated"
+			if *input.IsActive {
+				status = "activated"
+			}
+			changedFields = append(changedFields, status)
+		}
 		user.IsActive = *input.IsActive
 	}
 

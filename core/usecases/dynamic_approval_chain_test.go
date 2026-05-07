@@ -415,6 +415,99 @@ func TestDynamicApprovalChain_SubmitTopRoleAutoApprovesAndCreatesLeaveRecord(t *
 	if len(actions) != 1 || actions[0].Action != domain.ApprovalActionTypeSubmit {
 		t.Fatalf("expected only one submit action, got %+v", actions)
 	}
+	if actions[0].ActorUID != "emp_top_requester" {
+		t.Fatalf("expected submit action actor_uid emp_top_requester, got %s", actions[0].ActorUID)
+	}
+}
+
+func TestDynamicApprovalChain_SubmitOnBehalfUsesSubmittingEmployeeAsActor(t *testing.T) {
+	env := newApprovalChainTestEnv(t)
+	defer env.close()
+
+	seedDepartment(t, env, "dept_eng", "ENG")
+	step1RoleID := seedRole(t, env, "role_department_manager", "Department Manager")
+	step2RoleID := seedRole(t, env, "role_dean", "Dean")
+
+	_, managerUser := seedEmployeeAndUser(t, env, "emp_delegate_manager", "usr_delegate_manager", "+201155555551", "dept_eng")
+	seedEmployeeAndUser(t, env, "emp_delegate_requester", "usr_delegate_requester", "+201155555552", "dept_eng")
+	_, approverUser := seedEmployeeAndUser(t, env, "emp_delegate_dean", "usr_delegate_dean", "+201155555553", "dept_eng")
+
+	dept := "dept_eng"
+	assignRole(t, env, managerUser.ID, step1RoleID, &dept)
+	assignRole(t, env, approverUser.ID, step2RoleID, &dept)
+
+	seedApprovalFlowWithSteps(t, env, "apf_delegate_submit", []string{"role_department_manager", "role_dean"})
+	seedLeaveType(t, env, "ltype_delegate_submit", "ANNUAL_DELEGATE", "apf_delegate_submit")
+
+	output, err := env.submitUC.Execute(context.Background(), usecases.SubmitLeaveRequestInput{
+		UserUID:          managerUser.UID,
+		EmployeeUID:      "emp_delegate_requester",
+		ActorEmployeeUID: managerUser.EmployeeUID,
+		LeaveTypeUID:     "ltype_delegate_submit",
+		StartDate:        time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC),
+		EndDate:          time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("submit leave request failed: %v", err)
+	}
+
+	actions, err := env.actionRepo.ListByRequest(context.Background(), env.db, output.ApprovalRequest.UID)
+	if err != nil {
+		t.Fatalf("list approval actions failed: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Action != domain.ApprovalActionTypeSubmit {
+		t.Fatalf("expected only one submit action, got %+v", actions)
+	}
+	if actions[0].ActorUID != "emp_delegate_manager" {
+		t.Fatalf("expected submit action actor_uid emp_delegate_manager, got %s", actions[0].ActorUID)
+	}
+	if output.ApprovalRequest.CurrentStep != 1 {
+		t.Fatalf("expected delegated submission for non-manager employee to stay at step 1, got %d", output.ApprovalRequest.CurrentStep)
+	}
+}
+
+func TestDynamicApprovalChain_AdminSubmittingForDepartmentManagerSkipsManagerStep(t *testing.T) {
+	env := newApprovalChainTestEnv(t)
+	defer env.close()
+
+	seedDepartment(t, env, "dept_law", "LAW")
+	step1RoleID := seedRole(t, env, "role_department_manager", "Department Manager")
+	step2RoleID := seedRole(t, env, "role_dean", "Dean")
+
+	_, adminUser := seedEmployeeAndUser(t, env, "emp_delegate_admin", "usr_delegate_admin", "+201166666661", "dept_law")
+	managerEmployee, managerUser := seedEmployeeAndUser(t, env, "emp_delegate_target_manager", "usr_delegate_target_manager", "+201166666662", "dept_law")
+	_, deanUser := seedEmployeeAndUser(t, env, "emp_delegate_law_dean", "usr_delegate_law_dean", "+201166666663", "dept_law")
+
+	dept := "dept_law"
+	assignRole(t, env, managerUser.ID, step1RoleID, &dept)
+	assignRole(t, env, deanUser.ID, step2RoleID, &dept)
+
+	seedApprovalFlowWithSteps(t, env, "apf_admin_for_manager", []string{"role_department_manager", "role_dean"})
+	seedLeaveType(t, env, "ltype_admin_for_manager", "ANNUAL_ADMIN_FOR_MANAGER", "apf_admin_for_manager")
+
+	output, err := env.submitUC.Execute(context.Background(), usecases.SubmitLeaveRequestInput{
+		UserUID:          adminUser.UID,
+		EmployeeUID:      managerEmployee.UID,
+		ActorEmployeeUID: adminUser.EmployeeUID,
+		LeaveTypeUID:     "ltype_admin_for_manager",
+		StartDate:        time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+		EndDate:          time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("submit leave request failed: %v", err)
+	}
+
+	if output.ApprovalRequest.CurrentStep != 2 {
+		t.Fatalf("expected department manager step to be skipped, got current step %d", output.ApprovalRequest.CurrentStep)
+	}
+
+	pendingForDean, err := env.listPendingUC.Execute(context.Background(), deanUser.ID)
+	if err != nil {
+		t.Fatalf("list pending approvals for dean failed: %v", err)
+	}
+	if len(pendingForDean.Items) != 1 || pendingForDean.Items[0].ApprovalRequest.UID != output.ApprovalRequest.UID {
+		t.Fatalf("expected dean to receive the delegated manager request, got %+v", pendingForDean.Items)
+	}
 }
 
 func TestDynamicApprovalChain_ApproveUsesOnlyHigherSteps(t *testing.T) {

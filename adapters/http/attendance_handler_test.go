@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
@@ -42,6 +42,8 @@ func timePtr(value time.Time) *time.Time {
 	return &value
 }
 
+type mockAttendanceDB = mockDB
+
 type mockDepartmentRepoForAttendance struct {
 	department *domain.Department
 }
@@ -53,6 +55,18 @@ func (m *mockDepartmentRepoForAttendance) GetByID(ctx context.Context, q ports.Q
 func (m *mockDepartmentRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Department, error) {
 	if m.department != nil && m.department.UID == uid {
 		return m.department, nil
+	}
+	return nil, nil
+}
+
+func (m *mockDepartmentRepoForAttendance) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Department, error) {
+	if m.department == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.department.UID == uid {
+			return []*domain.Department{m.department}, nil
+		}
 	}
 	return nil, nil
 }
@@ -100,6 +114,18 @@ func (m *mockAttendanceRecordRepo) Create(ctx context.Context, q ports.Querier, 
 func (m *mockAttendanceRecordRepo) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.AttendanceRecord, error) {
 	if m.recordByUID != nil && m.recordByUID.UID == uid {
 		return m.recordByUID, nil
+	}
+	return nil, nil
+}
+
+func (m *mockAttendanceRecordRepo) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.AttendanceRecord, error) {
+	if m.recordByUID == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.recordByUID.UID == uid {
+			return []*domain.AttendanceRecord{m.recordByUID}, nil
+		}
 	}
 	return nil, nil
 }
@@ -190,6 +216,18 @@ func (m *mockEmployeeRepoForAttendance) GetByID(ctx context.Context, q ports.Que
 func (m *mockEmployeeRepoForAttendance) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.Employee, error) {
 	if m.employee != nil && m.employee.UID == uid {
 		return m.employee, nil
+	}
+	return nil, nil
+}
+
+func (m *mockEmployeeRepoForAttendance) GetByUIDs(ctx context.Context, q ports.Querier, uids []string) ([]*domain.Employee, error) {
+	if m.employee == nil {
+		return nil, nil
+	}
+	for _, uid := range uids {
+		if m.employee.UID == uid {
+			return []*domain.Employee{m.employee}, nil
+		}
 	}
 	return nil, nil
 }
@@ -360,7 +398,7 @@ func TestAttendanceHandlerListDepartmentLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&employeeUid=emp_1&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req = withAdminClaims(req)
@@ -441,7 +479,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(listUC, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Alice&employeeNameMode=equals", nil)
 	req = withAdminClaims(req)
@@ -462,7 +500,7 @@ func TestAttendanceHandlerListDepartmentLogsWithEmployeeNameEquals(t *testing.T)
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?sortBy=createdAt", nil)
 	req = withAdminClaims(req)
@@ -477,7 +515,7 @@ func TestAttendanceHandlerListDepartmentLogsRejectsInvalidSortBy(t *testing.T) {
 }
 
 func TestAttendanceHandlerListDepartmentLogsRejectsInvalidEmployeeNameMode(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/logs?employeeName=Ali&employeeNameMode=startsWith", nil)
 	req = withAdminClaims(req)
@@ -520,7 +558,7 @@ func TestAttendanceHandlerListEmployeeLogs(t *testing.T) {
 		recordRepo,
 	)
 
-	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, listUC, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/logs?page=2&pageSize=1&sortBy=employeeName&sortOrder=asc&deviceUid=dev_1&punchType=check_in&startDate=2026-04-01&endDate=2026-04-30", nil)
 	req = withAdminClaims(req)
@@ -641,7 +679,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -740,7 +778,7 @@ func TestAttendanceHandlerListDailyDepartmentLogs_IncludesCheckoutOnlyRecord(t *
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, listUC, nil, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/departments/dept_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -821,7 +859,7 @@ func TestAttendanceHandlerListDailyEmployeeLogs(t *testing.T) {
 		nil,
 	)
 
-	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, listUC, nil, nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/attendance/employees/emp_1/daily-logs?page=1&pageSize=10&sortBy=date&sortOrder=desc", nil)
 	req = withAdminClaims(req)
@@ -1060,7 +1098,7 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 }
 
 func TestAttendanceHandlerCreateLogRejectsNonITManagerAttendanceWriter(t *testing.T) {
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))

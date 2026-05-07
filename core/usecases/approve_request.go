@@ -116,7 +116,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	if !isAuthorized {
 		return nil, ErrNotAuthorizedApprover
 	}
-
 	// Fetch actor employee name and role name for the audit action sentence
 	actorName := input.ActorEmployeeUID
 	if actor, err := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID); err == nil && actor != nil {
@@ -168,7 +167,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		WithMeta("new_status", "approved").
 		WithMeta("step_order", approvalRequest.CurrentStep)
 	defer auditBuilder.Save(ctx)
-
 	// Record the approve action
 	currentStep := approvalRequest.CurrentStep
 	action := domain.NewApprovalAction(
@@ -214,8 +212,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		}
 
 		// Re-check balance at approval time
-		oldUsedDays := balance.UsedDays
-		oldRemainingDays := balance.TotalDays - balance.UsedDays
 		remaining := balance.TotalDays - balance.UsedDays
 		if leaveRequest.Days > remaining {
 			// Reject due to insufficient balance at approval time
@@ -245,37 +241,12 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 			return nil, err
 		}
 
-		// Deduct balance
 		balance.UsedDays += leaveRequest.Days
 		if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 			return nil, err
 		}
 
-		// Audit log for balance deduction with old/new values
-		deductActionParams := map[string]interface{}{
-			"Actor":     actorName,
-			"Requester": requester.Name,
-			"LeaveType": leaveTypeName,
-			"Days":      float64(leaveRequest.Days),
-			"OldUsed":   float64(oldUsedDays),
-			"NewUsed":   float64(balance.UsedDays),
-		}
-		uc.auditor.Actor(input.ActorEmployeeUID).
-			Did(audit.ActionDeductBalance).
-			On(audit.EntityLeaveBalance, balance.UID).
-			WithMeta("action_key", "audit.sentence.deduct_leave_balance").
-			WithMeta("action_params", deductActionParams).
-			WithMeta("leave_type_name", leaveType.NameAR).
-			WithMeta("deduction_amount", leaveRequest.Days).
-			WithMeta("old_used_days", oldUsedDays).
-			WithMeta("new_used_days", balance.UsedDays).
-			WithMeta("old_remaining_days", oldRemainingDays).
-			WithMeta("new_remaining_days", balance.TotalDays-balance.UsedDays).
-			WithMeta("start_date", leaveRequest.StartDate.Format("2006-01-02")).
-			WithMeta("end_date", leaveRequest.EndDate.Format("2006-01-02")).
-			WithMeta("year", year).
-			Save(ctx)
-
+		
 		// Record balance transaction
 		balanceTx := domain.NewLeaveBalanceTransaction(
 			balance.ID,

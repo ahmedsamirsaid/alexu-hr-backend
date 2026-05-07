@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -42,6 +43,7 @@ type VerifyOTPUseCase struct {
 	devOTPBypass     bool
 	devBypassOTP     string
 	refreshTokenDays int
+	auditor          audit.Auditor
 }
 
 type JWTService interface {
@@ -60,6 +62,7 @@ func NewVerifyOTPUseCase(
 	devOTPBypass bool,
 	devBypassOTP string,
 	refreshTokenDays int,
+	auditor audit.Auditor,
 ) *VerifyOTPUseCase {
 	return &VerifyOTPUseCase{
 		db:               db,
@@ -73,6 +76,7 @@ func NewVerifyOTPUseCase(
 		devOTPBypass:     devOTPBypass,
 		devBypassOTP:     devBypassOTP,
 		refreshTokenDays: refreshTokenDays,
+		auditor:          auditor,
 	}
 }
 
@@ -165,6 +169,24 @@ func (uc *VerifyOTPUseCase) handleSuccessfulAuth(ctx context.Context, phone stri
 	refreshToken := domain.NewRefreshToken(user.ID, uc.refreshTokenDays)
 	if err := uc.refreshTokenRepo.Create(ctx, uc.db, &refreshToken.RefreshToken); err != nil {
 		return nil, err
+	}
+
+	// Audit log for login (skip admin user)
+	if user.Phone != "+201000000000" {
+		actorUID := user.UID // Use user UID as actor if no employee UID
+		if user.EmployeeUID != nil {
+			actorUID = *user.EmployeeUID
+		}
+		actionParams := map[string]interface{}{
+			"Phone": user.Phone,
+		}
+		uc.auditor.Actor(actorUID).
+			Did(audit.ActionLogin).
+			On(audit.EntityUser, user.UID).
+			WithMeta("action_key", "audit.sentence.user_login").
+			WithMeta("action_params", actionParams).
+			WithMeta("login_method", "otp").
+			Save(ctx)
 	}
 
 	return &VerifyOTPOutput{

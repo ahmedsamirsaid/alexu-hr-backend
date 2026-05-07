@@ -20,6 +20,11 @@ func NewSQLiteDB(dsn string) (*SQLiteDB, error) {
 		return nil, err
 	}
 
+	// Set connection pool settings to reduce contention
+	// SQLite works best with a single writer, so limit max open connections
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+
 	// Enable WAL mode for better concurrency (allows concurrent reads while writing)
 	_, err = db.Exec("PRAGMA journal_mode = WAL")
 	if err != nil {
@@ -28,8 +33,8 @@ func NewSQLiteDB(dsn string) (*SQLiteDB, error) {
 		return nil, err
 	}
 
-	// Set busy timeout to 5 seconds (SQLite will retry for this duration before returning SQLITE_BUSY)
-	_, err = db.Exec("PRAGMA busy_timeout = 5000")
+	// Set busy timeout to 10 seconds (SQLite will retry for this duration before returning SQLITE_BUSY)
+	_, err = db.Exec("PRAGMA busy_timeout = 10000")
 	if err != nil {
 		slog.Error("sqlite.NewSQLiteDB.set_busy_timeout", "error", err)
 		db.Close()

@@ -37,15 +37,14 @@ type AppConfig struct {
 	HolidaySyncTimezone      string
 	SchedulerIntervalMinutes int
 	// Storage config
-	MinIOEndpoint              string
-	MinIOAccessKey             string
-	MinIOSecretKey             string
-	MinIOUseSSL                bool
-	MinIODocumentsBucket       string
-	MinIOAutoCreateBucket      bool
-	MinIOUploadExpiryMinutes   int
-	MinIODownloadExpiryMinutes int
-	// I18n config
+	MinIOEndpoint                string
+	MinIOAccessKey               string
+	MinIOSecretKey               string
+	MinIOUseSSL                  bool
+	MinIODocumentsBucket         string
+	MinIOAutoCreateBucket        bool
+	MinIOUploadExpiryMinutes     int
+	MinIODownloadExpiryMinutes   int
 	I18nLocalesPath      string
 	I18nDefaultLocale    string
 	I18nSupportedLocales []string

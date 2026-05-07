@@ -83,7 +83,6 @@ func (r *EmployeeRepository) GetByUIDs(ctx context.Context, q ports.Querier, uid
 
 	return employees, nil
 }
-
 func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
 	query := `
 		INSERT INTO employees (uid, name, mobile, government_id, university_id, email,

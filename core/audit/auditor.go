@@ -225,14 +225,34 @@ func (a *auditorImpl) persist(ctx context.Context, b *Builder) {
 		OccurredAt: time.Now(),
 	}
 
-	if err := a.repo.Create(ctx, a.db, entry); err != nil {
+	// Retry logic for SQLite busy errors
+	maxRetries := 3
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		err := a.repo.Create(ctx, a.db, entry)
+		if err == nil {
+			return // Success
+		}
+
+		// Check if it's a database locked error
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "SQLITE_BUSY") {
+			if attempt < maxRetries {
+				// Exponential backoff: 10ms, 50ms, 250ms
+				backoff := time.Duration(10*(1<<uint(attempt*2))) * time.Millisecond
+				time.Sleep(backoff)
+				continue
+			}
+		}
+
+		// Log error on final attempt or non-retryable error
 		slog.Error("auditor.persist",
 			"error", err,
 			"action", b.action,
 			"entity_type", b.entityType,
 			"entity_uid", b.entityUID,
 			"actor_uid", b.actorUID,
+			"attempt", attempt+1,
 		)
+		return
 	}
 }
 

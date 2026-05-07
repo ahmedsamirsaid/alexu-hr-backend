@@ -38,6 +38,7 @@ type ListDailyEmployeeAttendanceLogsUseCase struct {
 	leaveRepo    ports.LeaveRecordRepository
 	weekendRepo  ports.WeekendConfigRepository
 	holidayRepo  ports.HolidayDefinitionRepository
+	permRepo     ports.PermissionRequestRepository
 }
 
 func NewListDailyEmployeeAttendanceLogsUseCase(
@@ -49,6 +50,7 @@ func NewListDailyEmployeeAttendanceLogsUseCase(
 	leaveRepo ports.LeaveRecordRepository,
 	weekendRepo ports.WeekendConfigRepository,
 	holidayRepo ports.HolidayDefinitionRepository,
+	permRepo ports.PermissionRequestRepository,
 ) *ListDailyEmployeeAttendanceLogsUseCase {
 	return &ListDailyEmployeeAttendanceLogsUseCase{
 		db:           db,
@@ -59,6 +61,7 @@ func NewListDailyEmployeeAttendanceLogsUseCase(
 		leaveRepo:    leaveRepo,
 		weekendRepo:  weekendRepo,
 		holidayRepo:  holidayRepo,
+		permRepo:     permRepo,
 	}
 }
 
@@ -121,7 +124,7 @@ func (uc *ListDailyEmployeeAttendanceLogsUseCase) Execute(ctx context.Context, i
 		return nil, err
 	}
 
-	records, err := buildDailyAttendanceLogItems(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, groups)
+	records, err := buildDailyAttendanceLogItemsWithPermissions(ctx, uc.db, uc.employeeRepo, uc.deptRepo, uc.shiftRepo, uc.permRepo, groups)
 	if err != nil {
 		return nil, err
 	}

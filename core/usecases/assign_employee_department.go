@@ -55,8 +55,7 @@ func (uc *AssignEmployeeDepartmentUseCase) Execute(ctx context.Context, input As
 	if !department.IsActive {
 		return ErrDepartmentInactive
 	}
-
-	// Build human-readable action sentence
+	
 	actorName := audit.ActorFromContext(ctx)
 	actionParams := map[string]interface{}{
 		"Actor":      actorName,
@@ -73,7 +72,6 @@ func (uc *AssignEmployeeDepartmentUseCase) Execute(ctx context.Context, input As
 		WithMeta("employee_name", employee.Name).
 		WithMeta("department_name", department.NameEN).
 		Save(ctx)
-
 	// Update employee's department
 	employee.DepartmentUID = &input.DepartmentUID
 	if input.ShiftUID != nil {

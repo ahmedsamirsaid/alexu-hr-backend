@@ -36,7 +36,7 @@ func (uc *ActivateAttendanceDeviceUseCase) Execute(ctx context.Context, uid stri
 		return ErrAttendanceDeviceAlreadyActive
 	}
 
-	// Build human-readable action sentence
+		// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
 	actionParams := map[string]interface{}{
 		"Actor":  actorName,
@@ -55,7 +55,6 @@ func (uc *ActivateAttendanceDeviceUseCase) Execute(ctx context.Context, uid stri
 		WithMeta("old_status", string(existing.Status)).
 		WithMeta("new_status", string(domain.AttendanceDeviceStatusOffline)).
 		Save(ctx)
-
 	return uc.repo.UpdateStatus(ctx, uc.db, uid, domain.AttendanceDeviceStatusOffline)
 }
 

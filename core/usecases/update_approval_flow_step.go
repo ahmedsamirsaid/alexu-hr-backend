@@ -95,6 +95,7 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 		step.RoleUID = *input.RoleUID
 	}
 
+
 	// Build human-readable action sentence
 	actionParams := map[string]interface{}{
 		"Actor": actorName,

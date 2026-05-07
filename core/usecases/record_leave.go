@@ -10,13 +10,13 @@ import (
 )
 
 type RecordLeaveInput struct {
-	EmployeeUID   string
-	LeaveTypeUID  string
-	StartDate     time.Time
-	EndDate       time.Time
-	RecordedBy    *int64
-	RecordedByUID *string // Employee UID of the actor recording the leave (for audit)
-	Notes         *string
+	EmployeeUID  string
+	LeaveTypeUID string
+	StartDate    time.Time
+	EndDate      time.Time
+	RecordedBy   *int64
+	RecordedByUID *string
+	Notes        *string
 }
 
 type RecordLeaveOutput struct {

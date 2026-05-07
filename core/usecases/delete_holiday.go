@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/banumusa/backend/core/audit"
@@ -40,16 +39,18 @@ func (uc *DeleteHolidayUseCase) Execute(ctx context.Context, input DeleteHoliday
 
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s deleted holiday '%s' on %s",
-		actorName, definition.NameEN, definition.Date.Format("Jan 2, 2006"),
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  definition.NameEN,
+		"Date":  definition.Date.Format("Jan 2, 2006"),
+	}
 
 	// Audit log before deletion
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionDelete).
 		On(audit.EntityHoliday, input.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.delete_holiday").
+		WithMeta("action_params", actionParams).
 		WithMeta("date", definition.Date.Format("2006-01-02")).
 		WithMeta("name_en", definition.NameEN).
 		WithMeta("name_ar", definition.NameAR).

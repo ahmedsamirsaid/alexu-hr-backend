@@ -1,0 +1,52 @@
+{
+  "notification": {
+    "leave_approved": {
+      "title": "تمت الموافقة على طلب الإجازة",
+      "body": "تمت الموافقة على طلب إجازة {{.LeaveTypeName}} الخاص بك"
+    },
+    "leave_rejected": {
+      "title": "تم رفض طلب الإجازة",
+      "body": "تم رفض طلب إجازة {{.LeaveTypeName}} الخاص بك"
+    },
+    "pending_approval": {
+      "title": "في انتظار الموافقة",
+      "body": "قدم {{.EmployeeName}} طلب إجازة يتطلب موافقتك"
+    },
+    "attendance_reminder": {
+      "title": "تذكير بالحضور",
+      "body": "لا تنسَ تسجيل الخروج قبل المغادرة"
+    },
+    "leave_cancelled": {
+      "title": "تم إلغاء طلب الإجازة",
+      "body": "تم إلغاء طلب إجازتك من {{.StartDate}} إلى {{.EndDate}}"
+    },
+    "approval_delegated": {
+      "title": "تم تفويض الموافقة",
+      "body": "تم تفويض طلب موافقة إليك من قبل {{.DelegatorName}}"
+    },
+    "balance_updated": {
+      "title": "تم تحديث رصيد الإجازة",
+      "body": "تم تحديث رصيد {{.LeaveType}} الخاص بك. الرصيد الجديد: {{.NewBalance}} يوم"
+    },
+    "shift_assigned": {
+      "title": "تم تعيين الوردية",
+      "body": "تم تعيينك لوردية {{.ShiftName}}"
+    },
+    "attendance_anomaly": {
+      "title": "تم اكتشاف شذوذ في الحضور",
+      "body": "يرجى مراجعة سجل حضورك ليوم {{.Date}}"
+    },
+    "document_uploaded": {
+      "title": "تم رفع مستند",
+      "body": "تم رفع مستند جديد لطلب إجازتك"
+    },
+    "holiday_announced": {
+      "title": "تم الإعلان عن عطلة",
+      "body": "{{.HolidayName}} في {{.Date}}"
+    },
+    "approval_reminder": {
+      "title": "تذكير بالموافقة",
+      "body": "لديك {{.Count}} طلبات موافقة معلقة"
+    }
+  }
+}

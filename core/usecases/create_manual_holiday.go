@@ -105,16 +105,18 @@ func (uc *CreateManualHolidayUseCase) Execute(ctx context.Context, input CreateM
 	
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s created manual holiday '%s' on %s",
-		actorName, nameEN, dateOnly.Format("Jan 2, 2006"),
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  nameEN,
+		"Date":  dateOnly.Format("Jan 2, 2006"),
+	}
 	
 	// Audit log will fire after successful transaction commit
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityHoliday, definition.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.create_holiday").
+		WithMeta("action_params", actionParams).
 		WithMeta("date", definition.Date.Format("2006-01-02")).
 		WithMeta("name_en", definition.NameEN).
 		WithMeta("name_ar", definition.NameAR).

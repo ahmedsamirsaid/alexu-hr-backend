@@ -45,7 +45,7 @@ func (r *EmployeeRepository) GetByUIDs(ctx context.Context, q ports.Querier, uid
 	// Build IN clause with placeholders
 	query := `
 		SELECT id, uid, name, mobile, government_id, university_id, email,
-		       hire_date, status, department_uid, shift_uid, created_at, updated_at
+		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
 		WHERE uid IN (`
 

@@ -103,17 +103,12 @@ func (uc *UpdateAttendanceDeviceUseCase) Execute(ctx context.Context, input Upda
 		changes = append(changes, "location")
 	}
 	
-	actionSentence := fmt.Sprintf("%s updated attendance device '%s'", actorName, existing.Name)
-	if len(changes) > 0 {
-		actionSentence += ": "
-		for i, c := range changes {
-			if i > 0 {
-				actionSentence += ", "
-			}
-			actionSentence += c
-		}
+	actionParams := map[string]interface{}{
+		"Actor":  actorName,
+		"Device": existing.Name,
 	}
-	auditBuilder.WithMeta("action", actionSentence)
+	auditBuilder.WithMeta("action_key", "audit.sentence.update_attendance_device").
+		WithMeta("action_params", actionParams)
 
 	defer auditBuilder.Save(ctx)
 

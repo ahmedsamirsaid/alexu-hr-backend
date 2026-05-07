@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -56,7 +55,7 @@ func (uc *RemoveDepartmentManagerUseCase) Execute(ctx context.Context, input Rem
 	if err == nil && currentManager != nil {
 		managerUID = currentManager.UID
 		managerName = currentManager.Phone
-		
+
 		// Try to get employee name if available
 		if currentManager.EmployeeUID != nil {
 			employee, err := uc.empRepo.GetByUID(ctx, uc.db, *currentManager.EmployeeUID)
@@ -68,30 +67,29 @@ func (uc *RemoveDepartmentManagerUseCase) Execute(ctx context.Context, input Rem
 
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s removed manager from department '%s'",
-		actorName, department.NameEN,
-	)
-	if managerName != "" {
-		actionSentence = fmt.Sprintf(
-			"%s removed %s as manager of department '%s'",
-			actorName, managerName, department.NameEN,
-		)
+	actionKey := "audit.sentence.remove_department_manager"
+	actionParams := map[string]interface{}{
+		"Actor":      actorName,
+		"Department": department.NameEN,
 	}
-	
+	if managerName != "" {
+		actionKey = "audit.sentence.remove_named_department_manager"
+		actionParams["Manager"] = managerName
+	}
+
 	// Audit log with manager information
 	auditBuilder := uc.auditor.From(ctx).
 		Did("remove_manager").
 		On(audit.EntityDepartment, input.DepartmentUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", actionKey).
+		WithMeta("action_params", actionParams).
 		WithMeta("department_name", department.NameEN)
-	
+
 	if managerUID != "" {
 		auditBuilder = auditBuilder.
-			WithMeta("manager_uid", managerUID).
 			WithMeta("manager_name", managerName)
 	}
-	
+
 	defer auditBuilder.Save(ctx)
 
 	// Remove Department Manager role assignment for this department (idempotent)

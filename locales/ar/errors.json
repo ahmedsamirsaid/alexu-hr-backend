@@ -1,0 +1,61 @@
+{
+  "error": {
+    "employee": {
+      "not_found": "الموظف غير موجود",
+      "already_exists": "الموظف موجود بالفعل",
+      "invalid_status": "حالة الموظف غير صالحة",
+      "cannot_delete": "لا يمكن حذف موظف لديه سجلات نشطة"
+    },
+    "leave": {
+      "insufficient_balance": "رصيد الإجازة غير كافٍ",
+      "invalid_date_range": "نطاق التاريخ غير صالح",
+      "exceeds_consecutive_days": "يتجاوز الحد الأقصى للأيام المتتالية المسموح بها",
+      "recording_deadline_passed": "انتهى الموعد النهائي للتسجيل",
+      "overlapping_dates": "تواريخ الإجازة تتداخل مع إجازة موجودة",
+      "not_found": "طلب الإجازة غير موجود",
+      "already_processed": "تمت معالجة طلب الإجازة بالفعل",
+      "cannot_cancel": "لا يمكن إلغاء طلب الإجازة في الحالة الحالية"
+    },
+    "auth": {
+      "invalid_credentials": "بيانات الاعتماد غير صالحة",
+      "token_expired": "انتهت صلاحية الرمز",
+      "unauthorized": "وصول غير مصرح به",
+      "invalid_otp": "رمز التحقق غير صالح",
+      "otp_expired": "انتهت صلاحية رمز التحقق",
+      "account_disabled": "تم تعطيل الحساب"
+    },
+    "validation": {
+      "required_field": "{{.Field}} مطلوب",
+      "invalid_format": "{{.Field}} له تنسيق غير صالح",
+      "out_of_range": "{{.Field}} خارج النطاق الصالح",
+      "invalid_email": "عنوان البريد الإلكتروني غير صالح",
+      "invalid_phone": "رقم الهاتف غير صالح",
+      "invalid_date": "تنسيق التاريخ غير صالح"
+    },
+    "approval": {
+      "not_found": "طلب الموافقة غير موجود",
+      "already_processed": "تمت معالجة طلب الموافقة بالفعل",
+      "not_authorized": "غير مصرح لك بالموافقة على هذا الطلب",
+      "invalid_action": "إجراء الموافقة غير صالح"
+    },
+    "department": {
+      "not_found": "القسم غير موجود",
+      "already_exists": "القسم موجود بالفعل",
+      "has_employees": "لا يمكن حذف قسم به موظفون نشطون"
+    },
+    "attendance": {
+      "not_found": "سجل الحضور غير موجود",
+      "already_checked_in": "تم تسجيل الدخول بالفعل",
+      "already_checked_out": "تم تسجيل الخروج بالفعل",
+      "invalid_time": "وقت الحضور غير صالح",
+      "future_date": "لا يمكن تسجيل الحضور لتواريخ مستقبلية"
+    },
+    "general": {
+      "internal_error": "حدث خطأ داخلي",
+      "not_found": "المورد غير موجود",
+      "forbidden": "الوصول محظور",
+      "bad_request": "طلب غير صالح",
+      "conflict": "تعارض في المورد"
+    }
+  }
+}

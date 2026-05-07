@@ -3,7 +3,6 @@ package usecases
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -97,18 +96,20 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	}
 
 	actorName := audit.ActorFromContext(ctx)
-	
+
 	// Format time in Cairo timezone for audit log display
 	cairoLoc, _ := time.LoadLocation("Africa/Cairo")
 	if cairoLoc == nil {
 		cairoLoc = time.FixedZone("Africa/Cairo", 2*60*60) // Fallback to UTC+2
 	}
 	localTime := record.PunchedAt.In(cairoLoc)
-	
-	actionSentence := fmt.Sprintf(
-		"%s created attendance record for %s (Employee) — %s at %s",
-		actorName, employeeName, string(record.PunchType), localTime.Format("Jan 2, 2006 3:04 PM"),
-	)
+
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"Employee":  employeeName,
+		"PunchType": string(record.PunchType),
+		"PunchedAt": localTime.Format("Jan 2, 2006 3:04 PM"),
+	}
 
 	// Audit log will fire after successful creation
 	// we will save the audit log only if the transaction commits successfully
@@ -142,16 +143,15 @@ func (uc *CreateAttendanceLogUseCase) Execute(ctx context.Context, input CreateA
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	// device name not uid 
+	// device name not uid
 	device, _ := uc.deviceRepo.GetByUID(ctx, uc.db, record.DeviceUID)
 
 	uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityAttendanceRecord, record.UID).
-		WithMeta("action", actionSentence).
-		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("action_key", "audit.sentence.create_attendance").
+		WithMeta("action_params", actionParams).
 		WithMeta("employee_name", employeeName).
-		WithMeta("device_uid", record.DeviceUID).
 		WithMeta("device_name", device.Name).
 		WithMeta("punched_at", record.PunchedAt.Format(time.RFC3339)).
 		WithMeta("punch_type", string(record.PunchType)).
@@ -171,7 +171,7 @@ func (uc *CreateAttendanceLogUseCase) buildNewRecord(ctx context.Context, employ
 	if employee == nil {
 		return nil, ErrEmployeeNotFound
 	}
-	
+
 	deviceUserID := employee.UniversityID
 	if deviceUserID == "" {
 		deviceUserID = employee.GovernmentID
@@ -180,7 +180,7 @@ func (uc *CreateAttendanceLogUseCase) buildNewRecord(ctx context.Context, employ
 		// Fallback to generating a UID if neither ID is available
 		deviceUserID = domain.GenerateUID("dusr")
 	}
-	
+
 	return uc.buildRecord(ctx, employeeUID, deviceUID, deviceUserID, punchedAt, punchType, nil, nil)
 }
 
@@ -287,7 +287,6 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 	}
 
 	// Capture old values for audit metadata
-	oldDeviceUID := existing.DeviceUID
 	oldPunchedAt := existing.PunchedAt
 	oldPunchType := existing.PunchType
 
@@ -303,7 +302,7 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 	}
 
 	actorName := audit.ActorFromContext(ctx)
-	
+
 	// Format times in Cairo timezone for audit log display
 	cairoLoc, _ := time.LoadLocation("Africa/Cairo")
 	if cairoLoc == nil {
@@ -311,13 +310,15 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 	}
 	oldLocalTime := oldPunchedAt.In(cairoLoc)
 	newLocalTime := record.PunchedAt.In(cairoLoc)
-	
-	actionSentence := fmt.Sprintf(
-		"%s updated attendance record for %s (Employee) — changed from %s at %s to %s at %s",
-		actorName, employeeName,
-		string(oldPunchType), oldLocalTime.Format("Jan 2, 3:04 PM"),
-		string(record.PunchType), newLocalTime.Format("Jan 2, 3:04 PM"),
-	)
+
+	actionParams := map[string]interface{}{
+		"Actor":        actorName,
+		"Employee":     employeeName,
+		"OldPunchType": string(oldPunchType),
+		"OldPunchedAt": oldLocalTime.Format("Jan 2, 3:04 PM"),
+		"NewPunchType": string(record.PunchType),
+		"NewPunchedAt": newLocalTime.Format("Jan 2, 3:04 PM"),
+	}
 
 	// Audit log will fire after successful update
 	// we will save the audit log only if the transaction commits successfully
@@ -338,11 +339,9 @@ func (uc *UpdateAttendanceLogUseCase) Execute(ctx context.Context, input UpdateA
 	uc.auditor.From(ctx).
 		Did(audit.ActionUpdate).
 		On(audit.EntityAttendanceRecord, record.UID).
-		WithMeta("action", actionSentence).
-		WithMeta("employee_uid", record.EmployeeUID).
+		WithMeta("action_key", "audit.sentence.update_attendance").
+		WithMeta("action_params", actionParams).
 		WithMeta("employee_name", employeeName).
-		WithMeta("old_device_uid", oldDeviceUID).
-		WithMeta("new_device_uid", record.DeviceUID).
 		WithMeta("old_punched_at", oldPunchedAt.Format(time.RFC3339)).
 		WithMeta("new_punched_at", record.PunchedAt.Format(time.RFC3339)).
 		WithMeta("old_punch_type", string(oldPunchType)).

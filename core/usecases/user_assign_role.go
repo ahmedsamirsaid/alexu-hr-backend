@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/banumusa/backend/core/audit"
@@ -79,13 +78,16 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 	}
 
 	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionAssign).On(audit.EntityUser, input.UserUID).
-		WithMeta("role_uid", role.UID).
 		WithMeta("role_name", role.Name)
 
 	if departmentUIDInput == "" {
-		actionSentence := fmt.Sprintf("Role '%s' was assigned to user %s (global scope)", role.Name, user.Phone)
+		actionParams := map[string]interface{}{
+			"Role":  role.Name,
+			"Phone": user.Phone,
+		}
 		auditBuilder.
-			WithMeta("action", actionSentence).
+			WithMeta("action_key", "audit.sentence.assign_role_global").
+			WithMeta("action_params", actionParams).
 			WithMeta("scope", "global").
 			WithMeta("new_role", map[string]interface{}{
 				"role_uid":  role.UID,
@@ -105,11 +107,15 @@ func (uc *AssignRoleUseCase) Execute(ctx context.Context, input AssignRoleInput)
 	}
 
 	departmentUID := department.UID
-	actionSentence := fmt.Sprintf("Role '%s' was assigned to user %s for department '%s'", role.Name, user.Phone, department.NameEN)
+	actionParams := map[string]interface{}{
+		"Role":       role.Name,
+		"Phone":      user.Phone,
+		"Department": department.NameEN,
+	}
 	auditBuilder.
-		WithMeta("department_uid", departmentUID).
 		WithMeta("department_name", department.NameEN).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.assign_role_department").
+		WithMeta("action_params", actionParams).
 		WithMeta("new_role", map[string]interface{}{
 			"role_uid":        role.UID,
 			"role_name":       role.Name,
@@ -164,11 +170,14 @@ func (uc *RemoveRoleUseCase) Execute(ctx context.Context, input RemoveRoleInput)
 		return ErrRoleNotFound
 	}
 
-	actionSentence := fmt.Sprintf("Role '%s' was removed from user %s", role.Name, user.Phone)
+	actionParams := map[string]interface{}{
+		"Role":  role.Name,
+		"Phone": user.Phone,
+	}
 
 	defer uc.auditor.From(ctx).Did(audit.ActionUnassign).On(audit.EntityUser, input.UserUID).
-		WithMeta("action", actionSentence).
-		WithMeta("role_uid", role.UID).
+		WithMeta("action_key", "audit.sentence.remove_user_role").
+		WithMeta("action_params", actionParams).
 		WithMeta("role_name", role.Name).
 		WithMeta("removed_role", map[string]interface{}{
 			"role_uid":  role.UID,

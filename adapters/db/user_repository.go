@@ -20,7 +20,7 @@ func NewUserRepository() *UserRepository {
 
 func (r *UserRepository) GetByID(ctx context.Context, q ports.Querier, id int64) (*domain.User, error) {
 	query := `
-		SELECT id, uid, phone, password_hash, employee_uid, is_active, created_at, updated_at
+		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		WHERE id = ?`
 
@@ -29,7 +29,7 @@ func (r *UserRepository) GetByID(ctx context.Context, q ports.Querier, id int64)
 
 func (r *UserRepository) GetByUID(ctx context.Context, q ports.Querier, uid string) (*domain.User, error) {
 	query := `
-		SELECT id, uid, phone, password_hash, employee_uid, is_active, created_at, updated_at
+		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		WHERE uid = ?`
 
@@ -38,7 +38,7 @@ func (r *UserRepository) GetByUID(ctx context.Context, q ports.Querier, uid stri
 
 func (r *UserRepository) GetByPhone(ctx context.Context, q ports.Querier, phone string) (*domain.User, error) {
 	query := `
-		SELECT id, uid, phone, password_hash, employee_uid, is_active, created_at, updated_at
+		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		WHERE phone = ?`
 
@@ -92,7 +92,7 @@ func (r *UserRepository) Update(ctx context.Context, q ports.Querier, user *doma
 
 func (r *UserRepository) List(ctx context.Context, q ports.Querier, limit, offset int) ([]*domain.User, error) {
 	query := `
-		SELECT id, uid, phone, password_hash, employee_uid, is_active, created_at, updated_at
+		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		ORDER BY id DESC
 		LIMIT ? OFFSET ?`
@@ -138,7 +138,7 @@ func (r *UserRepository) scanUser(row *sql.Row) (*domain.User, error) {
 	var isActive int
 	err := row.Scan(
 		&u.ID, &u.UID, &u.Phone, &u.PasswordHash, &u.EmployeeUID,
-		&isActive, &createdAt, &updatedAt)
+		&isActive, &u.PreferredLanguage, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -158,7 +158,7 @@ func (r *UserRepository) scanUserRow(rows *sql.Rows) (*domain.User, error) {
 	var isActive int
 	err := rows.Scan(
 		&u.ID, &u.UID, &u.Phone, &u.PasswordHash, &u.EmployeeUID,
-		&isActive, &createdAt, &updatedAt)
+		&isActive, &u.PreferredLanguage, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (r *UserRepository) ExistingPhones(ctx context.Context, q ports.Querier, ph
 
 func (r *UserRepository) GetByEmployeeUID(ctx context.Context, q ports.Querier, employeeUID string) (*domain.User, error) {
 	query := `
-		SELECT id, uid, phone, password_hash, employee_uid, is_active, created_at, updated_at
+		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		WHERE employee_uid = ?`
 

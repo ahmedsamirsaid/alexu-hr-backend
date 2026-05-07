@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -17,6 +18,7 @@ type DepartmentHandler struct {
 	updateDeptUC *usecases.UpdateDepartmentUseCase
 	assignMgrUC  *usecases.AssignDepartmentManagerUseCase
 	removeMgrUC  *usecases.RemoveDepartmentManagerUseCase
+	i18nService  ports.I18nService
 }
 
 func NewDepartmentHandler(
@@ -26,6 +28,7 @@ func NewDepartmentHandler(
 	updateDeptUC *usecases.UpdateDepartmentUseCase,
 	assignMgrUC *usecases.AssignDepartmentManagerUseCase,
 	removeMgrUC *usecases.RemoveDepartmentManagerUseCase,
+	i18nService ports.I18nService,
 ) *DepartmentHandler {
 	return &DepartmentHandler{
 		listDeptUC:   listDeptUC,
@@ -34,7 +37,18 @@ func NewDepartmentHandler(
 		updateDeptUC: updateDeptUC,
 		assignMgrUC:  assignMgrUC,
 		removeMgrUC:  removeMgrUC,
+		i18nService:  i18nService,
 	}
+}
+
+// localizedDeptName picks NameAR when the request locale is "ar", otherwise NameEN.
+// NameAR is a pointer since it's optional; falls back to NameEN if nil.
+func (h *DepartmentHandler) localizedDeptName(r *http.Request, nameEN string, nameAR *string) string {
+	acceptLang := r.Header.Get("Accept-Language")
+	if len(acceptLang) >= 2 && acceptLang[:2] == "ar" && nameAR != nil && *nameAR != "" {
+		return *nameAR
+	}
+	return nameEN
 }
 
 // Response types
@@ -44,6 +58,7 @@ type DepartmentResponse struct {
 	Code            string  `json:"code"`
 	NameEN          string  `json:"nameEn"`
 	NameAR          *string `json:"nameAr,omitempty"`
+	LocalizedName   string  `json:"name"`
 	IsActive        bool    `json:"isActive"`
 	DefaultShiftUID *string `json:"defaultShiftUid,omitempty"`
 	CreatedAt       string  `json:"createdAt"`
@@ -61,6 +76,7 @@ type DepartmentDetailResponse struct {
 	Code            string                     `json:"code"`
 	NameEN          string                     `json:"nameEn"`
 	NameAR          *string                    `json:"nameAr,omitempty"`
+	LocalizedName   string                     `json:"name"`
 	IsActive        bool                       `json:"isActive"`
 	DefaultShiftUID *string                    `json:"defaultShiftUid,omitempty"`
 	Manager         *DepartmentManagerResponse `json:"manager"`
@@ -116,6 +132,7 @@ func (h *DepartmentHandler) ListDepartments(w http.ResponseWriter, r *http.Reque
 			Code:            d.Code,
 			NameEN:          d.NameEN,
 			NameAR:          d.NameAR,
+			LocalizedName:   h.localizedDeptName(r, d.NameEN, d.NameAR),
 			IsActive:        d.IsActive,
 			DefaultShiftUID: d.DefaultShiftUID,
 			CreatedAt:       d.CreatedAt.Format("2006-01-02T15:04:05Z"),
@@ -148,7 +165,7 @@ func (h *DepartmentHandler) GetDepartment(w http.ResponseWriter, r *http.Request
 		} else {
 			slog.Error("department_handler.GetDepartment.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -168,6 +185,7 @@ func (h *DepartmentHandler) GetDepartment(w http.ResponseWriter, r *http.Request
 		Code:            output.Department.Code,
 		NameEN:          output.Department.NameEN,
 		NameAR:          output.Department.NameAR,
+		LocalizedName:   h.localizedDeptName(r, output.Department.NameEN, output.Department.NameAR),
 		IsActive:        output.Department.IsActive,
 		DefaultShiftUID: output.Department.DefaultShiftUID,
 		Manager:         manager,
@@ -208,7 +226,7 @@ func (h *DepartmentHandler) CreateDepartment(w http.ResponseWriter, r *http.Requ
 		} else {
 			slog.Error("department_handler.CreateDepartment.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -217,6 +235,7 @@ func (h *DepartmentHandler) CreateDepartment(w http.ResponseWriter, r *http.Requ
 		Code:            output.Department.Code,
 		NameEN:          output.Department.NameEN,
 		NameAR:          output.Department.NameAR,
+		LocalizedName:   h.localizedDeptName(r, output.Department.NameEN, output.Department.NameAR),
 		IsActive:        output.Department.IsActive,
 		DefaultShiftUID: output.Department.DefaultShiftUID,
 		CreatedAt:       output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
@@ -264,7 +283,7 @@ func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Requ
 		default:
 			slog.Error("department_handler.UpdateDepartment.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -273,6 +292,7 @@ func (h *DepartmentHandler) UpdateDepartment(w http.ResponseWriter, r *http.Requ
 		Code:            output.Department.Code,
 		NameEN:          output.Department.NameEN,
 		NameAR:          output.Department.NameAR,
+		LocalizedName:   h.localizedDeptName(r, output.Department.NameEN, output.Department.NameAR),
 		IsActive:        output.Department.IsActive,
 		DefaultShiftUID: output.Department.DefaultShiftUID,
 		CreatedAt:       output.Department.CreatedAt.Format("2006-01-02T15:04:05Z"),
@@ -323,7 +343,7 @@ func (h *DepartmentHandler) AssignManager(w http.ResponseWriter, r *http.Request
 		default:
 			slog.Error("department_handler.AssignManager.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 

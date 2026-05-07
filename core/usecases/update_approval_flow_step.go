@@ -57,7 +57,6 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 
 	// Capture old values for audit metadata
 	oldStepOrder := step.StepOrder
-	oldRoleUID := step.RoleUID
 
 	// Build audit metadata with field changes
 	actorName := audit.ActorFromContext(ctx)
@@ -90,18 +89,18 @@ func (uc *UpdateApprovalFlowStepUseCase) Execute(ctx context.Context, input Upda
 			return nil, ErrRoleNotFound
 		}
 		if *input.RoleUID != step.RoleUID {
-			auditBuilder.WithMeta("old_role_uid", oldRoleUID).WithMeta("new_role_uid", *input.RoleUID).WithMeta("new_role_name", role.Name)
+			auditBuilder.WithMeta("new_role_name", role.Name)
 			changedFields = append(changedFields, fmt.Sprintf("role to %s", role.Name))
 		}
 		step.RoleUID = *input.RoleUID
 	}
 
 	// Build human-readable action sentence
-	actionSentence := fmt.Sprintf("%s updated approval flow step", actorName)
-	if len(changedFields) > 0 {
-		actionSentence = fmt.Sprintf("%s updated approval flow step: %s", actorName, changedFields[0])
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
 	}
-	auditBuilder.WithMeta("action", actionSentence)
+	auditBuilder.WithMeta("action_key", "audit.sentence.update_approval_flow_step").
+		WithMeta("action_params", actionParams)
 
 	if err := uc.stepRepo.Update(ctx, tx, step); err != nil {
 		return nil, err

@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -113,23 +112,26 @@ func (uc *CancelLeaveRequestUseCase) Execute(ctx context.Context, input CancelLe
 	startDate := leaveRequest.StartDate.Format("Jan 2, 2006")
 	endDate := leaveRequest.EndDate.Format("Jan 2, 2006")
 
-	actionSentence := fmt.Sprintf(
-		"%s (Employee) cancelled their %s leave request for %s to %s (%d days)",
-		actorName, leaveTypeName, startDate, endDate, leaveRequest.Days,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"LeaveType": leaveTypeName,
+		"StartDate": startDate,
+		"EndDate":   endDate,
+		"Days":      leaveRequest.Days,
+	}
 
 	// Audit log — deferred, fires on function return
 	defer uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionCancel).
 		On(audit.EntityLeaveRequest, leaveRequest.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.cancel_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("leave_type", leaveTypeName).
 		WithMeta("start_date", startDate).
 		WithMeta("end_date", endDate).
 		WithMeta("days", leaveRequest.Days).
 		WithMeta("old_status", "pending").
 		WithMeta("new_status", "cancelled").
-		WithMeta("approval_request_uid", approvalRequest.UID).
 		Save(ctx)
 
 	// Cancel the approval request

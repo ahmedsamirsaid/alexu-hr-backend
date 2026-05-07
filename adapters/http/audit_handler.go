@@ -47,17 +47,31 @@ type AuditEventResponse struct {
 	CreatedAt  string  `json:"createdAt"`
 }
 
+// LocalizedAuditEventResponse represents an audit event with localized labels in the API response.
+type LocalizedAuditEventResponse struct {
+	UID             string  `json:"uid"`
+	ActorUID        string  `json:"actorUid"`
+	Action          string  `json:"action"`          // Raw key
+	ActionLabel     string  `json:"actionLabel"`     // Translated
+	EntityType      string  `json:"entityType"`      // Raw key
+	EntityTypeLabel string  `json:"entityTypeLabel"` // Translated
+	EntityUID       string  `json:"entityUid"`
+	Meta            *string `json:"meta,omitempty"`
+	OccurredAt      string  `json:"occurredAt"`
+	CreatedAt       string  `json:"createdAt"`
+}
+
 // AuditTrailResponse represents the audit trail API response.
 type AuditTrailResponse struct {
-	Events []AuditEventResponse `json:"events"`
+	Events []LocalizedAuditEventResponse `json:"events"`
 }
 
 // ActorAuditEventsResponse represents the actor audit events API response.
 type ActorAuditEventsResponse struct {
-	Events      []AuditEventResponse `json:"events"`
-	Page        int                  `json:"page"`
-	PageSize    int                  `json:"pageSize"`
-	HasNextPage bool                 `json:"hasNextPage"`
+	Events      []LocalizedAuditEventResponse `json:"events"`
+	Page        int                           `json:"page"`
+	PageSize    int                           `json:"pageSize"`
+	HasNextPage bool                          `json:"hasNextPage"`
 }
 
 // GetAuditTrail handles GET /api/v1/audit/entity/{entityType}/{entityUID}
@@ -90,18 +104,20 @@ func (h *AuditHandler) GetAuditTrail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Transform domain models to DTOs
-	events := make([]AuditEventResponse, 0, len(output.Events))
+	// Transform localized DTOs to response format
+	events := make([]LocalizedAuditEventResponse, 0, len(output.Events))
 	for _, event := range output.Events {
-		events = append(events, AuditEventResponse{
-			UID:        event.UID,
-			ActorUID:   event.ActorUID,
-			Action:     event.Action,
-			EntityType: event.EntityType,
-			EntityUID:  event.EntityUID,
-			Meta:       event.Meta,
-			OccurredAt: event.OccurredAt.Format(time.RFC3339),
-			CreatedAt:  event.CreatedAt.Format(time.RFC3339),
+		events = append(events, LocalizedAuditEventResponse{
+			UID:             event.UID,
+			ActorUID:        event.ActorUID,
+			Action:          event.Action,
+			ActionLabel:     event.ActionLabel,
+			EntityType:      event.EntityType,
+			EntityTypeLabel: event.EntityTypeLabel,
+			EntityUID:       event.EntityUID,
+			Meta:            event.Meta,
+			OccurredAt:      event.OccurredAt,
+			CreatedAt:       event.CreatedAt,
 		})
 	}
 
@@ -153,18 +169,20 @@ func (h *AuditHandler) GetActorAuditEvents(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Transform domain models to DTOs
-	events := make([]AuditEventResponse, 0, len(output.Events))
+	// Transform localized DTOs to response format
+	events := make([]LocalizedAuditEventResponse, 0, len(output.Events))
 	for _, event := range output.Events {
-		events = append(events, AuditEventResponse{
-			UID:        event.UID,
-			ActorUID:   event.ActorUID,
-			Action:     event.Action,
-			EntityType: event.EntityType,
-			EntityUID:  event.EntityUID,
-			Meta:       event.Meta,
-			OccurredAt: event.OccurredAt.Format(time.RFC3339),
-			CreatedAt:  event.CreatedAt.Format(time.RFC3339),
+		events = append(events, LocalizedAuditEventResponse{
+			UID:             event.UID,
+			ActorUID:        event.ActorUID,
+			Action:          event.Action,
+			ActionLabel:     event.ActionLabel,
+			EntityType:      event.EntityType,
+			EntityTypeLabel: event.EntityTypeLabel,
+			EntityUID:       event.EntityUID,
+			Meta:            event.Meta,
+			OccurredAt:      event.OccurredAt,
+			CreatedAt:       event.CreatedAt,
 		})
 	}
 
@@ -223,18 +241,20 @@ func (h *AuditHandler) ListAllAuditLogs(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Transform DTOs to response format
-	events := make([]AuditEventResponse, 0, len(output.Events))
+	// Transform localized DTOs to response format
+	events := make([]LocalizedAuditEventResponse, 0, len(output.Events))
 	for _, event := range output.Events {
-		events = append(events, AuditEventResponse{
-			UID:        event.UID,
-			ActorUID:   event.ActorUID,
-			Action:     event.Action,
-			EntityType: event.EntityType,
-			EntityUID:  event.EntityUID,
-			Meta:       event.Meta,
-			OccurredAt: event.OccurredAt,
-			CreatedAt:  event.CreatedAt,
+		events = append(events, LocalizedAuditEventResponse{
+			UID:             event.UID,
+			ActorUID:        event.ActorUID,
+			Action:          event.Action,
+			ActionLabel:     event.ActionLabel,
+			EntityType:      event.EntityType,
+			EntityTypeLabel: event.EntityTypeLabel,
+			EntityUID:       event.EntityUID,
+			Meta:            event.Meta,
+			OccurredAt:      event.OccurredAt,
+			CreatedAt:       event.CreatedAt,
 		})
 	}
 

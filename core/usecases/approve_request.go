@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/banumusa/backend/core/audit"
@@ -145,18 +144,21 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	}
 
 	// Build audit entry (deferred save fires on function return)
-	actionSentence := fmt.Sprintf(
-		"%s (%s) approved %s (Employee)'s %s leave request for %s to %s (%d days)",
-		actorName, actorRoleName, requester.Name, leaveTypeName,
-		leaveStartDate, leaveEndDate, leaveDays,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"ActorRole": actorRoleName,
+		"Requester": requester.Name,
+		"LeaveType": leaveTypeName,
+		"StartDate": leaveStartDate,
+		"EndDate":   leaveEndDate,
+		"Days":      leaveDays,
+	}
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionApprove).
 		On(audit.EntityLeaveRequest, leaveRequestUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.approve_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("comments", input.Comments).
-		// WithMeta("approval_request_uid", input.ApprovalRequestUID).
-		// WithMeta("requester_uid", approvalRequest.RequesterUID).
 		WithMeta("requester_name", requester.Name).
 		WithMeta("leave_type", leaveTypeName).
 		WithMeta("start_date", leaveStartDate).
@@ -250,16 +252,19 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		}
 
 		// Audit log for balance deduction with old/new values
+		deductActionParams := map[string]interface{}{
+			"Actor":     actorName,
+			"Requester": requester.Name,
+			"LeaveType": leaveTypeName,
+			"Days":      float64(leaveRequest.Days),
+			"OldUsed":   float64(oldUsedDays),
+			"NewUsed":   float64(balance.UsedDays),
+		}
 		uc.auditor.Actor(input.ActorEmployeeUID).
 			Did(audit.ActionDeductBalance).
 			On(audit.EntityLeaveBalance, balance.UID).
-			WithMeta("action", fmt.Sprintf(
-				"%s approved %s's %s leave — deducted %.1f days from balance (was %.1f used, now %.1f used)",
-				actorName, requester.Name, leaveTypeName,
-				float64(leaveRequest.Days), float64(oldUsedDays), float64(balance.UsedDays),
-			)).
-			WithMeta("employee_uid", approvalRequest.RequesterUID).
-			WithMeta("leave_type_uid", leaveRequest.LeaveTypeUID).
+			WithMeta("action_key", "audit.sentence.deduct_leave_balance").
+			WithMeta("action_params", deductActionParams).
 			WithMeta("leave_type_name", leaveType.NameAR).
 			WithMeta("deduction_amount", leaveRequest.Days).
 			WithMeta("old_used_days", oldUsedDays).
@@ -269,7 +274,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 			WithMeta("start_date", leaveRequest.StartDate.Format("2006-01-02")).
 			WithMeta("end_date", leaveRequest.EndDate.Format("2006-01-02")).
 			WithMeta("year", year).
-			WithMeta("leave_request_uid", leaveRequest.UID).
 			Save(ctx)
 
 		// Record balance transaction
@@ -341,14 +345,21 @@ func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeN
 		return
 	}
 
-	title := "تمت الموافقة على طلب الإجازة"
-	body := "تمت الموافقة على طلب " + leaveTypeName
+	params := map[string]interface{}{
+		"LeaveTypeName": leaveTypeName,
+	}
 	data := ports.NotificationData{
 		"type":       "request_approved",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUser(user.UID, title, body, data)
+	_, err = uc.notificationService.SendToUser(
+		user.UID,
+		"notification.leave_approved.title",
+		"notification.leave_approved.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("approve_request.notifyRequesterApproved.send", "error", err)
 	}
@@ -371,14 +382,22 @@ func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID,
 		userUIDs[i] = user.UID
 	}
 
-	title := "طلب إجازة بانتظار الموافقة"
-	body := "طلب " + leaveTypeName + " من " + requesterName
+	params := map[string]interface{}{
+		"EmployeeName":  requesterName,
+		"LeaveTypeName": leaveTypeName,
+	}
 	data := ports.NotificationData{
 		"type":       "pending_approval",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUsers(userUIDs, title, body, data)
+	_, err = uc.notificationService.SendToUsers(
+		userUIDs,
+		"notification.pending_approval.title",
+		"notification.pending_approval.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("approve_request.notifyNextStepApprovers.send", "error", err)
 	}

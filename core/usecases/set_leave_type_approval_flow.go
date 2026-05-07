@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -72,36 +71,31 @@ func (uc *SetLeaveTypeApprovalFlowUseCase) Execute(ctx context.Context, input Se
 
 	// Audit log after successful update
 	actorName := audit.ActorFromContext(ctx)
-	var actionSentence string
+	var actionKey string
 	if leaveType.ApprovalFlowUID != nil {
 		if oldApprovalFlowUID != nil {
-			actionSentence = fmt.Sprintf(
-				"%s changed approval flow for leave type '%s'",
-				actorName, leaveType.NameEN,
-			)
+			actionKey = "audit.sentence.change_leave_type_flow"
 		} else {
-			actionSentence = fmt.Sprintf(
-				"%s assigned approval flow to leave type '%s'",
-				actorName, leaveType.NameEN,
-			)
+			actionKey = "audit.sentence.assign_leave_type_flow"
 		}
 	} else {
-		actionSentence = fmt.Sprintf(
-			"%s removed approval flow from leave type '%s'",
-			actorName, leaveType.NameEN,
-		)
+		actionKey = "audit.sentence.remove_leave_type_flow"
 	}
-	
+
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"LeaveType": leaveType.NameEN,
+	}
+
 	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionUpdate).On(audit.EntityLeaveType, input.LeaveTypeUID).
-		WithMeta("action", actionSentence).
-		WithMeta("leave_type_name", leaveType.NameEN).
-		WithMeta("old_approval_flow_uid", oldApprovalFlowUID).
-		WithMeta("new_approval_flow_uid", leaveType.ApprovalFlowUID)
-	
+		WithMeta("action_key", actionKey).
+		WithMeta("action_params", actionParams).
+		WithMeta("leave_type_name", leaveType.NameEN)
+
 	if approvalFlow != nil {
-		auditBuilder.WithMeta("approval_flow_name", approvalFlow.NameEN)
+		auditBuilder = auditBuilder.WithMeta("approval_flow_name", approvalFlow.NameEN)
 	}
-	
+
 	defer auditBuilder.Save(ctx)
 
 	return &SetLeaveTypeApprovalFlowOutput{

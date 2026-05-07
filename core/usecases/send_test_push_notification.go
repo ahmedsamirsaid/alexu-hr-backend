@@ -62,7 +62,7 @@ func (uc *SendTestPushNotificationUseCase) Execute(ctx context.Context, input Se
 	}
 	data["type"] = "manual_test_push"
 
-	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, data)
+	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, nil, data)
 	if err != nil {
 		return nil, err
 	}

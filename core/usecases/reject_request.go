@@ -140,19 +140,23 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 		reasonStr = fmt.Sprintf(" Reason: %s", *input.Comments)
 	}
 
-	actionSentence := fmt.Sprintf(
-		"%s (%s) rejected %s (Employee)'s %s leave request for %s to %s (%d days).%s",
-		actorName, actorRoleName, requester.Name, leaveTypeName,
-		leaveStartDate, leaveEndDate, leaveDays, reasonStr,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"ActorRole": actorRoleName,
+		"Requester": requester.Name,
+		"LeaveType": leaveTypeName,
+		"StartDate": leaveStartDate,
+		"EndDate":   leaveEndDate,
+		"Days":      leaveDays,
+		"Reason":    reasonStr,
+	}
 
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionReject).
 		On(audit.EntityLeaveRequest, leaveRequestUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.reject_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("reason", input.Comments).
-		WithMeta("approval_request_uid", input.ApprovalRequestUID).
-		WithMeta("requester_uid", approvalRequest.RequesterUID).
 		WithMeta("requester_name", requester.Name).
 		WithMeta("leave_type", leaveTypeName).
 		WithMeta("start_date", leaveStartDate).
@@ -222,14 +226,21 @@ func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeNa
 		return
 	}
 
-	title := "تم رفض طلب الإجازة"
-	body := "تم رفض طلب " + leaveTypeName
+	params := map[string]interface{}{
+		"LeaveTypeName": leaveTypeName,
+	}
 	data := ports.NotificationData{
 		"type":       "request_rejected",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUser(user.UID, title, body, data)
+	_, err = uc.notificationService.SendToUser(
+		user.UID,
+		"notification.leave_rejected.title",
+		"notification.leave_rejected.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("reject_request.notifyRequesterRejected.send", "error", err)
 	}

@@ -12,9 +12,12 @@ import (
 )
 
 // FCMNotificationService implements NotificationService using Firebase Admin SDK.
+// It accepts i18n translation keys and translates them to each user's preferred language.
 type FCMNotificationService struct {
 	client          *messaging.Client
 	deviceTokenRepo ports.DeviceTokenRepository
+	userRepo        ports.UserRepository
+	i18n            ports.I18nService
 	db              ports.Querier
 }
 
@@ -22,6 +25,8 @@ type FCMNotificationService struct {
 type Config struct {
 	ServiceAccountJSONPath string
 	DeviceTokenRepo        ports.DeviceTokenRepository
+	UserRepo               ports.UserRepository
+	I18nService            ports.I18nService
 	DB                     ports.Querier
 }
 
@@ -41,12 +46,22 @@ func NewFCMNotificationService(ctx context.Context, cfg Config) (*FCMNotificatio
 	return &FCMNotificationService{
 		client:          client,
 		deviceTokenRepo: cfg.DeviceTokenRepo,
+		userRepo:        cfg.UserRepo,
+		i18n:            cfg.I18nService,
 		db:              cfg.DB,
 	}, nil
 }
 
-// SendToUser sends a push notification to all devices registered to a user.
-func (s *FCMNotificationService) SendToUser(userUID, title, body string, data ports.NotificationData) (int, error) {
+// SendToUser sends a localized push notification to all devices registered to a user.
+// titleKey and bodyKey are i18n translation keys; the user's preferred language is used for translation.
+func (s *FCMNotificationService) SendToUser(userUID, titleKey, bodyKey string, params map[string]interface{}, data ports.NotificationData) (int, error) {
+	// Look up user's preferred language
+	locale := s.userLocale(userUID)
+
+	// Translate notification text
+	title := s.translate(locale, titleKey, params)
+	body := s.translate(locale, bodyKey, params)
+
 	tokens, err := s.deviceTokenRepo.GetByUserUID(context.Background(), s.db, userUID)
 	if err != nil {
 		slog.Error("fcm_notification.SendToUser.get_tokens", "error", err, "user_uid", userUID)
@@ -62,7 +77,6 @@ func (s *FCMNotificationService) SendToUser(userUID, title, body string, data po
 	for _, token := range tokens {
 		err := s.sendToToken(token.Token, title, body, data)
 		if err != nil {
-			// Check if token is invalid and should be deleted
 			if messaging.IsUnregistered(err) {
 				slog.Debug("fcm_notification.SendToUser.stale_token",
 					"user_uid", userUID,
@@ -86,11 +100,12 @@ func (s *FCMNotificationService) SendToUser(userUID, title, body string, data po
 	return successCount, nil
 }
 
-// SendToUsers sends a push notification to multiple users.
-func (s *FCMNotificationService) SendToUsers(userUIDs []string, title, body string, data ports.NotificationData) (int, error) {
+// SendToUsers sends localized push notifications to multiple users.
+// Each user's preferred language is resolved individually.
+func (s *FCMNotificationService) SendToUsers(userUIDs []string, titleKey, bodyKey string, params map[string]interface{}, data ports.NotificationData) (int, error) {
 	totalSuccess := 0
 	for _, userUID := range userUIDs {
-		count, err := s.SendToUser(userUID, title, body, data)
+		count, err := s.SendToUser(userUID, titleKey, bodyKey, params, data)
 		if err != nil {
 			slog.Warn("fcm_notification.SendToUsers.user_failed", "error", err, "user_uid", userUID)
 			continue
@@ -98,6 +113,26 @@ func (s *FCMNotificationService) SendToUsers(userUIDs []string, title, body stri
 		totalSuccess += count
 	}
 	return totalSuccess, nil
+}
+
+// userLocale looks up the user's preferred language; defaults to "ar" if unset or not found.
+func (s *FCMNotificationService) userLocale(userUID string) string {
+	user, err := s.userRepo.GetByUID(context.Background(), s.db, userUID)
+	if err != nil || user == nil {
+		return "ar"
+	}
+	if user.PreferredLanguage == "" {
+		return "ar"
+	}
+	return user.PreferredLanguage
+}
+
+// translate resolves a translation key with optional params for the given locale.
+func (s *FCMNotificationService) translate(locale, key string, params map[string]interface{}) string {
+	if len(params) > 0 {
+		return s.i18n.TLocaleWithParams(locale, key, params)
+	}
+	return s.i18n.TLocale(locale, key)
 }
 
 func (s *FCMNotificationService) sendToToken(token, title, body string, data ports.NotificationData) error {
@@ -112,7 +147,7 @@ func (s *FCMNotificationService) sendToToken(token, title, body string, data por
 			Priority: "high",
 			Notification: &messaging.AndroidNotification{
 				ChannelID: "APPROVAL_CHANNEL",
-				Sound: "default",
+				Sound:     "default",
 			},
 		},
 		APNS: &messaging.APNSConfig{

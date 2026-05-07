@@ -3,7 +3,6 @@ package usecases
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/banumusa/backend/adapters/db"
 	"github.com/banumusa/backend/core/audit"
@@ -54,20 +53,21 @@ func (uc *ToggleLeaveTypeUseCase) Execute(ctx context.Context, input ToggleLeave
 
 	// Audit log after successful toggle with human-readable action sentence
 	action := audit.ActionActivate
-	actionVerb := "activated"
+	actionKey := "audit.sentence.activate_leave_type"
 	if !input.IsActive {
 		action = audit.ActionDeactivate
-		actionVerb = "deactivated"
+		actionKey = "audit.sentence.deactivate_leave_type"
 	}
 	
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s %s leave type '%s'",
-		actorName, actionVerb, leaveType.NameEN,
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  leaveType.NameEN,
+	}
 	
 	defer uc.auditor.From(ctx).Did(action).On(audit.EntityLeaveType, input.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", actionKey).
+		WithMeta("action_params", actionParams).
 		WithMeta("leave_type_name", leaveType.NameEN).
 		WithMeta("old_is_active", !input.IsActive).
 		WithMeta("new_is_active", input.IsActive).

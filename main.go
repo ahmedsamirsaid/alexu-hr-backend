@@ -23,6 +23,7 @@ import (
 	"github.com/banumusa/backend/adapters/scheduler"
 	minioAdapter "github.com/banumusa/backend/adapters/storage/minio"
 	"github.com/banumusa/backend/core/audit"
+	"github.com/banumusa/backend/core/i18n"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
@@ -44,6 +45,27 @@ func main() {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
 	}
+
+	// Initialize I18n service
+	i18nLoader := i18n.NewLoader(cfg.I18nLocalesPath)
+	translations, err := i18nLoader.LoadAll()
+	if err != nil {
+		slog.Error("main.main.load_translations", "error", err)
+		os.Exit(1)
+	}
+
+	i18nService := i18n.NewService(translations, cfg.I18nDefaultLocale, cfg.I18nSupportedLocales)
+	slog.Info("main.main.i18n_initialized",
+		"locales", i18nService.GetSupportedLocales(),
+		"default", i18nService.GetDefaultLocale(),
+		"translation_count", func() int {
+			count := 0
+			for _, localeTranslations := range translations {
+				count += len(localeTranslations)
+			}
+			return count
+		}(),
+	)
 
 	minioService, err := minioAdapter.NewService(minioAdapter.Config{
 		Endpoint:  cfg.MinIOEndpoint,
@@ -99,6 +121,8 @@ func main() {
 		fcmService, err := fcm.NewFCMNotificationService(context.Background(), fcm.Config{
 			ServiceAccountJSONPath: cfg.FCMServiceAccountPath,
 			DeviceTokenRepo:        deviceTokenRepo,
+			UserRepo:               userRepo,
+			I18nService:            i18nService,
 			DB:                     sqliteDB,
 		})
 		if err != nil {
@@ -297,9 +321,9 @@ func main() {
 		cfg.HolidaySyncTimezone,
 	)
 
-	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC)
+	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC, i18nService)
 	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
-	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC)
+	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, i18nService)
 	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
 	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, setRoleScopeUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
@@ -309,11 +333,11 @@ func main() {
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
 		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
-		listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,
+		listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC, i18nService,
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
 		listDepartmentsUC, getDepartmentUC, createDepartmentUC, updateDepartmentUC,
-		assignDepartmentManagerUC, removeDepartmentManagerUC,
+		assignDepartmentManagerUC, removeDepartmentManagerUC, i18nService,
 	)
 	deviceTokenHandler := httpAdapter.NewDeviceTokenHandler(registerDeviceTokenUC, unregisterDeviceTokenUC)
 	attendanceDeviceHandler := httpAdapter.NewAttendanceDeviceHandler(
@@ -327,7 +351,7 @@ func main() {
 		checkAttendanceDeviceConnectionUC,
 		checkAllAttendanceDevicesConnectionUC,
 	)
-	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setLeaveTypeApprovalFlowUC, toggleLeaveTypeUC)
+	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setLeaveTypeApprovalFlowUC, toggleLeaveTypeUC, i18nService)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
 	holidayHandler := httpAdapter.NewHolidayHandler(sqliteDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
@@ -349,13 +373,13 @@ func main() {
 		},
 	)
 
-	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo)
-	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo)
-	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB)
+	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo, i18nService)
+	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo, i18nService)
+	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB, i18nService)
 	listEnrichedAuditLogsUC := usecases.NewListEnrichedAuditLogsUseCase(
-		auditLogRepo, employeeRepo, departmentRepo, leaveRequestRepo, leaveTypeRepo, attendanceRecordRepo, sqliteDB,
+		auditLogRepo, employeeRepo, departmentRepo, leaveRequestRepo, leaveTypeRepo, attendanceRecordRepo, sqliteDB, i18nService,
 	)
-	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB)
+	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB, i18nService)
 	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC, listEnrichedAuditLogsUC, getAuditFilterOptionsUC)
 
 
@@ -386,6 +410,7 @@ func main() {
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
 		DocumentHandler:         documentHandler,
+		I18nService:             i18nService,
 	})
 
 	var sched *scheduler.Scheduler

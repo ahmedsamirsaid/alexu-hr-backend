@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -111,7 +110,6 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 	}
 
 	// Capture old values for audit
-	oldLeaveTypeUID := leaveRequest.LeaveTypeUID
 	oldStartDate := leaveRequest.StartDate
 	oldEndDate := leaveRequest.EndDate
 
@@ -120,17 +118,17 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 	if employee != nil {
 		actorName = employee.Name
 	}
-	
-	actionSentence := fmt.Sprintf(
-		"%s (Employee) updated and resubmitted their rejected leave request",
-		actorName,
-	)
-	
+
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+	}
+
 	// Build audit metadata with field changes
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionUpdate).
 		On(audit.EntityLeaveRequest, input.LeaveRequestUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.resubmit_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("resubmit_after_rejection", true)
 
 	if input.LeaveTypeUID != nil && *input.LeaveTypeUID != "" {
@@ -162,10 +160,6 @@ func (uc *UpdateRejectedLeaveRequestUseCase) Execute(ctx context.Context, input 
 	}
 
 	// Add field changes to audit metadata
-	if oldLeaveTypeUID != leaveRequest.LeaveTypeUID {
-		auditBuilder.WithMeta("old_leave_type_uid", oldLeaveTypeUID).
-			WithMeta("new_leave_type_uid", leaveRequest.LeaveTypeUID)
-	}
 	if !oldStartDate.Equal(leaveRequest.StartDate) {
 		auditBuilder.WithMeta("old_start_date", oldStartDate.Format("2006-01-02")).
 			WithMeta("new_start_date", leaveRequest.StartDate.Format("2006-01-02"))

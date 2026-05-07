@@ -2,30 +2,29 @@ package usecases
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
 
-// EnrichedAuditLogDTO represents an audit log entry with resolved names and bilingual labels.
+// EnrichedAuditLogDTO represents an audit log entry with resolved names and localized labels.
 type EnrichedAuditLogDTO struct {
-	UID               string  `json:"uid"`
-	ActorUID          string  `json:"actorUid"`
-	ActorName         *string `json:"actorName"`         // Resolved actor name
-	ActorType         string  `json:"actorType"`         // "user" or "system"
-	Action            string  `json:"action"`
-	ActionLabelEN     string  `json:"actionLabelEn"`     // "Approved"
-	ActionLabelAR     string  `json:"actionLabelAr"`     // "تمت الموافقة"
-	EntityType        string  `json:"entityType"`
-	EntityTypeLabelEN string  `json:"entityTypeLabelEn"` // "Leave Request"
-	EntityTypeLabelAR string  `json:"entityTypeLabelAr"` // "طلب إجازة"
-	EntityUID         string  `json:"entityUid"`
-	EntityDescription *string `json:"entityDescription"` // "Ahmed Al-Sayed - Annual Leave (Jan 15-20)"
-	Meta              *string `json:"meta"`
-	OccurredAt        string  `json:"occurredAt"`
-	CreatedAt         string  `json:"createdAt"`
-	IsSystemAction    bool    `json:"isSystemAction"` // True for auto-generated actions
+	UID               string                 `json:"uid"`
+	ActorUID          string                 `json:"actorUid"`
+	ActorName         *string                `json:"actorName"`         // Resolved actor name
+	ActorType         string                 `json:"actorType"`         // "user" or "system"
+	Action            string                 `json:"action"`            // Raw key
+	ActionLabel       string                 `json:"actionLabel"`       // Translated based on request locale
+	EntityType        string                 `json:"entityType"`        // Raw key
+	EntityTypeLabel   string                 `json:"entityTypeLabel"`   // Translated based on request locale
+	EntityUID         string                 `json:"entityUid"`
+	EntityDescription *string                `json:"entityDescription"` // "Ahmed Al-Sayed - Annual Leave (Jan 15-20)"
+	Meta              map[string]interface{} `json:"meta"`              // Translated field names
+	OccurredAt        string                 `json:"occurredAt"`
+	CreatedAt         string                 `json:"createdAt"`
+	IsSystemAction    bool                   `json:"isSystemAction"` // True for auto-generated actions
 }
 
 // ListEnrichedAuditLogsInput defines the input for listing enriched audit logs.
@@ -65,6 +64,7 @@ type ListEnrichedAuditLogsUseCase struct {
 	leaveTypeRepo ports.LeaveTypeRepository
 	attRecordRepo ports.AttendanceRecordRepository
 	db            ports.DB
+	i18n          ports.I18nService
 }
 
 // NewListEnrichedAuditLogsUseCase creates a new enriched audit logs use case.
@@ -76,6 +76,7 @@ func NewListEnrichedAuditLogsUseCase(
 	leaveTypeRepo ports.LeaveTypeRepository,
 	attRecordRepo ports.AttendanceRecordRepository,
 	db ports.DB,
+	i18n ports.I18nService,
 ) *ListEnrichedAuditLogsUseCase {
 	return &ListEnrichedAuditLogsUseCase{
 		auditRepo:     auditRepo,
@@ -85,6 +86,7 @@ func NewListEnrichedAuditLogsUseCase(
 		leaveTypeRepo: leaveTypeRepo,
 		attRecordRepo: attRecordRepo,
 		db:            db,
+		i18n:          i18n,
 	}
 }
 
@@ -138,7 +140,7 @@ func (uc *ListEnrichedAuditLogsUseCase) Execute(ctx context.Context, input ListE
 	// 6. Build enriched DTOs with resolved names
 	events := make([]EnrichedAuditLogDTO, 0, len(logs))
 	for _, log := range logs {
-		enriched := uc.enrichAuditLog(log, actorMap, entityDescMap)
+		enriched := uc.enrichAuditLog(ctx, log, actorMap, entityDescMap)
 		events = append(events, enriched)
 	}
 
@@ -427,8 +429,9 @@ func getEntityTypeLabels(entityType string) (string, string) {
 	return entityType, entityType
 }
 
-// enrichAuditLog builds an enriched DTO with resolved names and labels.
+// enrichAuditLog builds an enriched DTO with resolved names and localized labels.
 func (uc *ListEnrichedAuditLogsUseCase) enrichAuditLog(
+	ctx context.Context,
 	log *domain.AuditLog,
 	actorMap map[string]*domain.Employee,
 	entityDescMap map[string]string,
@@ -437,9 +440,10 @@ func (uc *ListEnrichedAuditLogsUseCase) enrichAuditLog(
 		UID:            log.UID,
 		ActorUID:       log.ActorUID,
 		Action:         log.Action,
+		ActionLabel:    uc.i18n.T(ctx, "audit.action."+log.Action),
 		EntityType:     log.EntityType,
+		EntityTypeLabel: uc.i18n.T(ctx, "audit.entity."+log.EntityType),
 		EntityUID:      log.EntityUID,
-		Meta:           log.Meta,
 		OccurredAt:     log.OccurredAt.Format("2006-01-02T15:04:05Z07:00"),
 		CreatedAt:      log.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		IsSystemAction: isSystemAction(log.Action),
@@ -458,17 +462,130 @@ func (uc *ListEnrichedAuditLogsUseCase) enrichAuditLog(
 		enriched.EntityDescription = &desc
 	}
 
-	// Add action labels with translations
-	actionLabelEN, actionLabelAR := getActionLabels(log.Action)
-	enriched.ActionLabelEN = actionLabelEN
-	enriched.ActionLabelAR = actionLabelAR
-
-	// Add entity type labels with translations
-	entityTypeLabelEN, entityTypeLabelAR := getEntityTypeLabels(log.EntityType)
-	enriched.EntityTypeLabelEN = entityTypeLabelEN
-	enriched.EntityTypeLabelAR = entityTypeLabelAR
+	// Translate metadata field names if metadata exists
+	if log.Meta != nil && *log.Meta != "" {
+		enriched.Meta = uc.translateMetadata(ctx, *log.Meta)
+	}
 
 	return enriched
+}
+
+// translateMetadata translates metadata field names recursively.
+func (uc *ListEnrichedAuditLogsUseCase) translateMetadata(ctx context.Context, metaJSON string) map[string]interface{} {
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(metaJSON), &meta); err != nil {
+		// If JSON parsing fails, return empty map
+		return make(map[string]interface{})
+	}
+
+	return uc.translateMetadataRecursive(ctx, meta)
+}
+
+// translateMetadataRecursive recursively translates field names and well-known values in metadata.
+func (uc *ListEnrichedAuditLogsUseCase) translateMetadataRecursive(ctx context.Context, meta map[string]interface{}) map[string]interface{} {
+	translated := make(map[string]interface{})
+
+	// action_key + action_params are consumed together to form a translated sentence.
+	// They must not appear as individual keys in the output.
+	skipKeys := map[string]bool{
+		"details":       true,
+		"action_key":    true,
+		"action_params": true,
+	}
+
+	// If this record uses the new structured format, compose a translated action sentence.
+	if actionKey, ok := meta["action_key"].(string); ok {
+		var params map[string]interface{}
+		if p, ok := meta["action_params"].(map[string]interface{}); ok {
+			params = p
+		}
+		actionLabel := uc.i18n.T(ctx, "audit.metadata.action")
+		translated[actionLabel] = uc.i18n.TWithParams(ctx, actionKey, params)
+	} else if actionSentence, ok := meta["action"].(string); ok && actionSentence != "" {
+		// Legacy: show the raw English sentence as-is (old DB records before migration).
+		actionLabel := uc.i18n.T(ctx, "audit.metadata.action")
+		translated[actionLabel] = actionSentence
+		skipKeys["action"] = true
+	}
+
+	for key, value := range meta {
+		if skipKeys[key] {
+			continue
+		}
+
+		translatedKey := uc.i18n.T(ctx, "audit.metadata."+key)
+
+		if nestedMap, ok := value.(map[string]interface{}); ok {
+			translated[translatedKey] = uc.translateMetadataRecursive(ctx, nestedMap)
+		} else {
+			translated[translatedKey] = uc.translateMetadataValue(ctx, key, value)
+		}
+	}
+
+	return translated
+}
+
+// translateMetadataValue translates a metadata value for well-known enum and boolean fields.
+func (uc *ListEnrichedAuditLogsUseCase) translateMetadataValue(ctx context.Context, key string, value interface{}) interface{} {
+	// Translate booleans
+	if b, isBool := value.(bool); isBool {
+		if b {
+			return uc.i18n.T(ctx, "common.yes")
+		}
+		return uc.i18n.T(ctx, "common.no")
+	}
+
+	strVal, ok := value.(string)
+	if !ok {
+		return value
+	}
+
+	// Translate known enum values by key context
+	switch key {
+	case "old_status", "new_status", "status":
+		candidate := uc.i18n.T(ctx, "audit.value.status."+strVal)
+		if candidate != "audit.value.status."+strVal {
+			return candidate
+		}
+	case "punch_type", "old_punch_type", "new_punch_type":
+		candidate := uc.i18n.T(ctx, "audit.value.punch_type."+strVal)
+		if candidate != "audit.value.punch_type."+strVal {
+			return candidate
+		}
+	}
+
+	// Format ISO date/datetime strings into readable form
+	if isISODateString(strVal) {
+		return formatAuditDateString(strVal)
+	}
+
+	return strVal
+}
+
+// isISODateString returns true if s looks like an ISO 8601 date or datetime.
+func isISODateString(s string) bool {
+	if len(s) < 10 {
+		return false
+	}
+	return len(s) >= 4 && s[4] == '-' && len(s) >= 7 && s[7] == '-'
+}
+
+// formatAuditDateString formats an ISO date string to a readable display format.
+func formatAuditDateString(s string) string {
+	layouts := []string{
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05Z",
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			if len(s) == 10 {
+				return t.Format("Jan 2, 2006")
+			}
+			return t.Format("Jan 2, 2006 3:04 PM")
+		}
+	}
+	return s
 }
 
 // isSystemAction determines if an action is system-generated.

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type AppConfig struct {
@@ -44,6 +45,11 @@ type AppConfig struct {
 	MinIOAutoCreateBucket      bool
 	MinIOUploadExpiryMinutes   int
 	MinIODownloadExpiryMinutes int
+	// I18n config
+	I18nLocalesPath      string
+	I18nDefaultLocale    string
+	I18nSupportedLocales []string
+	I18nHotReload        bool
 }
 
 func LoadConfig() *AppConfig {
@@ -79,14 +85,20 @@ func LoadConfig() *AppConfig {
 		HolidaySyncTimezone:      getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
 
 		// Storage config
-		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "34.68.220.78:9000"),
-		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "minioadmin"),
-		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "minioadmin"),
-		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", false),
+		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "bucket-production-62aa.up.railway.app"),
+		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "hgZN6FTEHjaeg0nJX8H5NmCc1IHOIcqp"),
+		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "vkiYoESOd5vr0wdo1J34t9JOzphCkoh3mBMqQ7V739UOCr4K"),
+		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", true),
 		MinIODocumentsBucket:       getEnv("BANU_MUSA_MINIO_DOCUMENTS_BUCKET", "documents"),
 		MinIOAutoCreateBucket:      getEnvBool("BANU_MUSA_MINIO_AUTO_CREATE_BUCKET", true),
 		MinIOUploadExpiryMinutes:   getEnvInt("BANU_MUSA_MINIO_UPLOAD_EXPIRY_MINUTES", 15),
 		MinIODownloadExpiryMinutes: getEnvInt("BANU_MUSA_MINIO_DOWNLOAD_EXPIRY_MINUTES", 15),
+
+		// I18n config
+		I18nLocalesPath:      getEnv("BANU_MUSA_I18N_LOCALES_PATH", "./locales"),
+		I18nDefaultLocale:    getEnv("BANU_MUSA_I18N_DEFAULT_LOCALE", "en"),
+		I18nSupportedLocales: getEnvStringSlice("BANU_MUSA_I18N_SUPPORTED_LOCALES", []string{"en", "ar"}),
+		I18nHotReload:        getEnvBool("BANU_MUSA_I18N_HOT_RELOAD", false),
 	}
 }
 
@@ -115,6 +127,28 @@ func getEnvInt(key string, defaultValue int) int {
 			return defaultValue
 		}
 		return parsed
+	}
+	return defaultValue
+}
+
+func getEnvStringSlice(key string, defaultValue []string) []string {
+	if value, exists := os.LookupEnv(key); exists {
+		if value == "" {
+			return defaultValue
+		}
+		// Split by comma and trim whitespace
+		parts := strings.Split(value, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) == 0 {
+			return defaultValue
+		}
+		return result
 	}
 	return defaultValue
 }

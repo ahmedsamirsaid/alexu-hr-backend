@@ -2,9 +2,12 @@ package http
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"github.com/banumusa/backend/core/audit"
+	"github.com/banumusa/backend/core/i18n"
+	"github.com/banumusa/backend/core/ports"
 )
 
 type contextKey string
@@ -12,6 +15,26 @@ type contextKey string
 const (
 	ClaimsContextKey contextKey = "claims"
 )
+
+// LanguageMiddleware extracts locale from Accept-Language header.
+func LanguageMiddleware(i18nService ports.I18nService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			acceptLang := r.Header.Get("Accept-Language")
+			locale := i18n.ParseAcceptLanguage(acceptLang, i18nService.GetSupportedLocales())
+			
+			// Add debug logging for detected locale
+			slog.Debug("language.middleware.locale_detected",
+				"accept_language", acceptLang,
+				"detected_locale", locale,
+				"path", r.URL.Path,
+			)
+			
+			ctx := i18n.WithLocale(r.Context(), locale)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
 
 // AuthMiddleware validates JWT tokens and sets claims in context
 func AuthMiddleware(jwtService *JWTService, authEnabled bool) func(http.Handler) http.Handler {

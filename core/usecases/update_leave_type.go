@@ -3,7 +3,6 @@ package usecases
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/banumusa/backend/adapters/db"
 	"github.com/banumusa/backend/core/audit"
@@ -94,13 +93,14 @@ func (uc *UpdateLeaveTypeUseCase) Execute(ctx context.Context, input UpdateLeave
 
 	// Audit log after successful update
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s updated leave type '%s'",
-		actorName, leaveType.NameEN,
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  leaveType.NameEN,
+	}
 	
 	auditBuilder := uc.auditor.From(ctx).Did(audit.ActionUpdate).On(audit.EntityLeaveType, input.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.update_leave_type").
+		WithMeta("action_params", actionParams).
 		WithMeta("leave_type_name", leaveType.NameEN)
 	
 	if input.DefaultBalanceSet {

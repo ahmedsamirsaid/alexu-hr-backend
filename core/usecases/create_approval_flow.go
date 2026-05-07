@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -62,16 +61,18 @@ func (uc *CreateApprovalFlowUseCase) Execute(ctx context.Context, input CreateAp
 
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s created approval flow '%s' (code: %s)",
-		actorName, input.NameEN, input.Code,
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  input.NameEN,
+		"Code":  input.Code,
+	}
 
 	// Audit log after successful creation
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityApprovalFlow, flow.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.create_approval_flow").
+		WithMeta("action_params", actionParams).
 		WithMeta("flow_name", input.NameEN).
 		WithMeta("flow_code", input.Code).
 		Save(ctx)

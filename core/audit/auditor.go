@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -201,6 +202,10 @@ func (a *auditorImpl) persist(ctx context.Context, b *Builder) {
 		return
 	}
 
+	if shouldSkipAuditLog(b.action, b.actorUID) {
+		return
+	}
+
 	var metaJSON *string
 	if len(b.meta) > 0 {
 		raw, err := json.Marshal(b.meta)
@@ -229,6 +234,31 @@ func (a *auditorImpl) persist(ctx context.Context, b *Builder) {
 			"actor_uid", b.actorUID,
 		)
 	}
+}
+
+func shouldSkipAuditLog(action, actorUID string) bool {
+	if isSystemAction(action) {
+		return true
+	}
+
+	if actorUID == "system" || strings.HasPrefix(actorUID, "system_") {
+		return true
+	}
+
+	return false
+}
+
+func isSystemAction(action string) bool {
+	systemActions := map[string]bool{
+		"deduct_balance":          true,
+		"annual_reset":            true,
+		"auto_reject":             true,
+		"system_adjustment":       true,
+		"cascade_delete":          true,
+		"auto_create_transaction": true,
+	}
+
+	return systemActions[action]
 }
 
 // ---------------------------------------------------------------------------

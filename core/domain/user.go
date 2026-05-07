@@ -10,6 +10,9 @@ type User struct {
 	EmployeeUID           *string
 	ManagedDepartmentUIDs []string
 	IsActive              bool
+	// PreferredLanguage is the user's preferred locale (e.g. "ar", "en").
+	// An empty value defaults to "ar" at the notification-service layer.
+	PreferredLanguage     string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time
 	Roles                 []Role

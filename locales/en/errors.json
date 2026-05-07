@@ -1,0 +1,61 @@
+{
+  "error": {
+    "employee": {
+      "not_found": "Employee not found",
+      "already_exists": "Employee already exists",
+      "invalid_status": "Invalid employee status",
+      "cannot_delete": "Cannot delete employee with active records"
+    },
+    "leave": {
+      "insufficient_balance": "Insufficient leave balance",
+      "invalid_date_range": "Invalid date range",
+      "exceeds_consecutive_days": "Exceeds maximum consecutive days allowed",
+      "recording_deadline_passed": "Recording deadline has passed",
+      "overlapping_dates": "Leave dates overlap with existing leave",
+      "not_found": "Leave request not found",
+      "already_processed": "Leave request has already been processed",
+      "cannot_cancel": "Cannot cancel leave request in current status"
+    },
+    "auth": {
+      "invalid_credentials": "Invalid credentials",
+      "token_expired": "Token has expired",
+      "unauthorized": "Unauthorized access",
+      "invalid_otp": "Invalid OTP code",
+      "otp_expired": "OTP code has expired",
+      "account_disabled": "Account has been disabled"
+    },
+    "validation": {
+      "required_field": "{{.Field}} is required",
+      "invalid_format": "{{.Field}} has invalid format",
+      "out_of_range": "{{.Field}} is out of valid range",
+      "invalid_email": "Invalid email address",
+      "invalid_phone": "Invalid phone number",
+      "invalid_date": "Invalid date format"
+    },
+    "approval": {
+      "not_found": "Approval request not found",
+      "already_processed": "Approval request has already been processed",
+      "not_authorized": "You are not authorized to approve this request",
+      "invalid_action": "Invalid approval action"
+    },
+    "department": {
+      "not_found": "Department not found",
+      "already_exists": "Department already exists",
+      "has_employees": "Cannot delete department with active employees"
+    },
+    "attendance": {
+      "not_found": "Attendance record not found",
+      "already_checked_in": "Already checked in",
+      "already_checked_out": "Already checked out",
+      "invalid_time": "Invalid attendance time",
+      "future_date": "Cannot record attendance for future dates"
+    },
+    "general": {
+      "internal_error": "An internal error occurred",
+      "not_found": "Resource not found",
+      "forbidden": "Access forbidden",
+      "bad_request": "Invalid request",
+      "conflict": "Resource conflict"
+    }
+  }
+}

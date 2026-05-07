@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -42,9 +41,7 @@ func (uc *DeleteApprovalFlowStepUseCase) Execute(ctx context.Context, uid string
 	}
 
 	// Capture step information for audit metadata before deletion
-	approvalFlowUID := step.ApprovalFlowUID
 	stepOrder := step.StepOrder
-	roleUID := step.RoleUID
 
 	// Check for pending requests at this step
 	hasPending, err := uc.stepRepo.HasPendingRequestsAtStep(ctx, tx, uid)
@@ -61,19 +58,18 @@ func (uc *DeleteApprovalFlowStepUseCase) Execute(ctx context.Context, uid string
 
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s deleted approval flow step %d",
-		actorName, stepOrder,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"StepOrder": stepOrder,
+	}
 
 	// Audit log after successful deletion with step information
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionDeleteStep).
 		On(audit.EntityApprovalFlowStep, uid).
-		WithMeta("action", actionSentence).
-		WithMeta("approval_flow_uid", approvalFlowUID).
+		WithMeta("action_key", "audit.sentence.delete_approval_flow_step").
+		WithMeta("action_params", actionParams).
 		WithMeta("step_order", stepOrder).
-		WithMeta("role_uid", roleUID).
 		Save(ctx)
 
 	if err := tx.Commit(); err != nil {

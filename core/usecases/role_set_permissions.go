@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -100,13 +99,15 @@ func (uc *SetRolePermissionsUseCase) Execute(ctx context.Context, input SetRoleP
 		newPermCodes = append(newPermCodes, uidToCode[uid])
 	}
 
-	actionSentence := fmt.Sprintf(
-		"Permissions for role '%s' were updated: %d added, %d removed",
-		role.Name, len(addedPerms), len(removedPerms),
-	)
+	actionParams := map[string]interface{}{
+		"Role":    role.Name,
+		"Added":   len(addedPerms),
+		"Removed": len(removedPerms),
+	}
 
 	defer uc.auditor.From(ctx).Did(audit.ActionUpdate).On(audit.EntityRole, input.RoleUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.set_role_permissions").
+		WithMeta("action_params", actionParams).
 		WithMeta("role_name", role.Name).
 		WithMeta("added_permissions", addedPerms).
 		WithMeta("removed_permissions", removedPerms).

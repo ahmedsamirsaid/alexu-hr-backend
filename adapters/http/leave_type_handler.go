@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -17,6 +18,7 @@ type LeaveTypeHandler struct {
 	updateLeaveTypeUC     *usecases.UpdateLeaveTypeUseCase
 	setApprovalFlowUC     *usecases.SetLeaveTypeApprovalFlowUseCase
 	toggleLeaveTypeUC     *usecases.ToggleLeaveTypeUseCase
+	i18nService           ports.I18nService
 }
 
 func NewLeaveTypeHandler(
@@ -26,6 +28,7 @@ func NewLeaveTypeHandler(
 	updateLeaveTypeUC *usecases.UpdateLeaveTypeUseCase,
 	setApprovalFlowUC *usecases.SetLeaveTypeApprovalFlowUseCase,
 	toggleLeaveTypeUC *usecases.ToggleLeaveTypeUseCase,
+	i18nService ports.I18nService,
 ) *LeaveTypeHandler {
 	return &LeaveTypeHandler{
 		getLeaveTypeDetailsUC: getLeaveTypeDetailsUC,
@@ -34,23 +37,47 @@ func NewLeaveTypeHandler(
 		updateLeaveTypeUC:     updateLeaveTypeUC,
 		setApprovalFlowUC:     setApprovalFlowUC,
 		toggleLeaveTypeUC:     toggleLeaveTypeUC,
+		i18nService:           i18nService,
 	}
+}
+
+// localizedLeaveName picks NameAR when the request locale is "ar", else NameEN.
+func (h *LeaveTypeHandler) localizedLeaveName(r *http.Request, nameEN, nameAR string) string {
+	if h.i18nService != nil {
+		locale := h.i18nService.GetDefaultLocale()
+		// The middleware stores the resolved locale in context; we peek at it via T
+		// by resolving a dummy key — the locale is the same one the middleware set.
+		// Simpler: use the language middleware's context value directly.
+		if ctx := r.Context(); ctx != nil {
+			// Resolve locale from context by checking what T returns for a known AR-only key
+			_ = locale
+		}
+	}
+	// Use Accept-Language directly for the pick
+	acceptLang := r.Header.Get("Accept-Language")
+	if len(acceptLang) >= 2 && acceptLang[:2] == "ar" {
+		if nameAR != "" {
+			return nameAR
+		}
+	}
+	return nameEN
 }
 
 // Leave Type responses
 
 type LeaveTypeResponse struct {
-	UID                   string `json:"uid"`
-	Code                  string `json:"code"`
-	NameEN                string `json:"nameEn"`
-	NameAR                string `json:"nameAr"`
-	DefaultBalance        int    `json:"defaultBalance"`
-	MaxConsecutive        *int   `json:"maxConsecutive,omitempty"`
-	RecordingDeadlineDays *int   `json:"recordingDeadlineDays,omitempty"`
-	AdvanceNoticeDays     *int   `json:"advanceNoticeDays,omitempty"`
-	IsActive              bool   `json:"isActive"`
-	CreatedAt             string `json:"createdAt"`
-	UpdatedAt             string `json:"updatedAt"`
+	UID                   string  `json:"uid"`
+	Code                  string  `json:"code"`
+	NameEN                string  `json:"nameEn"`
+	NameAR                string  `json:"nameAr"`
+	LocalizedName         string  `json:"name"`
+	DefaultBalance        int     `json:"defaultBalance"`
+	MaxConsecutive        *int    `json:"maxConsecutive,omitempty"`
+	RecordingDeadlineDays *int    `json:"recordingDeadlineDays,omitempty"`
+	AdvanceNoticeDays     *int    `json:"advanceNoticeDays,omitempty"`
+	IsActive              bool    `json:"isActive"`
+	CreatedAt             string  `json:"createdAt"`
+	UpdatedAt             string  `json:"updatedAt"`
 }
 
 type ListLeaveTypesResponse struct {
@@ -58,10 +85,11 @@ type ListLeaveTypesResponse struct {
 }
 
 type SubLeaveTypeResponse struct {
-	UID          string `json:"uid"`
-	LeaveTypeUID string `json:"leaveTypeUid"`
-	NameEN       string `json:"nameEn"`
-	NameAR       string `json:"nameAr"`
+	UID           string `json:"uid"`
+	LeaveTypeUID  string `json:"leaveTypeUid"`
+	NameEN        string `json:"nameEn"`
+	NameAR        string `json:"nameAr"`
+	LocalizedName string `json:"name"`
 }
 
 type ListSubLeaveTypesResponse struct {
@@ -141,6 +169,7 @@ func (h *LeaveTypeHandler) ListLeaveTypes(w http.ResponseWriter, r *http.Request
 			Code:                  lt.Code,
 			NameEN:                lt.NameEN,
 			NameAR:                lt.NameAR,
+			LocalizedName:         h.localizedLeaveName(r, lt.NameEN, lt.NameAR),
 			DefaultBalance:        lt.DefaultBalance,
 			MaxConsecutive:        lt.MaxConsecutive,
 			RecordingDeadlineDays: lt.RecordingDeadlineDays,
@@ -170,17 +199,18 @@ func (h *LeaveTypeHandler) GetLeaveType(w http.ResponseWriter, r *http.Request) 
 		} else {
 			slog.Error("leave_type_handler.GetLeaveType.execute_usecase", "error", err, "leave_type_uid", uid)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
 	subLeaveTypes := make([]SubLeaveTypeResponse, 0, len(output.SubLeaveTypes))
 	for _, item := range output.SubLeaveTypes {
 		subLeaveTypes = append(subLeaveTypes, SubLeaveTypeResponse{
-			UID:          item.UID,
-			LeaveTypeUID: item.LeaveTypeUID,
-			NameEN:       item.NameEN,
-			NameAR:       item.NameAR,
+			UID:           item.UID,
+			LeaveTypeUID:  item.LeaveTypeUID,
+			NameEN:        item.NameEN,
+			NameAR:        item.NameAR,
+			LocalizedName: h.localizedLeaveName(r, item.NameEN, item.NameAR),
 		})
 	}
 
@@ -218,6 +248,7 @@ func (h *LeaveTypeHandler) GetLeaveType(w http.ResponseWriter, r *http.Request) 
 			Code:                  output.LeaveType.Code,
 			NameEN:                output.LeaveType.NameEN,
 			NameAR:                output.LeaveType.NameAR,
+			LocalizedName:         h.localizedLeaveName(r, output.LeaveType.NameEN, output.LeaveType.NameAR),
 			DefaultBalance:        output.LeaveType.DefaultBalance,
 			MaxConsecutive:        output.LeaveType.MaxConsecutive,
 			RecordingDeadlineDays: output.LeaveType.RecordingDeadlineDays,
@@ -268,7 +299,7 @@ func (h *LeaveTypeHandler) UpdateLeaveType(w http.ResponseWriter, r *http.Reques
 		default:
 			slog.Error("leave_type_handler.UpdateLeaveType.execute_usecase", "error", err, "leave_type_uid", uid)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -277,6 +308,7 @@ func (h *LeaveTypeHandler) UpdateLeaveType(w http.ResponseWriter, r *http.Reques
 		Code:                  output.LeaveType.Code,
 		NameEN:                output.LeaveType.NameEN,
 		NameAR:                output.LeaveType.NameAR,
+		LocalizedName:         h.localizedLeaveName(r, output.LeaveType.NameEN, output.LeaveType.NameAR),
 		DefaultBalance:        output.LeaveType.DefaultBalance,
 		MaxConsecutive:        output.LeaveType.MaxConsecutive,
 		RecordingDeadlineDays: output.LeaveType.RecordingDeadlineDays,
@@ -314,7 +346,7 @@ func (h *LeaveTypeHandler) SetLeaveTypeApprovalFlow(w http.ResponseWriter, r *ht
 		default:
 			slog.Error("leave_type_handler.SetLeaveTypeApprovalFlow.execute_usecase", "error", err, "leave_type_uid", uid)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -328,10 +360,11 @@ func (h *LeaveTypeHandler) SetLeaveTypeApprovalFlow(w http.ResponseWriter, r *ht
 	subLeaveTypes := make([]SubLeaveTypeResponse, 0, len(details.SubLeaveTypes))
 	for _, item := range details.SubLeaveTypes {
 		subLeaveTypes = append(subLeaveTypes, SubLeaveTypeResponse{
-			UID:          item.UID,
-			LeaveTypeUID: item.LeaveTypeUID,
-			NameEN:       item.NameEN,
-			NameAR:       item.NameAR,
+			UID:           item.UID,
+			LeaveTypeUID:  item.LeaveTypeUID,
+			NameEN:        item.NameEN,
+			NameAR:        item.NameAR,
+			LocalizedName: h.localizedLeaveName(r, item.NameEN, item.NameAR),
 		})
 	}
 
@@ -369,6 +402,7 @@ func (h *LeaveTypeHandler) SetLeaveTypeApprovalFlow(w http.ResponseWriter, r *ht
 			Code:                  details.LeaveType.Code,
 			NameEN:                details.LeaveType.NameEN,
 			NameAR:                details.LeaveType.NameAR,
+			LocalizedName:         h.localizedLeaveName(r, details.LeaveType.NameEN, details.LeaveType.NameAR),
 			DefaultBalance:        details.LeaveType.DefaultBalance,
 			MaxConsecutive:        details.LeaveType.MaxConsecutive,
 			RecordingDeadlineDays: details.LeaveType.RecordingDeadlineDays,
@@ -409,7 +443,7 @@ func (h *LeaveTypeHandler) ToggleLeaveType(w http.ResponseWriter, r *http.Reques
 		} else {
 			slog.Error("leave_type_handler.ToggleLeaveType.execute_usecase", "error", err)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -418,6 +452,7 @@ func (h *LeaveTypeHandler) ToggleLeaveType(w http.ResponseWriter, r *http.Reques
 		Code:                  output.LeaveType.Code,
 		NameEN:                output.LeaveType.NameEN,
 		NameAR:                output.LeaveType.NameAR,
+		LocalizedName:         h.localizedLeaveName(r, output.LeaveType.NameEN, output.LeaveType.NameAR),
 		DefaultBalance:        output.LeaveType.DefaultBalance,
 		MaxConsecutive:        output.LeaveType.MaxConsecutive,
 		RecordingDeadlineDays: output.LeaveType.RecordingDeadlineDays,
@@ -444,17 +479,18 @@ func (h *LeaveTypeHandler) ListSubLeaveTypes(w http.ResponseWriter, r *http.Requ
 		} else {
 			slog.Error("leave_type_handler.ListSubLeaveTypes.execute_usecase", "error", err, "leave_type_uid", uid)
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
 	subLeaveTypes := make([]SubLeaveTypeResponse, 0, len(output.SubLeaveTypes))
 	for _, item := range output.SubLeaveTypes {
 		subLeaveTypes = append(subLeaveTypes, SubLeaveTypeResponse{
-			UID:          item.UID,
-			LeaveTypeUID: item.LeaveTypeUID,
-			NameEN:       item.NameEN,
-			NameAR:       item.NameAR,
+			UID:           item.UID,
+			LeaveTypeUID:  item.LeaveTypeUID,
+			NameEN:        item.NameEN,
+			NameAR:        item.NameAR,
+			LocalizedName: h.localizedLeaveName(r, item.NameEN, item.NameAR),
 		})
 	}
 

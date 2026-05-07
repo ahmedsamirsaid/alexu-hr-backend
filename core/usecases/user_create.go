@@ -59,18 +59,17 @@ func (uc *CreateUserUseCase) Execute(ctx context.Context, input CreateUserInput)
 	}
 
 	// Determine employee link description for the action sentence
-	employeeLink := ""
-	if input.EmployeeUID != nil && *input.EmployeeUID != "" {
-		employeeLink = " linked to employee " + *input.EmployeeUID
+	actionParams := map[string]interface{}{
+		"Phone": input.Phone,
 	}
 
 	// Audit log after successful creation
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityUser, user.UID).
-		WithMeta("action", "New user account created for phone "+input.Phone+employeeLink).
+		WithMeta("action_key", "audit.sentence.create_user").
+		WithMeta("action_params", actionParams).
 		WithMeta("phone", input.Phone).
-		WithMeta("employee_uid", input.EmployeeUID).
 		WithMeta("new_state", map[string]interface{}{
 			"uid":          user.UID,
 			"phone":        input.Phone,

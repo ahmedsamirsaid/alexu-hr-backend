@@ -2,8 +2,6 @@ package usecases
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/banumusa/backend/core/audit"
@@ -11,26 +9,14 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
-var (
-	ErrEmployeeNotFound                     = errors.New("employee not found")
-	ErrLeaveTypeNotFound                    = errors.New("leave type not found")
-	ErrSubLeaveTypeNotFound                 = errors.New("sub leave type not found")
-	ErrSubLeaveTypeDoesNotBelongToLeaveType = errors.New("sub leave type does not belong to leave type")
-	ErrInsufficientBalance                  = errors.New("insufficient leave balance")
-	ErrExceedsConsecutiveDays               = errors.New("exceeds maximum consecutive days")
-	ErrRecordingDeadlinePassed              = errors.New("recording deadline has passed")
-	ErrInvalidDateRange                     = errors.New("invalid date range")
-	ErrNoWorkingDays                        = errors.New("no working days")
-)
-
 type RecordLeaveInput struct {
-	EmployeeUID     string
-	LeaveTypeUID    string
-	StartDate       time.Time
-	EndDate         time.Time
-	RecordedBy      *int64
-	RecordedByUID   *string // Employee UID of the actor recording the leave (for audit)
-	Notes           *string
+	EmployeeUID   string
+	LeaveTypeUID  string
+	StartDate     time.Time
+	EndDate       time.Time
+	RecordedBy    *int64
+	RecordedByUID *string // Employee UID of the actor recording the leave (for audit)
+	Notes         *string
 }
 
 type RecordLeaveOutput struct {
@@ -192,20 +178,21 @@ func (uc *RecordLeaveUseCase) Execute(ctx context.Context, input RecordLeaveInpu
 			if actor, err := uc.employeeRepo.GetByUID(ctx, tx, actorUID); err == nil && actor != nil {
 				actorName = actor.Name
 			}
-			
-			actionSentence := fmt.Sprintf(
-				"%s recorded %s leave for %s — deducted %d days from balance (was %d used, now %d used)",
-				actorName, leaveType.NameEN, employee.Name,
-				workingDays, oldUsedDays, balance.UsedDays,
-			)
-			
+
+			actionParams := map[string]interface{}{
+				"Actor":     actorName,
+				"LeaveType": leaveType.NameEN,
+				"Employee":  employee.Name,
+				"Days":      float64(workingDays),
+				"OldUsed":   float64(oldUsedDays),
+				"NewUsed":   float64(balance.UsedDays),
+			}
+
 			defer uc.auditor.Actor(actorUID).
 				Did(audit.ActionDeductBalance).
 				On(audit.EntityLeaveBalance, balance.UID).
-				WithMeta("action", actionSentence).
-				WithMeta("employee_uid", input.EmployeeUID).
-				WithMeta("employee_name", employee.Name).
-				WithMeta("leave_type_uid", input.LeaveTypeUID).
+				WithMeta("action_key", "audit.sentence.record_leave").
+				WithMeta("action_params", actionParams).
 				WithMeta("leave_type_name", leaveType.NameEN).
 				WithMeta("deduction_amount", workingDays).
 				WithMeta("old_used_days", oldUsedDays).

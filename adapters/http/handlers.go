@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -96,6 +97,7 @@ type LeaveHandler struct {
 	getBalanceUC          *usecases.GetBalanceUseCase
 	listLeaveRecordsUC    *usecases.ListLeaveRecordsUseCase
 	listAllLeaveRecordsUC *usecases.ListAllLeaveRecordsUseCase
+	i18nService           ports.I18nService
 }
 
 func NewLeaveHandler(
@@ -103,12 +105,14 @@ func NewLeaveHandler(
 	getBalanceUC *usecases.GetBalanceUseCase,
 	listLeaveRecordsUC *usecases.ListLeaveRecordsUseCase,
 	listAllLeaveRecordsUC *usecases.ListAllLeaveRecordsUseCase,
+	i18nService ports.I18nService,
 ) *LeaveHandler {
 	return &LeaveHandler{
 		recordLeaveUC:         recordLeaveUC,
 		getBalanceUC:          getBalanceUC,
 		listLeaveRecordsUC:    listLeaveRecordsUC,
 		listAllLeaveRecordsUC: listAllLeaveRecordsUC,
+		i18nService:           i18nService,
 	}
 }
 
@@ -147,16 +151,13 @@ func (h *LeaveHandler) RecordLeave(w http.ResponseWriter, r *http.Request) {
 			statusCode = http.StatusNotFound
 		case errors.Is(err, usecases.ErrLeaveTypeNotFound):
 			statusCode = http.StatusNotFound
-		case errors.Is(err, usecases.ErrInsufficientBalance):
-			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrExceedsConsecutiveDays):
-			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrRecordingDeadlinePassed):
-			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrInvalidDateRange):
+		case errors.Is(err, usecases.ErrInsufficientBalance),
+			errors.Is(err, usecases.ErrExceedsConsecutiveDays),
+			errors.Is(err, usecases.ErrRecordingDeadlinePassed),
+			errors.Is(err, usecases.ErrInvalidDateRange):
 			statusCode = http.StatusBadRequest
 		}
-		writeError(w, statusCode, err.Error())
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/banumusa/backend/core/audit"
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
@@ -929,7 +930,7 @@ func TestAttendanceHandlerCreateLog(t *testing.T) {
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in","reason":"Manual correction"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -982,7 +983,7 @@ func TestAttendanceHandlerCreateLogReturnsConflictForDuplicatePunchTypeOnSameDat
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_in"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -1018,7 +1019,7 @@ func TestAttendanceHandlerCreateLogReturnsPreconditionFailedForCheckoutBeforeChe
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	createUC := usecases.NewCreateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, createUC, nil, nil, nil, nil)
 
 	body := `{"employeeUid":"emp_1","deviceUid":"dev_1","punchedAt":"2026-04-10T08:30:00Z","punchType":"check_out"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/attendance/logs", strings.NewReader(body))
@@ -1064,7 +1065,7 @@ func TestAttendanceHandlerUpdateLog(t *testing.T) {
 		device: &domain.AttendanceDevice{UID: "dev_1", Name: "Front Gate"},
 	}
 	updateUC := usecases.NewUpdateAttendanceLogUseCase(db, recordRepo, employeeRepo, deviceRepo, audit.Noop())
-	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil, nil, nil)
+	handler := NewAttendanceHandler(nil, nil, nil, nil, nil, updateUC, nil, nil, nil)
 
 	body := `{"deviceUid":"dev_1","punchedAt":"2026-04-10T17:30:00Z","punchType":"check_out","reason":"Corrected missed checkout"}`
 	req := httptest.NewRequest(http.MethodPatch, "/api/v1/attendance/logs/atr_1", strings.NewReader(body))

@@ -10,13 +10,15 @@ import (
 type ListAllAuditLogsUseCase struct {
 	repo ports.AuditLogRepository
 	db   ports.DB
+	i18n ports.I18nService
 }
 
 // NewListAllAuditLogsUseCase creates a new use case instance.
-func NewListAllAuditLogsUseCase(repo ports.AuditLogRepository, db ports.DB) *ListAllAuditLogsUseCase {
+func NewListAllAuditLogsUseCase(repo ports.AuditLogRepository, db ports.DB, i18n ports.I18nService) *ListAllAuditLogsUseCase {
 	return &ListAllAuditLogsUseCase{
 		repo: repo,
 		db:   db,
+		i18n: i18n,
 	}
 }
 
@@ -31,7 +33,7 @@ type ListAllAuditLogsInput struct {
 
 // ListAllAuditLogsOutput contains the result.
 type ListAllAuditLogsOutput struct {
-	Events      []AuditEventDTO
+	Events      []LocalizedAuditEventDTO
 	Page        int
 	PageSize    int
 	HasNextPage bool
@@ -67,18 +69,20 @@ func (uc *ListAllAuditLogsUseCase) Execute(ctx context.Context, input ListAllAud
 		return nil, err
 	}
 
-	// Convert to DTOs
-	events := make([]AuditEventDTO, 0, len(logs))
+	// Convert to localized DTOs
+	events := make([]LocalizedAuditEventDTO, 0, len(logs))
 	for _, log := range logs {
-		events = append(events, AuditEventDTO{
-			UID:        log.UID,
-			ActorUID:   log.ActorUID,
-			Action:     log.Action,
-			EntityType: log.EntityType,
-			EntityUID:  log.EntityUID,
-			Meta:       log.Meta,
-			OccurredAt: log.OccurredAt.Format("2006-01-02T15:04:05Z07:00"),
-			CreatedAt:  log.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		events = append(events, LocalizedAuditEventDTO{
+			UID:             log.UID,
+			ActorUID:        log.ActorUID,
+			Action:          log.Action,
+			ActionLabel:     uc.i18n.T(ctx, "audit.action."+log.Action),
+			EntityType:      log.EntityType,
+			EntityTypeLabel: uc.i18n.T(ctx, "audit.entity."+log.EntityType),
+			EntityUID:       log.EntityUID,
+			Meta:            log.Meta,
+			OccurredAt:      log.OccurredAt.Format("2006-01-02T15:04:05Z07:00"),
+			CreatedAt:       log.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 

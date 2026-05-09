@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/banumusa/backend/core/domain"
+	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -16,6 +18,7 @@ type AuthHandler struct {
 	refreshTokenUC   *usecases.RefreshTokenUseCase
 	logoutUC         *usecases.LogoutUseCase
 	getCurrentUserUC *usecases.GetCurrentUserUseCase
+	i18nService      ports.I18nService
 }
 
 func NewAuthHandler(
@@ -25,6 +28,7 @@ func NewAuthHandler(
 	refreshTokenUC *usecases.RefreshTokenUseCase,
 	logoutUC *usecases.LogoutUseCase,
 	getCurrentUserUC *usecases.GetCurrentUserUseCase,
+	i18nService ports.I18nService,
 ) *AuthHandler {
 	return &AuthHandler{
 		requestOTPUC:     requestOTPUC,
@@ -33,6 +37,7 @@ func NewAuthHandler(
 		refreshTokenUC:   refreshTokenUC,
 		logoutUC:         logoutUC,
 		getCurrentUserUC: getCurrentUserUC,
+		i18nService:      i18nService,
 	}
 }
 
@@ -96,19 +101,26 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		OTP:   req.OTP,
 	})
 	if err != nil {
+		var statusCode int
 		switch {
 		case errors.Is(err, usecases.ErrInvalidOTP):
-			writeJSONError(w, http.StatusUnauthorized, "invalid_otp", "Invalid OTP code")
+			statusCode = http.StatusUnauthorized
+			err = domain.NewLocalizedError("invalid_otp", "error.auth.invalid_otp", nil)
 		case errors.Is(err, usecases.ErrOTPExpired):
-			writeJSONError(w, http.StatusUnauthorized, "otp_expired", "OTP has expired")
+			statusCode = http.StatusUnauthorized
+			err = domain.NewLocalizedError("otp_expired", "error.auth.otp_expired", nil)
 		case errors.Is(err, usecases.ErrUserInactive):
-			writeJSONError(w, http.StatusForbidden, "user_inactive", "User account is inactive")
+			statusCode = http.StatusForbidden
+			err = domain.NewLocalizedError("user_inactive", "error.auth.account_disabled", nil)
 		case errors.Is(err, usecases.ErrWebAccessDenied):
-			writeJSONError(w, http.StatusForbidden, "web_access_denied", "Web portal is for administrators only. Please use the mobile app.")
+			statusCode = http.StatusForbidden
+			err = domain.NewLocalizedError("web_access_denied", "error.auth.unauthorized", nil)
 		default:
 			slog.Error("auth_handler.VerifyOTP.execute_usecase", "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to verify OTP")
+			statusCode = http.StatusInternalServerError
+			err = domain.NewLocalizedError("internal_error", "error.general.internal_error", nil)
 		}
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -143,19 +155,26 @@ func (h *AuthHandler) LoginPassword(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
+		var statusCode int
 		switch {
 		case errors.Is(err, usecases.ErrInvalidCredentials):
-			writeJSONError(w, http.StatusUnauthorized, "invalid_credentials", "Invalid phone or password")
+			statusCode = http.StatusUnauthorized
+			err = domain.NewLocalizedError("invalid_credentials", "error.auth.invalid_credentials", nil)
 		case errors.Is(err, usecases.ErrPasswordNotSet):
-			writeJSONError(w, http.StatusUnauthorized, "password_not_set", "Password not set for this account")
+			statusCode = http.StatusUnauthorized
+			err = domain.NewLocalizedError("password_not_set", "error.auth.invalid_credentials", nil)
 		case errors.Is(err, usecases.ErrUserInactive):
-			writeJSONError(w, http.StatusForbidden, "user_inactive", "User account is inactive")
+			statusCode = http.StatusForbidden
+			err = domain.NewLocalizedError("user_inactive", "error.auth.account_disabled", nil)
 		case errors.Is(err, usecases.ErrWebAccessDenied):
-			writeJSONError(w, http.StatusForbidden, "web_access_denied", "Web portal is for administrators only. Please use the mobile app.")
+			statusCode = http.StatusForbidden
+			err = domain.NewLocalizedError("web_access_denied", "error.auth.unauthorized", nil)
 		default:
 			slog.Error("auth_handler.LoginPassword.execute_usecase", "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to login")
+			statusCode = http.StatusInternalServerError
+			err = domain.NewLocalizedError("internal_error", "error.general.internal_error", nil)
 		}
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -193,12 +212,17 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: req.RefreshToken,
 	})
 	if err != nil {
-		if errors.Is(err, usecases.ErrInvalidRefreshToken) {
-			writeJSONError(w, http.StatusUnauthorized, "invalid_refresh_token", "Invalid or expired refresh token")
-			return
+		var statusCode int
+		switch {
+		case errors.Is(err, usecases.ErrInvalidRefreshToken):
+			statusCode = http.StatusUnauthorized
+			err = domain.NewLocalizedError("invalid_refresh_token", "error.auth.token_expired", nil)
+		default:
+			slog.Error("auth_handler.RefreshToken.execute_usecase", "error", err)
+			statusCode = http.StatusInternalServerError
+			err = domain.NewLocalizedError("internal_error", "error.general.internal_error", nil)
 		}
-		slog.Error("auth_handler.RefreshToken.execute_usecase", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to refresh token")
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 

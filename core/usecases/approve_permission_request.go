@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -32,6 +33,7 @@ type ApprovePermissionRequestUseCase struct {
 	roleRepo             ports.RoleRepository
 	userRepo             ports.UserRepository
 	notificationService  ports.NotificationService
+	auditor              audit.Auditor
 }
 
 func NewApprovePermissionRequestUseCase(
@@ -46,6 +48,7 @@ func NewApprovePermissionRequestUseCase(
 	roleRepo ports.RoleRepository,
 	userRepo ports.UserRepository,
 	notificationService ports.NotificationService,
+	auditor audit.Auditor,
 ) *ApprovePermissionRequestUseCase {
 	return &ApprovePermissionRequestUseCase{
 		db:                   db,
@@ -59,6 +62,7 @@ func NewApprovePermissionRequestUseCase(
 		roleRepo:             roleRepo,
 		userRepo:             userRepo,
 		notificationService:  notificationService,
+		auditor:              auditor,
 	}
 }
 
@@ -158,6 +162,35 @@ func (uc *ApprovePermissionRequestUseCase) Execute(ctx context.Context, input Ap
 		return nil, err
 	}
 
+	// Log audit event
+	if isFinal {
+		actorUser, _ := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, input.ActorEmployeeUID)
+		actorRole := ""
+		if actorUser != nil {
+			roles, _ := uc.roleRepo.GetRolesForUser(context.Background(), uc.db, actorUser.ID)
+			if len(roles) > 0 {
+				actorRole = roles[0].Name
+			}
+		}
+		actor, _ := uc.employeeRepo.GetByUID(context.Background(), uc.db, input.ActorEmployeeUID)
+		actorName := ""
+		if actor != nil {
+			actorName = actor.Name
+		}
+		actionParams := map[string]interface{}{
+			"Actor":          actorName,
+			"ActorRole":      actorRole,
+			"PermissionType": permission.Type.NameEN(),
+			"Date":           permission.PermissionDate.Format("Jan 2, 2006"),
+		}
+		defer uc.auditor.Actor(input.ActorEmployeeUID).
+			Did(audit.ActionApprove).
+			On("permission_request", permission.UID).
+			WithMeta("action_key", "audit.sentence.approve_permission").
+			WithMeta("action_params", actionParams).
+			Save(ctx)
+	}
+
 	if isFinal {
 		// Recompute attendance for that day so the excuse is reflected immediately.
 		go func() {
@@ -182,13 +215,14 @@ func (uc *ApprovePermissionRequestUseCase) notifyRequesterApproved(employeeUID s
 	if err != nil || user == nil {
 		return
 	}
-	title := "تمت الموافقة على طلب الإذن"
-	body := "تمت الموافقة على " + permission.Type.NameAR()
+	params := map[string]interface{}{
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
+	}
 	data := ports.NotificationData{
 		"type":       "permission_approved",
 		"requestUid": permission.UID,
 	}
-	if _, err := uc.notificationService.SendToUser(user.UID, title, body, data); err != nil {
+	if _, err := uc.notificationService.SendToUser(user.UID, "notification.permission_approved.title", "notification.permission_approved.body", params, data); err != nil {
 		slog.Error("approve_permission_request.notify", "error", err)
 	}
 }
@@ -209,13 +243,15 @@ func (uc *ApprovePermissionRequestUseCase) notifyNextStepApprovers(roleUID, depa
 	for i, u := range approvers {
 		userUIDs[i] = u.UID
 	}
-	title := "طلب إذن بانتظار الموافقة"
-	body := permission.Type.NameAR() + " — " + requester.Name
+	params := map[string]interface{}{
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
+		"EmployeeName":   requester.Name,
+	}
 	data := ports.NotificationData{
 		"type":       "pending_permission",
 		"requestUid": permission.UID,
 	}
-	if _, err := uc.notificationService.SendToUsers(userUIDs, title, body, data); err != nil {
+	if _, err := uc.notificationService.SendToUsers(userUIDs, "notification.pending_permission.title", "notification.pending_permission.body", params, data); err != nil {
 		slog.Error("approve_permission_request.notify_next", "error", err)
 	}
 }

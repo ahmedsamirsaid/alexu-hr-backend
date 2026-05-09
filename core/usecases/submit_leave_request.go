@@ -430,23 +430,23 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	}
 
 	// Audit log for leave request submission with human-readable action sentence
-	actionSentence := fmt.Sprintf(
-		"%s (Employee) submitted a %s leave request for %s to %s (%d days)",
-		employee.Name, leaveType.NameEN,
-		input.StartDate.Format("Jan 2, 2006"),
-		input.EndDate.Format("Jan 2, 2006"),
-		totalWorkingDays,
-	)
+	actionParams := map[string]interface{}{
+		"Employee":  employee.Name,
+		"LeaveType": leaveType.NameEN,
+		"StartDate": input.StartDate.Format("Jan 2, 2006"),
+		"EndDate":   input.EndDate.Format("Jan 2, 2006"),
+		"Days":      totalWorkingDays,
+	}
 	defer uc.auditor.Actor(input.EmployeeUID).
 		Did(audit.ActionSubmit).
 		On(audit.EntityLeaveRequest, leaveRequest.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.submit_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("leave_type", leaveType.NameEN).
 		WithMeta("start_date", input.StartDate.Format("2006-01-02")).
 		WithMeta("end_date", input.EndDate.Format("2006-01-02")).
 		WithMeta("days", totalWorkingDays).
 		WithMeta("new_status", "pending").
-		WithMeta("approval_request_uid", approvalRequest.UID).
 		Save(ctx)
 
 	submitAction := domain.NewApprovalAction(
@@ -477,7 +477,7 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	}
 
 	if step1RoleUID != "" {
-		go uc.notifyApprovers(step1RoleUID, departmentUID, employee.Name, leaveType.NameAR, leaveRequest.UID)
+		go uc.notifyApprovers(step1RoleUID, departmentUID, employee.Name, leaveType.NameAR, leaveType.NameEN, leaveRequest.UID)
 	}
 
 	return &SubmitLeaveRequestOutput{
@@ -678,7 +678,7 @@ func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(
 	return outputs, nil
 }
 
-func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeName, requestUID string) {
+func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("submit_leave_request.notifyApprovers.get_approvers", "error", err)
@@ -694,14 +694,22 @@ func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, emp
 		userUIDs[i] = user.UID
 	}
 
-	title := "طلب إجازة جديد"
-	body := "طلب " + employeeName + " " + leaveTypeName
+	params := map[string]interface{}{
+		"EmployeeName":  employeeName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
+	}
 	data := ports.NotificationData{
 		"type":       "pending_approval",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUsers(userUIDs, title, body, data)
+	_, err = uc.notificationService.SendToUsers(
+		userUIDs,
+		"notification.pending_approval.title",
+		"notification.pending_approval.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("submit_leave_request.notifyApprovers.send", "error", err)
 	}

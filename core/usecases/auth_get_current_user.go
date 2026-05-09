@@ -12,14 +12,15 @@ type GetCurrentUserInput struct {
 }
 
 type GetCurrentUserOutput struct {
-	UID         string         `json:"uid"`
-	Phone       string         `json:"phone"`
-	EmployeeUID *string        `json:"employeeUid"`
-	IsActive    bool           `json:"isActive"`
-	AccessScope string         `json:"accessScope"`
-	Roles       []RoleOutput   `json:"roles"`
-	Permissions []string       `json:"permissions"`
-	Employee    *EmployeeBasic `json:"employee,omitempty"`
+	UID               string         `json:"uid"`
+	Phone             string         `json:"phone"`
+	EmployeeUID       *string        `json:"employeeUid"`
+	IsActive          bool           `json:"isActive"`
+	PreferredLanguage string         `json:"preferredLanguage"`
+	AccessScope       string         `json:"accessScope"`
+	Roles             []RoleOutput   `json:"roles"`
+	Permissions       []string       `json:"permissions"`
+	Employee          *EmployeeBasic `json:"employee,omitempty"`
 }
 
 type RoleOutput struct {
@@ -95,13 +96,14 @@ func (uc *GetCurrentUserUseCase) Execute(ctx context.Context, input GetCurrentUs
 	}
 
 	output := &GetCurrentUserOutput{
-		UID:         user.UID,
-		Phone:       user.Phone,
-		EmployeeUID: user.EmployeeUID,
-		IsActive:    user.IsActive,
-		AccessScope: determineAccessScope(user.Roles),
-		Roles:       make([]RoleOutput, len(roles)),
-		Permissions: uc.collectPermissions(user),
+		UID:               user.UID,
+		Phone:             user.Phone,
+		EmployeeUID:       user.EmployeeUID,
+		IsActive:          user.IsActive,
+		PreferredLanguage: user.PreferredLanguage,
+		AccessScope:       determineAccessScope(user.Roles),
+		Roles:             make([]RoleOutput, len(roles)),
+		Permissions:       uc.collectPermissions(user),
 	}
 
 	for i, role := range roles {

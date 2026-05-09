@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -24,6 +25,7 @@ type UserOutput struct {
 	Phone                 string   `json:"phone"`
 	EmployeeUID           *string  `json:"employeeUid"`
 	EmployeeName          *string  `json:"employeeName,omitempty"`
+	PreferredLanguage     string   `json:"preferredLanguage"`
 	AccessScope           string   `json:"accessScope"`
 	Roles                 []string `json:"roles"`
 	Permissions           []string `json:"permissions"`
@@ -42,6 +44,7 @@ type VerifyOTPUseCase struct {
 	devOTPBypass     bool
 	devBypassOTP     string
 	refreshTokenDays int
+	auditor          audit.Auditor
 }
 
 type JWTService interface {
@@ -60,6 +63,7 @@ func NewVerifyOTPUseCase(
 	devOTPBypass bool,
 	devBypassOTP string,
 	refreshTokenDays int,
+	auditor audit.Auditor,
 ) *VerifyOTPUseCase {
 	return &VerifyOTPUseCase{
 		db:               db,
@@ -73,6 +77,7 @@ func NewVerifyOTPUseCase(
 		devOTPBypass:     devOTPBypass,
 		devBypassOTP:     devBypassOTP,
 		refreshTokenDays: refreshTokenDays,
+		auditor:          auditor,
 	}
 }
 
@@ -167,6 +172,24 @@ func (uc *VerifyOTPUseCase) handleSuccessfulAuth(ctx context.Context, phone stri
 		return nil, err
 	}
 
+	// Audit log for login (skip admin user)
+	if user.Phone != "+201000000000" {
+		actorUID := user.UID // Use user UID as actor if no employee UID
+		if user.EmployeeUID != nil {
+			actorUID = *user.EmployeeUID
+		}
+		actionParams := map[string]interface{}{
+			"Phone": user.Phone,
+		}
+		uc.auditor.Actor(actorUID).
+			Did(audit.ActionLogin).
+			On(audit.EntityUser, user.UID).
+			WithMeta("action_key", "audit.sentence.user_login").
+			WithMeta("action_params", actionParams).
+			WithMeta("login_method", "otp").
+			Save(ctx)
+	}
+
 	return &VerifyOTPOutput{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.RawToken,
@@ -199,6 +222,7 @@ func (uc *VerifyOTPUseCase) toUserOutput(ctx context.Context, user *domain.User)
 		UID:                   user.UID,
 		Phone:                 user.Phone,
 		EmployeeUID:           user.EmployeeUID,
+		PreferredLanguage:     user.PreferredLanguage,
 		AccessScope:           determineAccessScope(user.Roles),
 		Roles:                 roleNames,
 		Permissions:           permissions,

@@ -17,7 +17,7 @@ type GetActorAuditEventsInput struct {
 
 // GetActorAuditEventsOutput contains the paginated audit events for an actor.
 type GetActorAuditEventsOutput struct {
-	Events      []*domain.AuditLog
+	Events      []LocalizedAuditEventDTO
 	Page        int
 	PageSize    int
 	TotalPages  int
@@ -28,16 +28,19 @@ type GetActorAuditEventsOutput struct {
 type GetActorAuditEventsUseCase struct {
 	db           ports.DB
 	auditLogRepo ports.AuditLogRepository
+	i18n         ports.I18nService
 }
 
 // NewGetActorAuditEventsUseCase creates a new get actor audit events use case.
 func NewGetActorAuditEventsUseCase(
 	db ports.DB,
 	auditLogRepo ports.AuditLogRepository,
+	i18n ports.I18nService,
 ) *GetActorAuditEventsUseCase {
 	return &GetActorAuditEventsUseCase{
 		db:           db,
 		auditLogRepo: auditLogRepo,
+		i18n:         i18n,
 	}
 }
 
@@ -73,11 +76,28 @@ func (uc *GetActorAuditEventsUseCase) Execute(ctx context.Context, input GetActo
 		events = []*domain.AuditLog{}
 	}
 
+	// Convert to localized DTOs
+	localizedEvents := make([]LocalizedAuditEventDTO, len(events))
+	for i, event := range events {
+		localizedEvents[i] = LocalizedAuditEventDTO{
+			UID:             event.UID,
+			ActorUID:        event.ActorUID,
+			Action:          event.Action,
+			ActionLabel:     uc.i18n.T(ctx, "audit.action."+event.Action),
+			EntityType:      event.EntityType,
+			EntityTypeLabel: uc.i18n.T(ctx, "audit.entity."+event.EntityType),
+			EntityUID:       event.EntityUID,
+			Meta:            event.Meta,
+			OccurredAt:      event.OccurredAt.Format("2006-01-02T15:04:05Z07:00"),
+			CreatedAt:       event.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+	}
+
 	// Calculate pagination metadata
 	hasNextPage := len(events) == input.PageSize
 
 	return &GetActorAuditEventsOutput{
-		Events:      events,
+		Events:      localizedEvents,
 		Page:        input.Page,
 		PageSize:    input.PageSize,
 		HasNextPage: hasNextPage,

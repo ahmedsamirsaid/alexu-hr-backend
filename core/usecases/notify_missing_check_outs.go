@@ -181,15 +181,15 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx contex
 		return false, err
 	}
 
-	title := "تذكير بتسجيل الحضور"
-	body := "انتهت فترة السماح ولم يتم تسجيل الحضور بعد"
+	title := "notification.missing_check_in.title"
+	body := "notification.missing_check_in.body"
 	data := ports.NotificationData{
 		"type":           "missing_check_in_reminder",
 		"employeeUid":    employee.UID,
 		"attendanceDate": attendanceDate,
 	}
 
-	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, data)
+	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, nil, data)
 	if err != nil {
 		return false, err
 	}
@@ -235,15 +235,15 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployee(ctx context.Context, now
 		return false, err
 	}
 
-	title := "تذكير بتسجيل الانصراف"
-	body := "انتهى وقت الدوام ولم يتم تسجيل الانصراف بعد"
+	title := "notification.missing_check_out.title"
+	body := "notification.missing_check_out.body"
 	data := ports.NotificationData{
 		"type":           "missing_check_out_reminder",
 		"employeeUid":    group.EmployeeUID,
 		"attendanceDate": attendanceDate,
 	}
 
-	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, data)
+	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, nil, data)
 	if err != nil {
 		return false, err
 	}

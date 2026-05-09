@@ -9,11 +9,12 @@ import (
 )
 
 type UpdateUserInput struct {
-	UserUID     string
-	Phone       *string
-	Password    *string
-	EmployeeUID *string
-	IsActive    *bool
+	UserUID           string
+	Phone             *string
+	Password          *string
+	EmployeeUID       *string
+	IsActive          *bool
+	PreferredLanguage *string
 }
 
 type UpdateUserUseCase struct {
@@ -86,7 +87,6 @@ func (uc *UpdateUserUseCase) Execute(ctx context.Context, input UpdateUserInput)
 			user.EmployeeUID = input.EmployeeUID
 			newEmployeeUID = *input.EmployeeUID
 		}
-		auditBuilder.WithMeta("old_employee_uid", oldEmployeeUID).WithMeta("new_employee_uid", newEmployeeUID)
 		if newEmployeeUID != oldEmployeeUID {
 			changedFields = append(changedFields, fmt.Sprintf("employee link (%s → %s)", oldEmployeeUID, newEmployeeUID))
 		}
@@ -101,7 +101,20 @@ func (uc *UpdateUserUseCase) Execute(ctx context.Context, input UpdateUserInput)
 			}
 			changedFields = append(changedFields, status)
 		}
+		auditBuilder.WithMeta("old_is_active", oldIsActive).WithMeta("new_is_active", *input.IsActive)
+		if *input.IsActive != oldIsActive {
+			status := "deactivated"
+			if *input.IsActive {
+				status = "activated"
+			}
+			changedFields = append(changedFields, status)
+		}
 		user.IsActive = *input.IsActive
+	}
+
+	if input.PreferredLanguage != nil && *input.PreferredLanguage != user.PreferredLanguage {
+		changedFields = append(changedFields, fmt.Sprintf("preferred_language (%s → %s)", user.PreferredLanguage, *input.PreferredLanguage))
+		user.PreferredLanguage = *input.PreferredLanguage
 	}
 
 	if passwordChanged {
@@ -109,17 +122,11 @@ func (uc *UpdateUserUseCase) Execute(ctx context.Context, input UpdateUserInput)
 	}
 
 	// Build human-readable action sentence
-	actionSentence := "User account " + input.UserUID + " was updated"
-	if len(changedFields) > 0 {
-		actionSentence = "User account " + input.UserUID + " was updated: "
-		for i, f := range changedFields {
-			if i > 0 {
-				actionSentence += ", "
-			}
-			actionSentence += f
-		}
+	actionParams := map[string]interface{}{
+		"UserUID": input.UserUID,
 	}
-	auditBuilder.WithMeta("action", actionSentence)
+	auditBuilder.WithMeta("action_key", "audit.sentence.update_user").
+		WithMeta("action_params", actionParams)
 
 	defer auditBuilder.Save(ctx)
 

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 type AppConfig struct {
@@ -36,14 +37,18 @@ type AppConfig struct {
 	HolidaySyncTimezone      string
 	SchedulerIntervalMinutes int
 	// Storage config
-	MinIOEndpoint              string
-	MinIOAccessKey             string
-	MinIOSecretKey             string
-	MinIOUseSSL                bool
-	MinIODocumentsBucket       string
-	MinIOAutoCreateBucket      bool
-	MinIOUploadExpiryMinutes   int
-	MinIODownloadExpiryMinutes int
+	MinIOEndpoint                string
+	MinIOAccessKey               string
+	MinIOSecretKey               string
+	MinIOUseSSL                  bool
+	MinIODocumentsBucket         string
+	MinIOAutoCreateBucket        bool
+	MinIOUploadExpiryMinutes     int
+	MinIODownloadExpiryMinutes   int
+	I18nLocalesPath      string
+	I18nDefaultLocale    string
+	I18nSupportedLocales []string
+	I18nHotReload        bool
 }
 
 func LoadConfig() *AppConfig {
@@ -87,6 +92,12 @@ func LoadConfig() *AppConfig {
 		MinIOAutoCreateBucket:      getEnvBool("BANU_MUSA_MINIO_AUTO_CREATE_BUCKET", true),
 		MinIOUploadExpiryMinutes:   getEnvInt("BANU_MUSA_MINIO_UPLOAD_EXPIRY_MINUTES", 15),
 		MinIODownloadExpiryMinutes: getEnvInt("BANU_MUSA_MINIO_DOWNLOAD_EXPIRY_MINUTES", 15),
+
+		// I18n config
+		I18nLocalesPath:      getEnv("BANU_MUSA_I18N_LOCALES_PATH", "./locales"),
+		I18nDefaultLocale:    getEnv("BANU_MUSA_I18N_DEFAULT_LOCALE", "en"),
+		I18nSupportedLocales: getEnvStringSlice("BANU_MUSA_I18N_SUPPORTED_LOCALES", []string{"en", "ar"}),
+		I18nHotReload:        getEnvBool("BANU_MUSA_I18N_HOT_RELOAD", false),
 	}
 }
 
@@ -115,6 +126,28 @@ func getEnvInt(key string, defaultValue int) int {
 			return defaultValue
 		}
 		return parsed
+	}
+	return defaultValue
+}
+
+func getEnvStringSlice(key string, defaultValue []string) []string {
+	if value, exists := os.LookupEnv(key); exists {
+		if value == "" {
+			return defaultValue
+		}
+		// Split by comma and trim whitespace
+		parts := strings.Split(value, ",")
+		result := make([]string, 0, len(parts))
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) == 0 {
+			return defaultValue
+		}
+		return result
 	}
 	return defaultValue
 }

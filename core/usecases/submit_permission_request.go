@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -40,6 +41,7 @@ type SubmitPermissionRequestUseCase struct {
 	weekendRepo          ports.WeekendConfigRepository
 	roleRepo             ports.RoleRepository
 	notificationService  ports.NotificationService
+	auditor              audit.Auditor
 	now                  func() time.Time
 }
 
@@ -56,6 +58,7 @@ func NewSubmitPermissionRequestUseCase(
 	weekendRepo ports.WeekendConfigRepository,
 	roleRepo ports.RoleRepository,
 	notificationService ports.NotificationService,
+	auditor audit.Auditor,
 ) *SubmitPermissionRequestUseCase {
 	return &SubmitPermissionRequestUseCase{
 		db:                   db,
@@ -70,6 +73,7 @@ func NewSubmitPermissionRequestUseCase(
 		weekendRepo:          weekendRepo,
 		roleRepo:             roleRepo,
 		notificationService:  notificationService,
+		auditor:              auditor,
 		now:                  time.Now,
 	}
 }
@@ -190,6 +194,25 @@ func (uc *SubmitPermissionRequestUseCase) Execute(ctx context.Context, input Sub
 	if err := uc.approvalActionRepo.Create(ctx, tx, submitAction); err != nil {
 		return nil, err
 	}
+
+	// Audit log for permission request submission
+	actionParams := map[string]interface{}{
+		"Employee":       employee.Name,
+		"PermissionType": permissionRequest.Type.NameEN(),
+		"Date":           permissionRequest.PermissionDate.Format("Jan 2, 2006"),
+	}
+	defer uc.auditor.Actor(employee.UID).
+		Did(audit.ActionSubmit).
+		On("permission_request", permissionRequest.UID).
+		WithMeta("action_key", "audit.sentence.submit_permission").
+		WithMeta("action_params", actionParams).
+		WithMeta("permission_type", string(permissionRequest.Type)).
+		WithMeta("permission_date", permissionRequest.PermissionDate.Format("2006-01-02")).
+		WithMeta("start_time", permissionRequest.StartTime).
+		WithMeta("end_time", permissionRequest.EndTime).
+		WithMeta("new_status", "pending").
+		WithMeta("approval_request_uid", approvalRequest.UID).
+		Save(ctx)
 
 	// Capture data for notification before commit
 	step, err := uc.approvalFlowStepRepo.GetByFlowAndStep(ctx, tx, permissionDefaultFlowUID, currentStep)
@@ -363,13 +386,15 @@ func (uc *SubmitPermissionRequestUseCase) notifyApprovers(roleUID string, employ
 	for i, u := range approvers {
 		userUIDs[i] = u.UID
 	}
-	title := "طلب إذن جديد"
-	body := employee.Name + " طلب " + request.Type.NameAR()
+	params := map[string]interface{}{
+		"EmployeeName":   employee.Name,
+		"PermissionType": ports.LocalizableString{Ar: request.Type.NameAR(), En: request.Type.NameEN()},
+	}
 	data := ports.NotificationData{
 		"type":       "pending_permission",
 		"requestUid": request.UID,
 	}
-	if _, err := uc.notificationService.SendToUsers(userUIDs, title, body, data); err != nil {
+	if _, err := uc.notificationService.SendToUsers(userUIDs, "notification.pending_permission.title", "notification.pending_permission.body", params, data); err != nil {
 		slog.Error("submit_permission_request.notifyApprovers.send", "error", err)
 	}
 }

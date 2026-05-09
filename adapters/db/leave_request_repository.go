@@ -44,7 +44,7 @@ func (r *LeaveRequestRepository) GetByUIDs(ctx context.Context, q ports.Querier,
 
 	// Build IN clause with placeholders
 	query := `
-		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
+		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
 		WHERE uid IN (`
 
@@ -82,7 +82,6 @@ func (r *LeaveRequestRepository) GetByUIDs(ctx context.Context, q ports.Querier,
 
 	return requests, nil
 }
-
 func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q ports.Querier, approvalRequestUID string) (*domain.LeaveRequest, error) {
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at

@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"github.com/banumusa/backend/core/audit"
@@ -117,7 +116,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	if !isAuthorized {
 		return nil, ErrNotAuthorizedApprover
 	}
-
 	// Fetch actor employee name and role name for the audit action sentence
 	actorName := input.ActorEmployeeUID
 	if actor, err := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID); err == nil && actor != nil {
@@ -145,18 +143,21 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	}
 
 	// Build audit entry (deferred save fires on function return)
-	actionSentence := fmt.Sprintf(
-		"%s (%s) approved %s (Employee)'s %s leave request for %s to %s (%d days)",
-		actorName, actorRoleName, requester.Name, leaveTypeName,
-		leaveStartDate, leaveEndDate, leaveDays,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"ActorRole": actorRoleName,
+		"Requester": requester.Name,
+		"LeaveType": leaveTypeName,
+		"StartDate": leaveStartDate,
+		"EndDate":   leaveEndDate,
+		"Days":      leaveDays,
+	}
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionApprove).
 		On(audit.EntityLeaveRequest, leaveRequestUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.approve_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("comments", input.Comments).
-		// WithMeta("approval_request_uid", input.ApprovalRequestUID).
-		// WithMeta("requester_uid", approvalRequest.RequesterUID).
 		WithMeta("requester_name", requester.Name).
 		WithMeta("leave_type", leaveTypeName).
 		WithMeta("start_date", leaveStartDate).
@@ -166,7 +167,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		WithMeta("new_status", "approved").
 		WithMeta("step_order", approvalRequest.CurrentStep)
 	defer auditBuilder.Save(ctx)
-
 	// Record the approve action
 	currentStep := approvalRequest.CurrentStep
 	action := domain.NewApprovalAction(
@@ -212,8 +212,6 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 		}
 
 		// Re-check balance at approval time
-		oldUsedDays := balance.UsedDays
-		oldRemainingDays := balance.TotalDays - balance.UsedDays
 		remaining := balance.TotalDays - balance.UsedDays
 		if leaveRequest.Days > remaining {
 			// Reject due to insufficient balance at approval time
@@ -243,35 +241,12 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 			return nil, err
 		}
 
-		// Deduct balance
 		balance.UsedDays += leaveRequest.Days
 		if err := uc.leaveBalanceRepo.Update(ctx, tx, balance); err != nil {
 			return nil, err
 		}
 
-		// Audit log for balance deduction with old/new values
-		uc.auditor.Actor(input.ActorEmployeeUID).
-			Did(audit.ActionDeductBalance).
-			On(audit.EntityLeaveBalance, balance.UID).
-			WithMeta("action", fmt.Sprintf(
-				"%s approved %s's %s leave — deducted %.1f days from balance (was %.1f used, now %.1f used)",
-				actorName, requester.Name, leaveTypeName,
-				float64(leaveRequest.Days), float64(oldUsedDays), float64(balance.UsedDays),
-			)).
-			WithMeta("employee_uid", approvalRequest.RequesterUID).
-			WithMeta("leave_type_uid", leaveRequest.LeaveTypeUID).
-			WithMeta("leave_type_name", leaveType.NameAR).
-			WithMeta("deduction_amount", leaveRequest.Days).
-			WithMeta("old_used_days", oldUsedDays).
-			WithMeta("new_used_days", balance.UsedDays).
-			WithMeta("old_remaining_days", oldRemainingDays).
-			WithMeta("new_remaining_days", balance.TotalDays-balance.UsedDays).
-			WithMeta("start_date", leaveRequest.StartDate.Format("2006-01-02")).
-			WithMeta("end_date", leaveRequest.EndDate.Format("2006-01-02")).
-			WithMeta("year", year).
-			WithMeta("leave_request_uid", leaveRequest.UID).
-			Save(ctx)
-
+		
 		// Record balance transaction
 		balanceTx := domain.NewLeaveBalanceTransaction(
 			balance.ID,
@@ -294,7 +269,7 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Get data for notification before commit
 	var requesterUID string
-	var leaveTypeNameNotif string
+	var leaveTypeNameAR, leaveTypeNameEN string
 	var nextStepRoleUID string
 	var departmentUID string
 	var requesterNameNotif string
@@ -302,7 +277,8 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	if leaveRequest != nil {
 		lt, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if lt != nil {
-			leaveTypeNameNotif = lt.NameAR
+			leaveTypeNameAR = lt.NameAR
+			leaveTypeNameEN = lt.NameEN
 		}
 	}
 
@@ -323,9 +299,9 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Send notification after commit (non-blocking, uses background context)
 	if isFinalApproval && requesterUID != "" {
-		go uc.notifyRequesterApproved(requesterUID, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyRequesterApproved(requesterUID, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	} else if nextStepRoleUID != "" {
-		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterNameNotif, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterNameNotif, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	}
 
 	return &ApproveRequestOutput{
@@ -334,27 +310,34 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	}, nil
 }
 
-func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeName, requestUID string) {
+func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("approve_request.notifyRequesterApproved.no_user", "employee_uid", employeeUID)
 		return
 	}
 
-	title := "تمت الموافقة على طلب الإجازة"
-	body := "تمت الموافقة على طلب " + leaveTypeName
+	params := map[string]interface{}{
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
+	}
 	data := ports.NotificationData{
 		"type":       "request_approved",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUser(user.UID, title, body, data)
+	_, err = uc.notificationService.SendToUser(
+		user.UID,
+		"notification.leave_approved.title",
+		"notification.leave_approved.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("approve_request.notifyRequesterApproved.send", "error", err)
 	}
 }
 
-func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID, requesterName, leaveTypeName, requestUID string) {
+func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID, requesterName, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("approve_request.notifyNextStepApprovers.get_approvers", "error", err, "role_uid", roleUID)
@@ -371,14 +354,22 @@ func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID,
 		userUIDs[i] = user.UID
 	}
 
-	title := "طلب إجازة بانتظار الموافقة"
-	body := "طلب " + leaveTypeName + " من " + requesterName
+	params := map[string]interface{}{
+		"EmployeeName":  requesterName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
+	}
 	data := ports.NotificationData{
 		"type":       "pending_approval",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUsers(userUIDs, title, body, data)
+	_, err = uc.notificationService.SendToUsers(
+		userUIDs,
+		"notification.pending_approval.title",
+		"notification.pending_approval.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("approve_request.notifyNextStepApprovers.send", "error", err)
 	}

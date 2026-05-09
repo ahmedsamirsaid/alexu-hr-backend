@@ -107,11 +107,13 @@ func (uc *UpdateApprovalFlowUseCase) Execute(ctx context.Context, input UpdateAp
 	}
 
 	// Build human-readable action sentence
-	actionSentence := fmt.Sprintf("%s updated approval flow '%s'", actorName, flow.NameEN)
-	if len(changedFields) > 0 {
-		actionSentence = fmt.Sprintf("%s updated approval flow '%s': %s", actorName, flow.NameEN, changedFields[0])
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  flow.NameEN,
 	}
-	auditBuilder.WithMeta("action", actionSentence).WithMeta("flow_name", flow.NameEN)
+
+	auditBuilder.WithMeta("action_key", "audit.sentence.update_approval_flow").
+		WithMeta("action_params", actionParams).WithMeta("flow_name", flow.NameEN)
 
 	if err := uc.flowRepo.Update(ctx, tx, flow); err != nil {
 		return nil, err

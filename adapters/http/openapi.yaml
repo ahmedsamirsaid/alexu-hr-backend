@@ -52,6 +52,11 @@ components:
           type: string
           nullable: true
           example: "Ahmed Al-Sayed"
+        preferredLanguage:
+          type: string
+          enum: [ar, en]
+          example: "ar"
+          description: Preferred language for push notifications
         accessScope:
           type: string
           enum: [global, department, self]
@@ -116,6 +121,11 @@ components:
         isActive:
           type: boolean
           example: true
+        preferredLanguage:
+          type: string
+          enum: [ar, en]
+          example: "ar"
+          description: Preferred language for push notifications
         accessScope:
           type: string
           enum: [global, department, self]
@@ -2524,6 +2534,11 @@ paths:
                 isActive:
                   type: boolean
                   example: true
+                preferredLanguage:
+                  type: string
+                  enum: [ar, en]
+                  example: "en"
+                  description: Preferred language for push notifications (admin override)
       responses:
         "200":
           description: Updated
@@ -2535,6 +2550,49 @@ paths:
                   message:
                     type: string
                     example: "User updated"
+
+  /api/v1/me/language:
+    put:
+      tags: [Me]
+      summary: Update own notification language preference
+      description: >
+        Sets the preferred language for push notifications for the authenticated user.
+        No special permissions required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  type: string
+                  enum: [ar, en]
+                  example: "en"
+      responses:
+        "200":
+          description: Language updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Language updated"
+        "400":
+          description: Invalid language value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/v1/users/{uid}/roles:
     post:

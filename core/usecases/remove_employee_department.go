@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/ports"
@@ -40,27 +39,20 @@ func (uc *RemoveEmployeeDepartmentUseCase) Execute(ctx context.Context, input Re
 		return ErrEmployeeNotFound
 	}
 
-	// Capture old department info for audit metadata
-	var oldDepartmentUID string
-	if employee.DepartmentUID != nil {
-		oldDepartmentUID = *employee.DepartmentUID
-	}
-	
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s removed %s (Employee) from their department",
-		actorName, employee.Name,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":    actorName,
+		"Employee": employee.Name,
+	}
 
 	// Audit log with department information
 	defer uc.auditor.From(ctx).
 		Did("remove_department").
 		On(audit.EntityEmployee, input.EmployeeUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.remove_employee_department").
+		WithMeta("action_params", actionParams).
 		WithMeta("employee_name", employee.Name).
-		WithMeta("old_department_uid", oldDepartmentUID).
-		WithMeta("new_department_uid", nil).
 		Save(ctx)
 
 	// Remove department assignment (idempotent - no error if already null)

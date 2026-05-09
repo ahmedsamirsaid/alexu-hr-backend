@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -53,12 +52,16 @@ func (uc *CreateRoleUseCase) Execute(ctx context.Context, input CreateRoleInput)
 
 	role := domain.NewRole(input.Name, input.Description, normalizedScopeType)
 
-	actionSentence := fmt.Sprintf("Role '%s' (%s scope) was created", role.Name, role.ScopeType)
+	actionParams := map[string]interface{}{
+		"Name":      role.Name,
+		"ScopeType": role.ScopeType,
+	}
 
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityRole, role.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.create_role").
+		WithMeta("action_params", actionParams).
 		WithMeta("name", role.Name).
 		WithMeta("scope_type", role.ScopeType).
 		WithMeta("description", role.Description).

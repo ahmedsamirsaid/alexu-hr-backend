@@ -240,7 +240,8 @@ func (r *RoleRepository) GetUsersByRoleAndDepartment(ctx context.Context, q port
 	// 1. Have a global role assignment (department_uid IS NULL), OR
 	// 2. Have a role scoped to the specific department (if departmentUID provided)
 	query := `
-		SELECT DISTINCT u.id, u.uid, u.phone, u.password_hash, u.employee_uid, u.is_active, u.created_at, u.updated_at
+		SELECT DISTINCT u.id, u.uid, u.phone, u.password_hash, u.employee_uid, u.is_active,
+		       COALESCE(u.preferred_language,''), u.created_at, u.updated_at
 		FROM users u
 		JOIN user_roles ur ON u.id = ur.user_id
 		JOIN roles r ON ur.role_id = r.id
@@ -359,7 +360,8 @@ func (r *RoleRepository) RemoveRoleFromUserForDepartment(ctx context.Context, q 
 
 func (r *RoleRepository) GetDepartmentManager(ctx context.Context, q ports.Querier, departmentUID string) (*domain.User, error) {
 	query := `
-		SELECT u.id, u.uid, u.phone, u.password_hash, u.employee_uid, u.is_active, u.created_at, u.updated_at
+		SELECT u.id, u.uid, u.phone, u.password_hash, u.employee_uid, u.is_active,
+		       COALESCE(u.preferred_language,''), u.created_at, u.updated_at
 		FROM users u
 		JOIN user_roles ur ON u.id = ur.user_id
 		JOIN roles r ON ur.role_id = r.id

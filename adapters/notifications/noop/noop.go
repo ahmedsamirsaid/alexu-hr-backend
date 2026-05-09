@@ -14,23 +14,25 @@ func NewNoopNotificationService() *NoopNotificationService {
 	return &NoopNotificationService{}
 }
 
-// SendToUser logs the notification but does not send it.
-func (s *NoopNotificationService) SendToUser(userUID, title, body string, data ports.NotificationData) (int, error) {
+// SendToUser logs the notification keys but does not send it.
+func (s *NoopNotificationService) SendToUser(userUID, titleKey, bodyKey string, params map[string]interface{}, data ports.NotificationData) (int, error) {
 	slog.Info("noop_notification.SendToUser",
 		"user_uid", userUID,
-		"title", title,
-		"body", body,
+		"title_key", titleKey,
+		"body_key", bodyKey,
+		"params", params,
 		"data", data,
 	)
 	return 0, nil
 }
 
-// SendToUsers logs the notification but does not send it.
-func (s *NoopNotificationService) SendToUsers(userUIDs []string, title, body string, data ports.NotificationData) (int, error) {
+// SendToUsers logs the notification keys but does not send it.
+func (s *NoopNotificationService) SendToUsers(userUIDs []string, titleKey, bodyKey string, params map[string]interface{}, data ports.NotificationData) (int, error) {
 	slog.Info("noop_notification.SendToUsers",
 		"user_uids", userUIDs,
-		"title", title,
-		"body", body,
+		"title_key", titleKey,
+		"body_key", bodyKey,
+		"params", params,
 		"data", data,
 	)
 	return 0, nil

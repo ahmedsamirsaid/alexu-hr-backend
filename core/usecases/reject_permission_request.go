@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -25,6 +26,7 @@ type RejectPermissionRequestUseCase struct {
 	roleRepo             ports.RoleRepository
 	userRepo             ports.UserRepository
 	notificationService  ports.NotificationService
+	auditor              audit.Auditor
 }
 
 func NewRejectPermissionRequestUseCase(
@@ -37,6 +39,7 @@ func NewRejectPermissionRequestUseCase(
 	roleRepo ports.RoleRepository,
 	userRepo ports.UserRepository,
 	notificationService ports.NotificationService,
+	auditor audit.Auditor,
 ) *RejectPermissionRequestUseCase {
 	return &RejectPermissionRequestUseCase{
 		db:                   db,
@@ -48,6 +51,7 @@ func NewRejectPermissionRequestUseCase(
 		roleRepo:             roleRepo,
 		userRepo:             userRepo,
 		notificationService:  notificationService,
+		auditor:              auditor,
 	}
 }
 
@@ -129,6 +133,38 @@ func (uc *RejectPermissionRequestUseCase) Execute(ctx context.Context, input Rej
 		return nil, err
 	}
 
+	// Log audit event
+	if permission != nil {
+		actorUser, _ := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, input.ActorEmployeeUID)
+		actorRole := ""
+		if actorUser != nil {
+			roles, _ := uc.roleRepo.GetRolesForUser(context.Background(), uc.db, actorUser.ID)
+			if len(roles) > 0 {
+				actorRole = roles[0].Name
+			}
+		}
+		actor, _ := uc.employeeRepo.GetByUID(context.Background(), uc.db, input.ActorEmployeeUID)
+		actorName := ""
+		if actor != nil {
+			actorName = actor.Name
+		}
+		actionParams := map[string]interface{}{
+			"Actor":          actorName,
+			"ActorRole":      actorRole,
+			"PermissionType": permission.Type.NameEN(),
+			"Date":           permission.PermissionDate.Format("Jan 2, 2006"),
+		}
+		if input.Comments != nil && *input.Comments != "" {
+			actionParams["Reason"] = *input.Comments
+		}
+		defer uc.auditor.Actor(input.ActorEmployeeUID).
+			Did(audit.ActionReject).
+			On("permission_request", permission.UID).
+			WithMeta("action_key", "audit.sentence.reject_permission").
+			WithMeta("action_params", actionParams).
+			Save(ctx)
+	}
+
 	if permission != nil {
 		go uc.notifyRequesterRejected(requester.UID, permission, input.Comments)
 	}
@@ -144,15 +180,17 @@ func (uc *RejectPermissionRequestUseCase) notifyRequesterRejected(employeeUID st
 	if err != nil || user == nil {
 		return
 	}
-	body := "تم رفض طلب " + permission.Type.NameAR()
+	params := map[string]interface{}{
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
+	}
 	if comments != nil && *comments != "" {
-		body += " — " + *comments
+		params["Comments"] = *comments
 	}
 	data := ports.NotificationData{
 		"type":       "permission_rejected",
 		"requestUid": permission.UID,
 	}
-	if _, err := uc.notificationService.SendToUser(user.UID, "تم رفض طلب الإذن", body, data); err != nil {
+	if _, err := uc.notificationService.SendToUser(user.UID, "notification.permission_rejected.title", "notification.permission_rejected.body", params, data); err != nil {
 		slog.Error("reject_permission_request.notify", "error", err)
 	}
 }

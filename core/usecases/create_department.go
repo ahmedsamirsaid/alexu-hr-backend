@@ -3,7 +3,6 @@ package usecases
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
@@ -53,12 +52,16 @@ func (uc *CreateDepartmentUseCase) Execute(ctx context.Context, input CreateDepa
 	department := domain.NewDepartment(input.Code, input.NameEN, input.NameAR)
 	department.DefaultShiftUID = input.DefaultShiftUID
 
-	actionSentence := fmt.Sprintf("Department '%s' (code: %s) was created", input.NameEN, input.Code)
+	actionParams := map[string]interface{}{
+		"Name": input.NameEN,
+		"Code": input.Code,
+	}
 
 	defer uc.auditor.From(ctx).
 		Did(audit.ActionCreate).
 		On(audit.EntityDepartment, department.UID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.create_department").
+		WithMeta("action_params", actionParams).
 		WithMeta("code", input.Code).
 		WithMeta("name_en", input.NameEN).
 		WithMeta("new_state", map[string]interface{}{

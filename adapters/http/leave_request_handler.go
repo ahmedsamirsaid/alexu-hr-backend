@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
+	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 )
 
@@ -25,6 +26,7 @@ type LeaveRequestHandler struct {
 	rejectUC               *usecases.RejectRequestUseCase
 	historyUC              *usecases.GetApprovalHistoryUseCase
 	getCurrentUserUC       *usecases.GetCurrentUserUseCase
+	i18nService            ports.I18nService
 }
 
 func NewLeaveRequestHandler(
@@ -39,6 +41,7 @@ func NewLeaveRequestHandler(
 	rejectUC *usecases.RejectRequestUseCase,
 	historyUC *usecases.GetApprovalHistoryUseCase,
 	getCurrentUserUC *usecases.GetCurrentUserUseCase,
+	i18nService ports.I18nService,
 ) *LeaveRequestHandler {
 	return &LeaveRequestHandler{
 		submitUC:               submitUC,
@@ -52,6 +55,7 @@ func NewLeaveRequestHandler(
 		rejectUC:               rejectUC,
 		historyUC:              historyUC,
 		getCurrentUserUC:       getCurrentUserUC,
+		i18nService:            i18nService,
 	}
 }
 
@@ -407,18 +411,16 @@ func (h *LeaveRequestHandler) SubmitLeaveRequest(w http.ResponseWriter, r *http.
 			statusCode = http.StatusBadRequest
 		case errors.Is(err, usecases.ErrOverlappingRequest):
 			statusCode = http.StatusConflict
-		case errors.Is(err, usecases.ErrLeaveRequestDocumentsRequired):
+		case errors.Is(err, usecases.ErrLeaveRequestDocumentsRequired),
+			errors.Is(err, usecases.ErrLeaveRequestDocumentsUnsupported):
 			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrLeaveRequestDocumentsUnsupported):
-			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrInvalidFilename):
-			statusCode = http.StatusBadRequest
-		case errors.Is(err, usecases.ErrInvalidContentType):
+		case errors.Is(err, usecases.ErrInvalidFilename),
+			errors.Is(err, usecases.ErrInvalidContentType):
 			statusCode = http.StatusBadRequest
 		default:
 			slog.Error("leave_request_handler.SubmitLeaveRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -553,7 +555,7 @@ func (h *LeaveRequestHandler) CancelLeaveRequest(w http.ResponseWriter, r *http.
 		default:
 			slog.Error("leave_request_handler.CancelLeaveRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -646,7 +648,7 @@ func (h *LeaveRequestHandler) UpdateRejectedLeaveRequest(w http.ResponseWriter, 
 		default:
 			slog.Error("leave_request_handler.UpdateRejectedLeaveRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -899,7 +901,7 @@ func (h *LeaveRequestHandler) GetLeaveRequest(w http.ResponseWriter, r *http.Req
 		} else {
 			slog.Error("leave_request_handler.GetLeaveRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -1061,7 +1063,7 @@ func (h *LeaveRequestHandler) ApproveRequest(w http.ResponseWriter, r *http.Requ
 		default:
 			slog.Error("leave_request_handler.ApproveRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -1121,7 +1123,7 @@ func (h *LeaveRequestHandler) RejectRequest(w http.ResponseWriter, r *http.Reque
 		default:
 			slog.Error("leave_request_handler.RejectRequest.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 
@@ -1147,7 +1149,7 @@ func (h *LeaveRequestHandler) GetApprovalHistory(w http.ResponseWriter, r *http.
 		} else {
 			slog.Error("leave_request_handler.GetApprovalHistory.execute_usecase", "error", err)
 		}
-		writeLeaveRequestErrorFromUseCase(w, statusCode, err)
+		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
 	}
 

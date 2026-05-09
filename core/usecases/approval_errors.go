@@ -15,10 +15,9 @@ var (
 	ErrStepHasPendingRequests   = errors.New("cannot delete step with pending requests")
 
 	// Leave Request errors
-	ErrLeaveRequestNotFound        = errors.New("leave request not found")
-	ErrLeaveTypeNoApprovalRequired = errors.New("leave type does not require approval")
-	ErrNoDepartmentAssigned        = errors.New("employee has no department assigned")
-	ErrOverlappingRequest          = errors.New("overlapping leave request exists")
+	ErrLeaveRequestNotFound         = errors.New("leave request not found")
+	ErrLeaveTypeNoApprovalRequired  = errors.New("leave type does not require approval")
+	ErrNoDepartmentAssigned         = errors.New("employee has no department assigned")
 	ErrLeaveRequestDocumentNotFound = errors.New("leave request document not found")
 
 	// Approval Request errors

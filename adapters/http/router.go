@@ -2,6 +2,7 @@ package http
 
 import (
 	"net/http"
+	"github.com/banumusa/backend/core/ports"
 )
 
 type RouterConfig struct {
@@ -26,7 +27,9 @@ type RouterConfig struct {
 	JWTService              *JWTService
 	AuthEnabled             bool
 	DocumentHandler         *DocumentHandler
+	I18nService             ports.I18nService
 	PermissionRequestHandler *PermissionRequestHandler
+	MeHandler                *MeHandler
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
@@ -42,6 +45,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/dashboard/stats", RequirePermission("employees:read")(http.HandlerFunc(cfg.DashboardHandler.GetStats)))
 	protectedMux.HandleFunc("POST /api/v1/auth/logout", cfg.AuthHandler.Logout)
 	protectedMux.HandleFunc("GET /api/v1/auth/me", cfg.AuthHandler.GetCurrentUser)
+	protectedMux.HandleFunc("PUT /api/v1/me/language", cfg.MeHandler.UpdateLanguage)
 
 	protectedMux.Handle("POST /api/v1/leave", RequirePermission("leave:record")(http.HandlerFunc(cfg.LeaveHandler.RecordLeave)))
 	protectedMux.Handle("GET /api/v1/leave-records", RequirePermission("leave:record")(http.HandlerFunc(cfg.LeaveHandler.ListAllLeaveRecords)))
@@ -166,9 +170,12 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/audit/actor/{actorUID}", RequirePermission("audit:read")(http.HandlerFunc(cfg.AuditHandler.GetActorAuditEvents)))
 
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)
-	mux.Handle("/api/v1/", authMiddleware(protectedMux))
+	languageMiddleware := LanguageMiddleware(cfg.I18nService)
+	
+	// Apply language middleware to all routes, then auth middleware to protected routes
+	mux.Handle("/api/v1/", languageMiddleware(authMiddleware(protectedMux)))
 
 	RegisterSwaggerRoutes(mux)
 
-	return CORSMiddleware(mux)
+	return CORSMiddleware(languageMiddleware(mux))
 }

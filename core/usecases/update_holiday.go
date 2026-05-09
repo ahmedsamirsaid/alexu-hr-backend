@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/banumusa/backend/core/audit"
@@ -64,7 +63,7 @@ func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHoliday
 		nameAR = *input.NameAR
 	}
 
-	// Capture old values for audit
+
 	oldDate := definition.Date
 	oldNameEN := definition.NameEN
 	oldNameAR := definition.NameAR
@@ -96,16 +95,17 @@ func (uc *UpdateHolidayUseCase) Execute(ctx context.Context, input UpdateHoliday
 
 	// Build human-readable action sentence
 	actorName := audit.ActorFromContext(ctx)
-	actionSentence := fmt.Sprintf(
-		"%s updated holiday '%s'",
-		actorName, definition.NameEN,
-	)
+	actionParams := map[string]interface{}{
+		"Actor": actorName,
+		"Name":  definition.NameEN,
+	}
 
 	// Build audit metadata with field changes
 	auditBuilder := uc.auditor.From(ctx).
 		Did(audit.ActionUpdate).
 		On(audit.EntityHoliday, definition.UID).
-		WithMeta("action", actionSentence)
+		WithMeta("action_key", "audit.sentence.update_holiday").
+		WithMeta("action_params", actionParams)
 
 	if !oldDate.Equal(dateOnly) {
 		auditBuilder.WithMeta("old_date", oldDate.Format("2006-01-02")).

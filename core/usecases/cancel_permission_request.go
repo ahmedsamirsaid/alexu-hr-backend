@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -23,6 +24,7 @@ type CancelPermissionRequestUseCase struct {
 	shiftRepo           ports.ShiftRepository
 	userRepo            ports.UserRepository
 	notificationService ports.NotificationService
+	auditor             audit.Auditor
 }
 
 func NewCancelPermissionRequestUseCase(
@@ -35,6 +37,7 @@ func NewCancelPermissionRequestUseCase(
 	shiftRepo ports.ShiftRepository,
 	userRepo ports.UserRepository,
 	notificationService ports.NotificationService,
+	auditor audit.Auditor,
 ) *CancelPermissionRequestUseCase {
 	return &CancelPermissionRequestUseCase{
 		db:                  db,
@@ -46,6 +49,7 @@ func NewCancelPermissionRequestUseCase(
 		shiftRepo:           shiftRepo,
 		userRepo:            userRepo,
 		notificationService: notificationService,
+		auditor:             auditor,
 	}
 }
 
@@ -104,6 +108,31 @@ func (uc *CancelPermissionRequestUseCase) Execute(ctx context.Context, input Can
 		return err
 	}
 
+	// Get employee name for audit
+	employee, _ := uc.employeeRepo.GetByUID(ctx, tx, input.ActorEmployeeUID)
+	actorName := input.ActorEmployeeUID
+	if employee != nil {
+		actorName = employee.Name
+	}
+
+	// Audit log for permission request cancellation
+	actionParams := map[string]interface{}{
+		"Actor":          actorName,
+		"PermissionType": request.Type.NameEN(),
+		"Date":           request.PermissionDate.Format("Jan 2, 2006"),
+	}
+	defer uc.auditor.Actor(input.ActorEmployeeUID).
+		Did(audit.ActionCancel).
+		On("permission_request", request.UID).
+		WithMeta("action_key", "audit.sentence.cancel_permission").
+		WithMeta("action_params", actionParams).
+		WithMeta("permission_type", string(request.Type)).
+		WithMeta("permission_date", request.PermissionDate.Format("2006-01-02")).
+		WithMeta("old_status", "pending").
+		WithMeta("new_status", "cancelled").
+		WithMeta("approval_request_uid", approvalRequest.UID).
+		Save(ctx)
+
 	// Find last approver (if any) to notify on cancel-after-approval.
 	var lastApproverUID string
 	if wasApproved {
@@ -142,13 +171,15 @@ func (uc *CancelPermissionRequestUseCase) notifyApproverCancelled(approverEmploy
 	if err != nil || user == nil {
 		return
 	}
-	title := "تم إلغاء طلب إذن سبق اعتماده"
-	body := request.Type.NameAR() + " — " + request.PermissionDate.Format("2006-01-02")
+	params := map[string]interface{}{
+		"PermissionType": ports.LocalizableString{Ar: request.Type.NameAR(), En: request.Type.NameEN()},
+		"Date":           request.PermissionDate.Format("2006-01-02"),
+	}
 	data := ports.NotificationData{
 		"type":       "permission_cancelled_after_approval",
 		"requestUid": request.UID,
 	}
-	if _, err := uc.notificationService.SendToUser(user.UID, title, body, data); err != nil {
+	if _, err := uc.notificationService.SendToUser(user.UID, "notification.permission_cancelled.title", "notification.permission_cancelled.body", params, data); err != nil {
 		slog.Error("cancel_permission_request.notify", "error", err)
 	}
 }

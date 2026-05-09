@@ -1,0 +1,76 @@
+{
+  "notification": {
+    "leave_approved": {
+      "title": "Leave Request Approved",
+      "body": "Your {{.LeaveTypeName}} leave request has been approved"
+    },
+    "leave_rejected": {
+      "title": "Leave Request Rejected",
+      "body": "Your {{.LeaveTypeName}} leave request has been rejected"
+    },
+    "pending_approval": {
+      "title": "Pending Approval",
+      "body": "{{.EmployeeName}} submitted a {{.LeaveTypeName}} leave request requiring your approval"
+    },
+    "permission_approved": {
+      "title": "Permission Request Approved",
+      "body": "Your {{.PermissionType}} request has been approved"
+    },
+    "permission_rejected": {
+      "title": "Permission Request Rejected",
+      "body": "Your {{.PermissionType}} request has been rejected"
+    },
+    "permission_cancelled": {
+      "title": "Approved Permission Cancelled",
+      "body": "{{.PermissionType}} — {{.Date}}"
+    },
+    "pending_permission": {
+      "title": "Permission Request Pending Approval",
+      "body": "{{.EmployeeName}} submitted a {{.PermissionType}} request requiring your approval"
+    },
+    "missing_check_in": {
+      "title": "Check-In Reminder",
+      "body": "Grace period ended and check-in has not been recorded yet"
+    },
+    "missing_check_out": {
+      "title": "Check-Out Reminder",
+      "body": "Work time has ended and check-out has not been recorded yet"
+    },
+    "attendance_reminder": {
+      "title": "Attendance Reminder",
+      "body": "Don't forget to check out before leaving"
+    },
+    "leave_cancelled": {
+      "title": "Leave Request Cancelled",
+      "body": "Your leave request from {{.StartDate}} to {{.EndDate}} has been cancelled"
+    },
+    "approval_delegated": {
+      "title": "Approval Delegated",
+      "body": "An approval request has been delegated to you by {{.DelegatorName}}"
+    },
+    "balance_updated": {
+      "title": "Leave Balance Updated",
+      "body": "Your {{.LeaveType}} balance has been updated. New balance: {{.NewBalance}} days"
+    },
+    "shift_assigned": {
+      "title": "Shift Assigned",
+      "body": "You have been assigned to {{.ShiftName}} shift"
+    },
+    "attendance_anomaly": {
+      "title": "Attendance Anomaly Detected",
+      "body": "Please review your attendance record for {{.Date}}"
+    },
+    "document_uploaded": {
+      "title": "Document Uploaded",
+      "body": "A new document has been uploaded for your leave request"
+    },
+    "holiday_announced": {
+      "title": "Holiday Announced",
+      "body": "{{.HolidayName}} on {{.Date}}"
+    },
+    "approval_reminder": {
+      "title": "Approval Reminder",
+      "body": "You have {{.Count}} pending approval requests"
+    }
+  }
+}

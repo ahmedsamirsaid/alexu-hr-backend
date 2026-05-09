@@ -116,17 +116,12 @@ func (uc *UpdateDepartmentUseCase) Execute(ctx context.Context, input UpdateDepa
 	}
 
 	// Build human-readable action sentence
-	actionSentence := fmt.Sprintf("Department '%s' was updated", department.NameEN)
-	if len(changedFields) > 0 {
-		actionSentence = fmt.Sprintf("Department '%s' was updated: ", department.NameEN)
-		for i, f := range changedFields {
-			if i > 0 {
-				actionSentence += ", "
-			}
-			actionSentence += f
-		}
+	actionParams := map[string]interface{}{
+		"Name": department.NameEN,
 	}
-	auditBuilder = auditBuilder.WithMeta("action", actionSentence)
+
+	auditBuilder = auditBuilder.WithMeta("action_key", "audit.sentence.update_department").
+		WithMeta("action_params", actionParams)
 
 	defer auditBuilder.Save(ctx)
 

@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -29,6 +30,7 @@ type LoginPasswordUseCase struct {
 	devOTPBypass     bool
 	devBypassOTP     string
 	refreshTokenDays int
+	auditor          audit.Auditor
 }
 
 func NewLoginPasswordUseCase(
@@ -42,6 +44,7 @@ func NewLoginPasswordUseCase(
 	devOTPBypass bool,
 	devBypassOTP string,
 	refreshTokenDays int,
+	auditor audit.Auditor,
 ) *LoginPasswordUseCase {
 	return &LoginPasswordUseCase{
 		db:               db,
@@ -54,6 +57,7 @@ func NewLoginPasswordUseCase(
 		devOTPBypass:     devOTPBypass,
 		devBypassOTP:     devBypassOTP,
 		refreshTokenDays: refreshTokenDays,
+		auditor:          auditor,
 	}
 }
 
@@ -131,6 +135,25 @@ func (uc *LoginPasswordUseCase) Execute(ctx context.Context, input LoginPassword
 		return nil, err
 	}
 
+	// Audit log for login (skip admin user)
+	if user.Phone != "+201000000000" {
+		actorUID := user.UID // Use user UID as actor if no employee UID
+		if user.EmployeeUID != nil {
+			actorUID = *user.EmployeeUID
+		}
+		actionParams := map[string]interface{}{
+			"Phone": user.Phone,
+		}
+		uc.auditor.Actor(actorUID).
+			Did(audit.ActionLogin).
+			On(audit.EntityUser, user.UID).
+			WithMeta("action_key", "audit.sentence.user_login").
+			WithMeta("action_params", actionParams).
+			WithMeta("phone", user.Phone).
+			WithMeta("login_method", "password").
+			Save(ctx)
+	}
+
 	return &LoginPasswordOutput{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken.RawToken,
@@ -162,6 +185,7 @@ func (uc *LoginPasswordUseCase) toUserOutput(ctx context.Context, user *domain.U
 		UID:                   user.UID,
 		Phone:                 user.Phone,
 		EmployeeUID:           user.EmployeeUID,
+		PreferredLanguage:     user.PreferredLanguage,
 		AccessScope:           determineAccessScope(user.Roles),
 		Roles:                 roleNames,
 		Permissions:           permissions,

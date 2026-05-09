@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/banumusa/backend/core/audit"
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
 )
@@ -26,6 +27,7 @@ type UpdatePermissionRequestUseCase struct {
 	deptRepo            ports.DepartmentRepository
 	shiftRepo           ports.ShiftRepository
 	weekendRepo         ports.WeekendConfigRepository
+	auditor             audit.Auditor
 	now                 func() time.Time
 }
 
@@ -37,6 +39,7 @@ func NewUpdatePermissionRequestUseCase(
 	deptRepo ports.DepartmentRepository,
 	shiftRepo ports.ShiftRepository,
 	weekendRepo ports.WeekendConfigRepository,
+	auditor audit.Auditor,
 ) *UpdatePermissionRequestUseCase {
 	return &UpdatePermissionRequestUseCase{
 		db:                  db,
@@ -46,6 +49,7 @@ func NewUpdatePermissionRequestUseCase(
 		deptRepo:            deptRepo,
 		shiftRepo:           shiftRepo,
 		weekendRepo:         weekendRepo,
+		auditor:             auditor,
 		now:                 time.Now,
 	}
 }
@@ -122,6 +126,10 @@ func (uc *UpdatePermissionRequestUseCase) Execute(ctx context.Context, input Upd
 		return nil, err
 	}
 
+	// Capture old values for audit
+	oldType := request.Type
+	oldDate := request.PermissionDate
+
 	request.Type = input.Type
 	request.PermissionDate = permissionDate
 	request.StartTime = startTime
@@ -130,6 +138,26 @@ func (uc *UpdatePermissionRequestUseCase) Execute(ctx context.Context, input Upd
 	if err := uc.permissionRepo.Update(ctx, tx, request); err != nil {
 		return nil, err
 	}
+
+	// Audit log for permission request update
+	actionParams := map[string]interface{}{
+		"Actor": employee.Name,
+	}
+	auditBuilder := uc.auditor.Actor(employee.UID).
+		Did(audit.ActionUpdate).
+		On("permission_request", request.UID).
+		WithMeta("action_key", "audit.sentence.update_permission").
+		WithMeta("action_params", actionParams)
+	
+	if oldType != request.Type {
+		auditBuilder.WithMeta("old_permission_type", string(oldType)).
+			WithMeta("new_permission_type", string(request.Type))
+	}
+	if !oldDate.Equal(request.PermissionDate) {
+		auditBuilder.WithMeta("old_permission_date", oldDate.Format("2006-01-02")).
+			WithMeta("new_permission_date", request.PermissionDate.Format("2006-01-02"))
+	}
+	defer auditBuilder.Save(ctx)
 
 	if err := tx.Commit(); err != nil {
 		return nil, err

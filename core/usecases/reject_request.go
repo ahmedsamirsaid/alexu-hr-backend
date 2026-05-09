@@ -140,19 +140,23 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 		reasonStr = fmt.Sprintf(" Reason: %s", *input.Comments)
 	}
 
-	actionSentence := fmt.Sprintf(
-		"%s (%s) rejected %s (Employee)'s %s leave request for %s to %s (%d days).%s",
-		actorName, actorRoleName, requester.Name, leaveTypeName,
-		leaveStartDate, leaveEndDate, leaveDays, reasonStr,
-	)
+	actionParams := map[string]interface{}{
+		"Actor":     actorName,
+		"ActorRole": actorRoleName,
+		"Requester": requester.Name,
+		"LeaveType": leaveTypeName,
+		"StartDate": leaveStartDate,
+		"EndDate":   leaveEndDate,
+		"Days":      leaveDays,
+		"Reason":    reasonStr,
+	}
 
 	auditBuilder := uc.auditor.Actor(input.ActorEmployeeUID).
 		Did(audit.ActionReject).
 		On(audit.EntityLeaveRequest, leaveRequestUID).
-		WithMeta("action", actionSentence).
+		WithMeta("action_key", "audit.sentence.reject_leave").
+		WithMeta("action_params", actionParams).
 		WithMeta("reason", input.Comments).
-		WithMeta("approval_request_uid", input.ApprovalRequestUID).
-		WithMeta("requester_uid", approvalRequest.RequesterUID).
 		WithMeta("requester_name", requester.Name).
 		WithMeta("leave_type", leaveTypeName).
 		WithMeta("start_date", leaveStartDate).
@@ -192,12 +196,13 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 
 	// Get data for notification
 	var requesterUID string
-	var leaveTypeNameNotif string
+	var leaveTypeNameAR, leaveTypeNameEN string
 	if leaveRequest != nil {
 		requesterUID = approvalRequest.RequesterUID
 		leaveType, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if leaveType != nil {
-			leaveTypeNameNotif = leaveType.NameAR
+			leaveTypeNameAR = leaveType.NameAR
+			leaveTypeNameEN = leaveType.NameEN
 		}
 	}
 
@@ -207,7 +212,7 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 
 	// Send notification to requester (after commit, non-blocking)
 	if requesterUID != "" {
-		go uc.notifyRequesterRejected(requesterUID, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyRequesterRejected(requesterUID, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	}
 
 	return &RejectRequestOutput{
@@ -215,21 +220,28 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 	}, nil
 }
 
-func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeName, requestUID string) {
+func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("reject_request.notifyRequesterRejected.no_user", "employee_uid", employeeUID)
 		return
 	}
 
-	title := "تم رفض طلب الإجازة"
-	body := "تم رفض طلب " + leaveTypeName
+	params := map[string]interface{}{
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
+	}
 	data := ports.NotificationData{
 		"type":       "request_rejected",
 		"requestUid": requestUID,
 	}
 
-	_, err = uc.notificationService.SendToUser(user.UID, title, body, data)
+	_, err = uc.notificationService.SendToUser(
+		user.UID,
+		"notification.leave_rejected.title",
+		"notification.leave_rejected.body",
+		params,
+		data,
+	)
 	if err != nil {
 		slog.Error("reject_request.notifyRequesterRejected.send", "error", err)
 	}

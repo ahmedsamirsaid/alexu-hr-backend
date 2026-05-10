@@ -23,7 +23,7 @@ func (r *LeaveTypeRepository) GetByID(ctx context.Context, q ports.Querier, id i
 		SELECT id, uid, code, name_en, name_ar, default_balance, max_consecutive,
 		       recording_deadline_days, advance_notice_days, is_active, approval_flow_uid, created_at, updated_at
 		FROM leave_types
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanLeaveType(q.QueryRowContext(ctx, query, id))
 }
@@ -33,7 +33,7 @@ func (r *LeaveTypeRepository) GetByUID(ctx context.Context, q ports.Querier, uid
 		SELECT id, uid, code, name_en, name_ar, default_balance, max_consecutive,
 		       recording_deadline_days, advance_notice_days, is_active, approval_flow_uid, created_at, updated_at
 		FROM leave_types
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanLeaveType(q.QueryRowContext(ctx, query, uid))
 }
@@ -43,7 +43,7 @@ func (r *LeaveTypeRepository) GetByCode(ctx context.Context, q ports.Querier, co
 		SELECT id, uid, code, name_en, name_ar, default_balance, max_consecutive,
 		       recording_deadline_days, advance_notice_days, is_active, approval_flow_uid, created_at, updated_at
 		FROM leave_types
-		WHERE code = ?`
+		WHERE code = $1`
 
 	return r.scanLeaveType(q.QueryRowContext(ctx, query, code))
 }
@@ -52,7 +52,7 @@ func (r *LeaveTypeRepository) GetSubLeaveTypeByUID(ctx context.Context, q ports.
 	query := `
 		SELECT id, uid, leave_type_uid, name_en, name_ar, created_at, updated_at
 		FROM sub_leave_types
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanSubLeaveType(q.QueryRowContext(ctx, query, uid))
 }
@@ -64,7 +64,7 @@ func (r *LeaveTypeRepository) List(ctx context.Context, q ports.Querier, activeO
 		FROM leave_types`
 
 	if activeOnly {
-		query += ` WHERE is_active = 1`
+		query += ` WHERE is_active = true`
 	}
 
 	query += ` ORDER BY id`
@@ -98,7 +98,7 @@ func (r *LeaveTypeRepository) ListSubLeaveTypesByLeaveTypeUID(ctx context.Contex
 	query := `
 		SELECT id, uid, leave_type_uid, name_en, name_ar, created_at, updated_at
 		FROM sub_leave_types
-		WHERE leave_type_uid = ?
+		WHERE leave_type_uid = $1
 		ORDER BY id`
 
 	rows, err := q.QueryContext(ctx, query, leaveTypeUID)
@@ -129,10 +129,10 @@ func (r *LeaveTypeRepository) ListSubLeaveTypesByLeaveTypeUID(ctx context.Contex
 func (r *LeaveTypeRepository) Update(ctx context.Context, q ports.Querier, leaveType *domain.LeaveType) error {
 	query := `
 		UPDATE leave_types
-		SET code = ?, name_en = ?, name_ar = ?, default_balance = ?, max_consecutive = ?,
-		    recording_deadline_days = ?, advance_notice_days = ?, is_active = ?, approval_flow_uid = ?,
-		    updated_at = datetime('now')
-		WHERE uid = ?`
+		SET code = $1, name_en = $2, name_ar = $3, default_balance = $4, max_consecutive = $5,
+		    recording_deadline_days = $6, advance_notice_days = $7, is_active = $8, approval_flow_uid = $9,
+		    updated_at = NOW()
+		WHERE uid = $10`
 
 	result, err := q.ExecContext(
 		ctx,
@@ -175,7 +175,7 @@ func (r *LeaveTypeRepository) Update(ctx context.Context, q ports.Querier, leave
 }
 
 func (r *LeaveTypeRepository) SetActive(ctx context.Context, q ports.Querier, uid string, isActive bool) error {
-	query := `UPDATE leave_types SET is_active = ?, updated_at = datetime('now') WHERE uid = ?`
+	query := `UPDATE leave_types SET is_active = $1, updated_at = NOW() WHERE uid = $2`
 
 	result, err := q.ExecContext(ctx, query, isActive, uid)
 	if err != nil {

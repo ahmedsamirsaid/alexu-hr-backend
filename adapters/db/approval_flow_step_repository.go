@@ -21,7 +21,7 @@ func (r *ApprovalFlowStepRepository) GetByID(ctx context.Context, q ports.Querie
 	query := `
 		SELECT id, uid, approval_flow_uid, step_order, role_uid, created_at, updated_at
 		FROM approval_flow_steps
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanApprovalFlowStep(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *ApprovalFlowStepRepository) GetByUID(ctx context.Context, q ports.Queri
 	query := `
 		SELECT id, uid, approval_flow_uid, step_order, role_uid, created_at, updated_at
 		FROM approval_flow_steps
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanApprovalFlowStep(q.QueryRowContext(ctx, query, uid))
 }
@@ -38,26 +38,20 @@ func (r *ApprovalFlowStepRepository) GetByUID(ctx context.Context, q ports.Queri
 func (r *ApprovalFlowStepRepository) Create(ctx context.Context, q ports.Querier, step *domain.ApprovalFlowStep) error {
 	query := `
 		INSERT INTO approval_flow_steps (uid, approval_flow_uid, step_order, role_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id`
 
 	now := time.Now()
 	step.CreatedAt = now
 	step.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		step.UID, step.ApprovalFlowUID, step.StepOrder, step.RoleUID,
-		step.CreatedAt, step.UpdatedAt)
+		step.CreatedAt, step.UpdatedAt).Scan(&step.ID)
 	if err != nil {
 		slog.Error("approval_flow_step_repository.Create.exec_query", "error", err, "uid", step.UID, "flow_uid", step.ApprovalFlowUID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("approval_flow_step_repository.Create.last_insert_id", "error", err, "uid", step.UID)
-		return err
-	}
-	step.ID = id
 
 	return nil
 }
@@ -65,8 +59,8 @@ func (r *ApprovalFlowStepRepository) Create(ctx context.Context, q ports.Querier
 func (r *ApprovalFlowStepRepository) Update(ctx context.Context, q ports.Querier, step *domain.ApprovalFlowStep) error {
 	query := `
 		UPDATE approval_flow_steps
-		SET step_order = ?, role_uid = ?, updated_at = ?
-		WHERE id = ?`
+		SET step_order = $1, role_uid = $2, updated_at = $3
+		WHERE id = $4`
 
 	step.UpdatedAt = time.Now()
 
@@ -79,7 +73,7 @@ func (r *ApprovalFlowStepRepository) Update(ctx context.Context, q ports.Querier
 }
 
 func (r *ApprovalFlowStepRepository) Delete(ctx context.Context, q ports.Querier, uid string) error {
-	query := `DELETE FROM approval_flow_steps WHERE uid = ?`
+	query := `DELETE FROM approval_flow_steps WHERE uid = $1`
 	_, err := q.ExecContext(ctx, query, uid)
 	if err != nil {
 		slog.Error("approval_flow_step_repository.Delete.exec_query", "error", err, "uid", uid)
@@ -91,7 +85,7 @@ func (r *ApprovalFlowStepRepository) ListByFlow(ctx context.Context, q ports.Que
 	query := `
 		SELECT id, uid, approval_flow_uid, step_order, role_uid, created_at, updated_at
 		FROM approval_flow_steps
-		WHERE approval_flow_uid = ?
+		WHERE approval_flow_uid = $1
 		ORDER BY step_order ASC`
 
 	rows, err := q.QueryContext(ctx, query, approvalFlowUID)
@@ -119,7 +113,7 @@ func (r *ApprovalFlowStepRepository) ListByFlow(ctx context.Context, q ports.Que
 }
 
 func (r *ApprovalFlowStepRepository) CountByFlow(ctx context.Context, q ports.Querier, approvalFlowUID string) (int, error) {
-	query := `SELECT COUNT(*) FROM approval_flow_steps WHERE approval_flow_uid = ?`
+	query := `SELECT COUNT(*) FROM approval_flow_steps WHERE approval_flow_uid = $1`
 	var count int
 	err := q.QueryRowContext(ctx, query, approvalFlowUID).Scan(&count)
 	if err != nil {
@@ -132,7 +126,7 @@ func (r *ApprovalFlowStepRepository) GetByFlowAndStep(ctx context.Context, q por
 	query := `
 		SELECT id, uid, approval_flow_uid, step_order, role_uid, created_at, updated_at
 		FROM approval_flow_steps
-		WHERE approval_flow_uid = ? AND step_order = ?`
+		WHERE approval_flow_uid = $1 AND step_order = $2`
 
 	return r.scanApprovalFlowStep(q.QueryRowContext(ctx, query, approvalFlowUID, stepOrder))
 }
@@ -151,7 +145,7 @@ func (r *ApprovalFlowStepRepository) HasPendingRequestsAtStep(ctx context.Contex
 	query := `
 		SELECT COUNT(*)
 		FROM approval_requests
-		WHERE approval_flow_uid = ? AND current_step = ? AND status = 'pending'`
+		WHERE approval_flow_uid = $1 AND current_step = $2 AND status = 'pending'`
 
 	var count int
 	err = q.QueryRowContext(ctx, query, step.ApprovalFlowUID, step.StepOrder).Scan(&count)

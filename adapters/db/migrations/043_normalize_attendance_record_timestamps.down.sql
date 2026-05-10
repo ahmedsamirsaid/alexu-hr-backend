@@ -1,1 +1,0 @@
--- Irreversible normalization. No-op on downgrade.

@@ -65,7 +65,7 @@ func syncAttendanceExceptions(ctx context.Context, db ports.DB, items []DailyAtt
 		INSERT INTO attendance_exceptions (
 			uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		ON CONFLICT(employee_uid, attendance_date, exception_type) DO UPDATE SET
 			check_in = excluded.check_in,
 			check_out = excluded.check_out,
@@ -119,20 +119,20 @@ func syncAttendanceExceptions(ctx context.Context, db ports.DB, items []DailyAtt
 
 func deleteStaleAttendanceExceptions(ctx context.Context, db ports.DB, employeeUID, dateStr string, details []attendanceExceptionDetail) error {
 	if len(details) == 0 {
-		_, err := db.ExecContext(ctx, `DELETE FROM attendance_exceptions WHERE employee_uid = ? AND attendance_date = ?`, employeeUID, dateStr)
+		_, err := db.ExecContext(ctx, `DELETE FROM attendance_exceptions WHERE employee_uid = $1 AND attendance_date = $2`, employeeUID, dateStr)
 		return err
 	}
 
 	placeholders := make([]string, 0, len(details))
 	args := make([]any, 0, len(details)+2)
 	args = append(args, employeeUID, dateStr)
-	for _, detail := range details {
-		placeholders = append(placeholders, "?")
+	for i, detail := range details {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+3))
 		args = append(args, detail.Type)
 	}
 
 	query := fmt.Sprintf(
-		`DELETE FROM attendance_exceptions WHERE employee_uid = ? AND attendance_date = ? AND exception_type NOT IN (%s)`,
+		`DELETE FROM attendance_exceptions WHERE employee_uid = $1 AND attendance_date = $2 AND exception_type NOT IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
 	_, err := db.ExecContext(ctx, query, args...)
@@ -270,11 +270,11 @@ func listDepartmentEmployeesForAttendance(ctx context.Context, db ports.DB, depa
 	query := `
 		SELECT id, uid, name, department_uid, hire_date, status
 		FROM employees
-		WHERE department_uid = ? AND status = ?`
+		WHERE department_uid = $1 AND status = $2`
 	args := []any{departmentUID, domain.EmployeeStatusActive}
 
 	if filter.EmployeeUID != nil {
-		query += ` AND uid = ?`
+		query += ` AND uid = $1`
 		args = append(args, *filter.EmployeeUID)
 	}
 
@@ -286,10 +286,10 @@ func listDepartmentEmployeesForAttendance(ctx context.Context, db ports.DB, depa
 
 		switch mode {
 		case "equals":
-			query += ` AND name = ?`
+			query += ` AND name = $1`
 			args = append(args, *filter.EmployeeName)
 		case "contains":
-			query += ` AND name LIKE ?`
+			query += ` AND name LIKE $1`
 			args = append(args, "%"+*filter.EmployeeName+"%")
 		}
 	}
@@ -348,12 +348,12 @@ func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo po
 		FROM attendance_exceptions ae
 		INNER JOIN employees e ON e.uid = ae.employee_uid
 		WHERE ae.exception_type = 'absence'
-			AND e.department_uid = ?
-			AND ae.attendance_date BETWEEN ? AND ?`
+			AND e.department_uid = $1
+			AND ae.attendance_date BETWEEN $2 AND $3`
 	args := []any{departmentUID, start.Format("2006-01-02"), end.Format("2006-01-02")}
 
 	if filter.EmployeeUID != nil {
-		query += ` AND e.uid = ?`
+		query += ` AND e.uid = $1`
 		args = append(args, *filter.EmployeeUID)
 	}
 	if filter.EmployeeName != nil {
@@ -364,10 +364,10 @@ func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo po
 
 		switch mode {
 		case "equals":
-			query += ` AND e.name = ?`
+			query += ` AND e.name = $1`
 			args = append(args, *filter.EmployeeName)
 		case "contains":
-			query += ` AND e.name LIKE ?`
+			query += ` AND e.name LIKE $1`
 			args = append(args, "%"+*filter.EmployeeName+"%")
 		}
 	}
@@ -398,7 +398,7 @@ func appendDepartmentAbsenceItems(ctx context.Context, db ports.DB, leaveRepo po
 			return nil, err
 		}
 
-		dateParsed, err := time.Parse("2006-01-02", dateValue)
+		dateParsed, err := parseDateOrTimestamp(dateValue)
 		if err != nil {
 			return nil, err
 		}
@@ -457,11 +457,11 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 		FROM attendance_exceptions ae
 		INNER JOIN employees e ON e.uid = ae.employee_uid
 		WHERE ae.exception_type = 'absence'
-			AND e.department_uid = ?`
+			AND e.department_uid = $1`
 	args := []any{departmentUID}
 
 	if filter.EmployeeUID != nil {
-		query += ` AND e.uid = ?`
+		query += ` AND e.uid = $1`
 		args = append(args, *filter.EmployeeUID)
 	}
 	if filter.EmployeeName != nil {
@@ -472,10 +472,10 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 
 		switch mode {
 		case "equals":
-			query += ` AND e.name = ?`
+			query += ` AND e.name = $1`
 			args = append(args, *filter.EmployeeName)
 		case "contains":
-			query += ` AND e.name LIKE ?`
+			query += ` AND e.name LIKE $1`
 			args = append(args, "%"+*filter.EmployeeName+"%")
 		}
 	}
@@ -557,7 +557,7 @@ func appendDepartmentAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, 
 			return nil, err
 		}
 
-		dateParsed, err := time.Parse("2006-01-02", dateValue)
+		dateParsed, err := parseDateOrTimestamp(dateValue)
 		if err != nil {
 			return nil, err
 		}
@@ -616,8 +616,8 @@ func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo port
 		FROM attendance_exceptions ae
 		INNER JOIN employees e ON e.uid = ae.employee_uid
 		WHERE ae.exception_type = 'absence'
-			AND e.uid = ?
-			AND ae.attendance_date BETWEEN ? AND ?
+			AND e.uid = $1
+			AND ae.attendance_date BETWEEN $2 AND $3
 		ORDER BY ae.attendance_date ASC`
 	args := []any{employee.UID, start.Format("2006-01-02"), end.Format("2006-01-02")}
 
@@ -642,7 +642,7 @@ func appendEmployeeAbsenceItems(ctx context.Context, db ports.DB, leaveRepo port
 			return nil, err
 		}
 
-		dateParsed, err := time.Parse("2006-01-02", dateValue)
+		dateParsed, err := parseDateOrTimestamp(dateValue)
 		if err != nil {
 			return nil, err
 		}
@@ -702,7 +702,7 @@ func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, le
 		FROM attendance_exceptions ae
 		INNER JOIN employees e ON e.uid = ae.employee_uid
 		WHERE ae.exception_type = 'absence'
-			AND e.uid = ?
+			AND e.uid = $1
 		ORDER BY ae.attendance_date ASC`
 
 	rows, err := db.QueryContext(ctx, query, employee.UID)
@@ -767,7 +767,7 @@ func appendEmployeeAbsenceItemsWithoutRange(ctx context.Context, db ports.DB, le
 			return nil, err
 		}
 
-		dateParsed, err := time.Parse("2006-01-02", dateValue)
+		dateParsed, err := parseDateOrTimestamp(dateValue)
 		if err != nil {
 			return nil, err
 		}

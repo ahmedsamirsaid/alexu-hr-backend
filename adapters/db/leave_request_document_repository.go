@@ -19,7 +19,7 @@ func NewLeaveRequestDocumentRepository() *LeaveRequestDocumentRepository {
 func (r *LeaveRequestDocumentRepository) Create(ctx context.Context, q ports.Querier, doc *domain.LeaveRequestDocument) error {
 	query := `
 		INSERT INTO leave_request_documents (leave_request_uid, file_name, object_key)
-		VALUES (?, ?, ?)`
+		VALUES ($1, $2, $3)`
 
 	_, err := q.ExecContext(ctx, query, doc.LeaveRequestUID, doc.FileName, doc.ObjectKey)
 	if err != nil {
@@ -32,7 +32,7 @@ func (r *LeaveRequestDocumentRepository) ListByLeaveRequestUID(ctx context.Conte
 	query := `
 		SELECT leave_request_uid, file_name, object_key
 		FROM leave_request_documents
-		WHERE leave_request_uid = ?
+		WHERE leave_request_uid = $1
 		ORDER BY rowid ASC`
 
 	rows, err := q.QueryContext(ctx, query, leaveRequestUID)
@@ -67,7 +67,7 @@ func (r *LeaveRequestDocumentRepository) GetByLeaveRequestUIDAndFileName(ctx con
 	query := `
 		SELECT leave_request_uid, file_name, object_key
 		FROM leave_request_documents
-		WHERE leave_request_uid = ? AND file_name = ?`
+		WHERE leave_request_uid = $1 AND file_name = $2`
 
 	row := q.QueryRowContext(ctx, query, leaveRequestUID, fileName)
 	doc := &domain.LeaveRequestDocument{}
@@ -85,8 +85,8 @@ func (r *LeaveRequestDocumentRepository) GetByLeaveRequestUIDAndFileName(ctx con
 func (r *LeaveRequestDocumentRepository) UpdateObjectKey(ctx context.Context, q ports.Querier, leaveRequestUID, fileName, objectKey string) error {
 	query := `
 		UPDATE leave_request_documents
-		SET object_key = ?
-		WHERE leave_request_uid = ? AND file_name = ?`
+		SET object_key = $1
+		WHERE leave_request_uid = $2 AND file_name = $3`
 
 	_, err := q.ExecContext(ctx, query, objectKey, leaveRequestUID, fileName)
 	if err != nil {

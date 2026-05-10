@@ -304,9 +304,9 @@ func (uc *GetDepartmentAttendanceReportUseCase) listDepartmentAttendanceReportEx
 		SELECT ae.employee_uid, ae.attendance_date, ae.exception_type
 		FROM attendance_exceptions ae
 		INNER JOIN employees e ON e.uid = ae.employee_uid
-		WHERE e.department_uid = ?
-			AND e.status = ?
-			AND ae.attendance_date BETWEEN ? AND ?
+		WHERE e.department_uid = $1
+			AND e.status = $2
+			AND ae.attendance_date BETWEEN $3 AND $4
 		ORDER BY ae.attendance_date ASC, e.name ASC, e.uid ASC
 	`, departmentUID, domain.EmployeeStatusActive, start.Format("2006-01-02"), end.Format("2006-01-02"))
 	if err != nil {
@@ -324,7 +324,7 @@ func (uc *GetDepartmentAttendanceReportUseCase) listDepartmentAttendanceReportEx
 			return nil, err
 		}
 
-		parsedDate, err := time.Parse("2006-01-02", dateValue)
+		parsedDate, err := parseDateOrTimestamp(dateValue)
 		if err != nil {
 			return nil, err
 		}

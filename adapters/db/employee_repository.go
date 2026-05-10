@@ -1,7 +1,8 @@
 package db
 
 import (
-	"context"
+	"fmt"
+"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -22,7 +23,7 @@ func (r *EmployeeRepository) GetByID(ctx context.Context, q ports.Querier, id in
 		SELECT id, uid, name, mobile, government_id, university_id, email,
 		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanEmployee(q.QueryRowContext(ctx, query, id))
 }
@@ -32,7 +33,7 @@ func (r *EmployeeRepository) GetByUID(ctx context.Context, q ports.Querier, uid 
 		SELECT id, uid, name, mobile, government_id, university_id, email,
 		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
 		FROM employees
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanEmployee(q.QueryRowContext(ctx, query, uid))
 }
@@ -54,7 +55,7 @@ func (r *EmployeeRepository) GetByUIDs(ctx context.Context, q ports.Querier, uid
 		if i > 0 {
 			query += ", "
 		}
-		query += "?"
+		query += fmt.Sprintf("$%d", i+1)
 		args[i] = uid
 	}
 	query += ")"
@@ -87,29 +88,23 @@ func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employ
 	query := `
 		INSERT INTO employees (uid, name, mobile, government_id, university_id, email,
 		                       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		RETURNING id`
 
 	now := time.Now()
 	employee.ApplyClassificationDefaults()
 	employee.CreatedAt = now
 	employee.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		employee.UID, employee.Name, employee.Mobile,
 		employee.GovernmentID, employee.UniversityID, employee.Email,
 		employee.HireDate, employee.Status, employee.Type, employee.SubType,
-		employee.DepartmentUID, employee.ShiftUID, employee.CreatedAt, employee.UpdatedAt)
+		employee.DepartmentUID, employee.ShiftUID, employee.CreatedAt, employee.UpdatedAt).Scan(&employee.ID)
 	if err != nil {
 		slog.Error("employee_repository.Create.exec_query", "error", err, "uid", employee.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("employee_repository.Create.last_insert_id", "error", err, "uid", employee.UID)
-		return err
-	}
-	employee.ID = id
 
 	return nil
 }
@@ -117,9 +112,9 @@ func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employ
 func (r *EmployeeRepository) Update(ctx context.Context, q ports.Querier, employee *domain.Employee) error {
 	query := `
 		UPDATE employees
-		SET name = ?, mobile = ?, government_id = ?, university_id = ?, email = ?,
-		    hire_date = ?, status = ?, type = ?, sub_type = ?, department_uid = ?, shift_uid = ?, updated_at = ?
-		WHERE id = ?`
+		SET name = $1, mobile = $2, government_id = $3, university_id = $4, email = $5,
+		    hire_date = $6, status = $7, type = $8, sub_type = $9, department_uid = $10, shift_uid = $11, updated_at = $12
+		WHERE id = $13`
 
 	employee.ApplyClassificationDefaults()
 	employee.UpdatedAt = time.Now()
@@ -146,15 +141,15 @@ func (r *EmployeeRepository) List(ctx context.Context, q ports.Querier, filter *
 
 	if filter != nil {
 		if filter.Status != nil {
-			query += ` AND status = ?`
+			query += ` AND status = ` + nextPlaceholder(args)
 			args = append(args, *filter.Status)
 		}
 		if filter.HireDateFrom != nil {
-			query += ` AND hire_date >= ?`
+			query += ` AND hire_date >= ` + nextPlaceholder(args)
 			args = append(args, *filter.HireDateFrom)
 		}
 		if filter.HireDateTo != nil {
-			query += ` AND hire_date <= ?`
+			query += ` AND hire_date <= ` + nextPlaceholder(args)
 			args = append(args, *filter.HireDateTo)
 		}
 	}
@@ -208,17 +203,13 @@ func (r *EmployeeRepository) ExistingUniversityIDs(ctx context.Context, q ports.
 }
 
 func (r *EmployeeRepository) existingValues(ctx context.Context, q ports.Querier, column string, values []string) ([]string, error) {
-	placeholders := make([]byte, 0, len(values)*2)
 	args := make([]any, len(values))
 	for i, v := range values {
-		if i > 0 {
-			placeholders = append(placeholders, ',')
-		}
-		placeholders = append(placeholders, '?')
 		args[i] = v
 	}
 
-	query := `SELECT ` + column + ` FROM employees WHERE ` + column + ` IN (` + string(placeholders) + `)`
+	placeholders := buildPlaceholders(len(values), 1)
+	query := `SELECT ` + column + ` FROM employees WHERE ` + column + ` IN (` + placeholders + `)`
 
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {

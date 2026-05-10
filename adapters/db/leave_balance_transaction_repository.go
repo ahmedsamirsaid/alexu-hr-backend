@@ -19,24 +19,18 @@ func NewLeaveBalanceTransactionRepository() *LeaveBalanceTransactionRepository {
 func (r *LeaveBalanceTransactionRepository) Create(ctx context.Context, q ports.Querier, tx *domain.LeaveBalanceTransaction) error {
 	query := `
 		INSERT INTO leave_balance_transactions (uid, balance_id, transaction_type, days, leave_record_id, notes, created_by, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	tx.CreatedAt = time.Now()
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		tx.UID, tx.BalanceID, tx.TransactionType, tx.Days,
-		tx.LeaveRecordID, tx.Notes, tx.CreatedBy, tx.CreatedAt)
+		tx.LeaveRecordID, tx.Notes, tx.CreatedBy, tx.CreatedAt).Scan(&tx.ID)
 	if err != nil {
 		slog.Error("leave_balance_transaction_repository.Create.exec_query", "error", err, "uid", tx.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("leave_balance_transaction_repository.Create.last_insert_id", "error", err, "uid", tx.UID)
-		return err
-	}
-	tx.ID = id
 
 	return nil
 }
@@ -45,7 +39,7 @@ func (r *LeaveBalanceTransactionRepository) ListByBalance(ctx context.Context, q
 	query := `
 		SELECT id, uid, balance_id, transaction_type, days, leave_record_id, notes, created_by, created_at
 		FROM leave_balance_transactions
-		WHERE balance_id = ?
+		WHERE balance_id = $1
 		ORDER BY created_at`
 
 	rows, err := q.QueryContext(ctx, query, balanceID)

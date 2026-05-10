@@ -1,13 +1,13 @@
 CREATE TABLE approval_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     approval_flow_uid TEXT NOT NULL REFERENCES approval_flows(uid) ON DELETE RESTRICT,
     requester_uid TEXT NOT NULL REFERENCES employees(uid) ON DELETE RESTRICT,
     current_step INTEGER NOT NULL DEFAULT 1,
     max_step INTEGER NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_approval_requests_flow ON approval_requests(approval_flow_uid);

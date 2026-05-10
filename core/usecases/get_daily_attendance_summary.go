@@ -167,7 +167,7 @@ func (uc *GetDailyAttendanceSummaryUseCase) Execute(ctx context.Context, input G
 var attendanceLoc = time.FixedZone("Africa/Cairo", 2*60*60)
 
 func buildTimeOnDate(date time.Time, hhmm string) (time.Time, error) {
-	parsed, err := time.Parse("15:04", hhmm)
+	parsed, err := parseShiftTime(hhmm)
 	if err != nil {
 		return time.Time{}, err
 	}

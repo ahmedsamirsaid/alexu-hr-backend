@@ -21,7 +21,7 @@ func (r *ShiftRepository) GetByUID(ctx context.Context, q ports.Querier, uid str
 	query := `
 		SELECT id, uid, start_time, end_time, grace_minutes, created_at, updated_at
 		FROM shifts
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanShift(q.QueryRowContext(ctx, query, uid))
 }
@@ -60,7 +60,7 @@ func (r *ShiftRepository) List(ctx context.Context, q ports.Querier) ([]*domain.
 func (r *ShiftRepository) Upsert(ctx context.Context, q ports.Querier, shift *domain.Shift) error {
 	query := `
 		INSERT INTO shifts (id, uid, start_time, end_time, grace_minutes, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT(uid) DO UPDATE SET
 			start_time = excluded.start_time,
 			end_time = excluded.end_time,

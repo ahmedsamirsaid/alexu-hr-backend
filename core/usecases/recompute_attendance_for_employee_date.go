@@ -140,8 +140,8 @@ func loadCheckInOutForDay(ctx context.Context, q ports.Querier, employeeUID stri
 	rows, err := q.QueryContext(ctx, `
 		SELECT punched_at, punch_type
 		FROM attendance_records
-		WHERE employee_uid = ?
-		  AND substr(punched_at, 1, 10) = ?`, employeeUID, dateStr)
+		WHERE employee_uid = $1
+		  AND TO_CHAR(punched_at, 'YYYY-MM-DD') = $2`, employeeUID, dateStr)
 	if err != nil {
 		return nil, nil, err
 	}

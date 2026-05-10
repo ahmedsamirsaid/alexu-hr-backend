@@ -1,5 +1,5 @@
 CREATE TABLE refresh_tokens (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     token_hash TEXT UNIQUE NOT NULL,
     user_id INTEGER NOT NULL,
     expires_at TIMESTAMP NOT NULL,

@@ -1,5 +1,5 @@
 CREATE TABLE leave_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
     leave_type_id INTEGER NOT NULL REFERENCES leave_types(id) ON DELETE RESTRICT,
@@ -9,8 +9,8 @@ CREATE TABLE leave_records (
     recorded_at TEXT NOT NULL,
     recorded_by INTEGER REFERENCES employees(id),
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_leave_records_employee_id ON leave_records(employee_id);

@@ -1,13 +1,13 @@
 CREATE TABLE audit_logs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid         TEXT    UNIQUE NOT NULL,
     actor_uid   TEXT    NOT NULL,                     -- employee UID who performed the action
     action      TEXT    NOT NULL,                     -- e.g. approve, update, create
     entity_type TEXT    NOT NULL,                     -- e.g. leave_request, attendance_record
     entity_uid  TEXT    NOT NULL,                     -- UID of the affected entity
     meta        TEXT,                                 -- optional JSON blob (old/new values, comments…)
-    occurred_at TEXT    NOT NULL DEFAULT (datetime('now')),
-    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    occurred_at TEXT    NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    created_at  TEXT    NOT NULL DEFAULT (CURRENT_TIMESTAMP)
 );
 
 -- Fast look-up by entity (most common query: "show history of this record")

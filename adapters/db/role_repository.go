@@ -21,7 +21,7 @@ func (r *RoleRepository) GetByID(ctx context.Context, q ports.Querier, id int64)
 	query := `
 		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanRole(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *RoleRepository) GetByUID(ctx context.Context, q ports.Querier, uid stri
 	query := `
 		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanRole(q.QueryRowContext(ctx, query, uid))
 }
@@ -39,7 +39,7 @@ func (r *RoleRepository) GetByName(ctx context.Context, q ports.Querier, name st
 	query := `
 		SELECT id, uid, name, description, scope_type, is_system, created_at, updated_at
 		FROM roles
-		WHERE name = ?`
+		WHERE name = $1`
 
 	return r.scanRole(q.QueryRowContext(ctx, query, name))
 }
@@ -47,26 +47,20 @@ func (r *RoleRepository) GetByName(ctx context.Context, q ports.Querier, name st
 func (r *RoleRepository) Create(ctx context.Context, q ports.Querier, role *domain.Role) error {
 	query := `
 		INSERT INTO roles (uid, name, description, scope_type, is_system, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id`
 
 	now := time.Now()
 	role.CreatedAt = now
 	role.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		role.UID, role.Name, role.Description, role.ScopeType, role.IsSystem,
-		role.CreatedAt, role.UpdatedAt)
+		role.CreatedAt, role.UpdatedAt).Scan(&role.ID)
 	if err != nil {
 		slog.Error("role_repository.Create.exec_query", "error", err, "uid", role.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("role_repository.Create.last_insert_id", "error", err, "uid", role.UID)
-		return err
-	}
-	role.ID = id
 
 	return nil
 }
@@ -74,8 +68,8 @@ func (r *RoleRepository) Create(ctx context.Context, q ports.Querier, role *doma
 func (r *RoleRepository) Update(ctx context.Context, q ports.Querier, role *domain.Role) error {
 	query := `
 		UPDATE roles
-		SET name = ?, description = ?, scope_type = ?, updated_at = ?
-		WHERE id = ?`
+		SET name = $1, description = $2, scope_type = $3, updated_at = $4
+		WHERE id = $5`
 
 	role.UpdatedAt = time.Now()
 
@@ -120,7 +114,7 @@ func (r *RoleRepository) List(ctx context.Context, q ports.Querier) ([]*domain.R
 }
 
 func (r *RoleRepository) Delete(ctx context.Context, q ports.Querier, id int64) error {
-	query := `DELETE FROM roles WHERE id = ? AND is_system = 0`
+	query := `DELETE FROM roles WHERE id = $1 AND is_system = false`
 	_, err := q.ExecContext(ctx, query, id)
 	if err != nil {
 		slog.Error("role_repository.Delete.exec_query", "error", err, "id", id)
@@ -133,7 +127,7 @@ func (r *RoleRepository) GetRolesForUser(ctx context.Context, q ports.Querier, u
 		SELECT r.id, r.uid, r.name, r.description, r.scope_type, r.is_system, r.created_at, r.updated_at
 		FROM roles r
 		JOIN user_roles ur ON r.id = ur.role_id
-		WHERE ur.user_id = ?
+		WHERE ur.user_id = $1
 		ORDER BY r.name ASC`
 
 	rows, err := q.QueryContext(ctx, query, userID)
@@ -162,7 +156,7 @@ func (r *RoleRepository) GetRolesForUser(ctx context.Context, q ports.Querier, u
 }
 
 func (r *RoleRepository) AssignRoleToUser(ctx context.Context, q ports.Querier, userID, roleID int64) error {
-	query := `INSERT OR IGNORE INTO user_roles (user_id, role_id, created_at) VALUES (?, ?, ?)`
+	query := `INSERT INTO user_roles (user_id, role_id, created_at) VALUES ($1, $2, $3)`
 	_, err := q.ExecContext(ctx, query, userID, roleID, time.Now())
 	if err != nil {
 		slog.Error("role_repository.AssignRoleToUser.exec_query", "error", err, "user_id", userID, "role_id", roleID)
@@ -171,7 +165,7 @@ func (r *RoleRepository) AssignRoleToUser(ctx context.Context, q ports.Querier, 
 }
 
 func (r *RoleRepository) RemoveRoleFromUser(ctx context.Context, q ports.Querier, userID, roleID int64) error {
-	query := `DELETE FROM user_roles WHERE user_id = ? AND role_id = ?`
+	query := `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`
 	_, err := q.ExecContext(ctx, query, userID, roleID)
 	if err != nil {
 		slog.Error("role_repository.RemoveRoleFromUser.exec_query", "error", err, "user_id", userID, "role_id", roleID)
@@ -180,7 +174,7 @@ func (r *RoleRepository) RemoveRoleFromUser(ctx context.Context, q ports.Querier
 }
 
 func (r *RoleRepository) AssignPermissionToRole(ctx context.Context, q ports.Querier, roleID, permissionID int64) error {
-	query := `INSERT OR IGNORE INTO role_permissions (role_id, permission_id, created_at) VALUES (?, ?, ?)`
+	query := `INSERT INTO role_permissions (role_id, permission_id, created_at) VALUES ($1, $2, $3)`
 	_, err := q.ExecContext(ctx, query, roleID, permissionID, time.Now())
 	if err != nil {
 		slog.Error("role_repository.AssignPermissionToRole.exec_query", "error", err, "role_id", roleID, "permission_id", permissionID)
@@ -189,7 +183,7 @@ func (r *RoleRepository) AssignPermissionToRole(ctx context.Context, q ports.Que
 }
 
 func (r *RoleRepository) RemovePermissionFromRole(ctx context.Context, q ports.Querier, roleID, permissionID int64) error {
-	query := `DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?`
+	query := `DELETE FROM role_permissions WHERE role_id = $1 AND permission_id = $2`
 	_, err := q.ExecContext(ctx, query, roleID, permissionID)
 	if err != nil {
 		slog.Error("role_repository.RemovePermissionFromRole.exec_query", "error", err, "role_id", roleID, "permission_id", permissionID)
@@ -199,7 +193,7 @@ func (r *RoleRepository) RemovePermissionFromRole(ctx context.Context, q ports.Q
 
 func (r *RoleRepository) SetRolePermissions(ctx context.Context, q ports.Querier, roleID int64, permissionIDs []int64) error {
 	// Delete existing permissions
-	_, err := q.ExecContext(ctx, `DELETE FROM role_permissions WHERE role_id = ?`, roleID)
+	_, err := q.ExecContext(ctx, `DELETE FROM role_permissions WHERE role_id = $1`, roleID)
 	if err != nil {
 		slog.Error("role_repository.SetRolePermissions.delete", "error", err, "role_id", roleID)
 		return err
@@ -208,7 +202,7 @@ func (r *RoleRepository) SetRolePermissions(ctx context.Context, q ports.Querier
 	// Insert new permissions
 	for _, permID := range permissionIDs {
 		_, err := q.ExecContext(ctx,
-			`INSERT INTO role_permissions (role_id, permission_id, created_at) VALUES (?, ?, ?)`,
+			`INSERT INTO role_permissions (role_id, permission_id, created_at) VALUES ($1, $2, $3)`,
 			roleID, permID, time.Now())
 		if err != nil {
 			slog.Error("role_repository.SetRolePermissions.insert", "error", err, "role_id", roleID, "permission_id", permID)
@@ -221,13 +215,13 @@ func (r *RoleRepository) SetRolePermissions(ctx context.Context, q ports.Querier
 
 func (r *RoleRepository) AssignRoleToUserWithDepartment(ctx context.Context, q ports.Querier, userID, roleID int64, departmentUID *string) error {
 	// First remove any existing assignment of this role to this user (to avoid duplicates)
-	_, err := q.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = ? AND role_id = ?`, userID, roleID)
+	_, err := q.ExecContext(ctx, `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`, userID, roleID)
 	if err != nil {
 		slog.Error("role_repository.AssignRoleToUserWithDepartment.delete", "error", err, "user_id", userID, "role_id", roleID)
 		return err
 	}
 
-	query := `INSERT INTO user_roles (user_id, role_id, department_uid, created_at) VALUES (?, ?, ?, ?)`
+	query := `INSERT INTO user_roles (user_id, role_id, department_uid, created_at) VALUES ($1, $2, $3, $4)`
 	_, err = q.ExecContext(ctx, query, userID, roleID, departmentUID, time.Now())
 	if err != nil {
 		slog.Error("role_repository.AssignRoleToUserWithDepartment.insert", "error", err, "user_id", userID, "role_id", roleID)
@@ -245,12 +239,12 @@ func (r *RoleRepository) GetUsersByRoleAndDepartment(ctx context.Context, q port
 		FROM users u
 		JOIN user_roles ur ON u.id = ur.user_id
 		JOIN roles r ON ur.role_id = r.id
-		WHERE r.uid = ? AND (ur.department_uid IS NULL`
+		WHERE r.uid = $1 AND (ur.department_uid IS NULL`
 
 	args := []any{roleUID}
 
 	if departmentUID != nil {
-		query += ` OR ur.department_uid = ?`
+		query += ` OR ur.department_uid = ` + nextPlaceholder(args)
 		args = append(args, *departmentUID)
 	}
 	query += `)`
@@ -289,7 +283,7 @@ func (r *RoleRepository) IsUserAuthorizedApprover(ctx context.Context, q ports.Q
 		SELECT COUNT(*)
 		FROM user_roles ur
 		JOIN roles r ON ur.role_id = r.id
-		WHERE ur.user_id = ? AND r.uid = ? AND (ur.department_uid IS NULL OR ur.department_uid = ?)`
+		WHERE ur.user_id = $1 AND r.uid = $2 AND (ur.department_uid IS NULL OR ur.department_uid = $3)`
 
 	var count int
 	err := q.QueryRowContext(ctx, query, userID, roleUID, departmentUID).Scan(&count)
@@ -304,9 +298,8 @@ func (r *RoleRepository) scanRole(row *sql.Row) (*domain.Role, error) {
 	var role domain.Role
 	var scopeType sql.NullString
 	var createdAt, updatedAt domain.Time
-	var isSystem int
 	err := row.Scan(
-		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &isSystem,
+		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &role.IsSystem,
 		&createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -315,7 +308,6 @@ func (r *RoleRepository) scanRole(row *sql.Row) (*domain.Role, error) {
 		slog.Error("role_repository.scanRole.scan_row", "error", err)
 		return nil, err
 	}
-	role.IsSystem = isSystem == 1
 	role.ScopeType = domain.NormalizeRoleScopeType(scopeType.String)
 	if role.ScopeType == "" {
 		role.ScopeType = domain.RoleScopeGlobal
@@ -329,14 +321,12 @@ func (r *RoleRepository) scanRoleRow(rows *sql.Rows) (*domain.Role, error) {
 	var role domain.Role
 	var scopeType sql.NullString
 	var createdAt, updatedAt domain.Time
-	var isSystem int
 	err := rows.Scan(
-		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &isSystem,
+		&role.ID, &role.UID, &role.Name, &role.Description, &scopeType, &role.IsSystem,
 		&createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
-	role.IsSystem = isSystem == 1
 	role.ScopeType = domain.NormalizeRoleScopeType(scopeType.String)
 	if role.ScopeType == "" {
 		role.ScopeType = domain.RoleScopeGlobal
@@ -349,8 +339,8 @@ func (r *RoleRepository) scanRoleRow(rows *sql.Rows) (*domain.Role, error) {
 func (r *RoleRepository) RemoveRoleFromUserForDepartment(ctx context.Context, q ports.Querier, roleUID string, departmentUID string) error {
 	query := `
 		DELETE FROM user_roles
-		WHERE role_id = (SELECT id FROM roles WHERE uid = ?)
-		AND department_uid = ?`
+		WHERE role_id = (SELECT id FROM roles WHERE uid = $1)
+		AND department_uid = $2`
 	_, err := q.ExecContext(ctx, query, roleUID, departmentUID)
 	if err != nil {
 		slog.Error("role_repository.RemoveRoleFromUserForDepartment.exec_query", "error", err, "role_uid", roleUID, "department_uid", departmentUID)
@@ -365,7 +355,7 @@ func (r *RoleRepository) GetDepartmentManager(ctx context.Context, q ports.Queri
 		FROM users u
 		JOIN user_roles ur ON u.id = ur.user_id
 		JOIN roles r ON ur.role_id = r.id
-		WHERE r.uid = 'role_department_manager' AND ur.department_uid = ?
+		WHERE r.uid = 'role_department_manager' AND ur.department_uid = $1
 		LIMIT 1`
 
 	userRepo := NewUserRepository()
@@ -377,7 +367,7 @@ func (r *RoleRepository) GetManagedDepartmentUIDs(ctx context.Context, q ports.Q
 	query := `
 		SELECT DISTINCT ur.department_uid
 		FROM user_roles ur
-		WHERE ur.user_id = ?
+		WHERE ur.user_id = $1
 		  AND ur.department_uid IS NOT NULL
 		ORDER BY ur.department_uid ASC`
 

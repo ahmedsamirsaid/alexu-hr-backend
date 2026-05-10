@@ -1,5 +1,5 @@
 -- Transfer HR Manager access to University Human Resources and remove the HR Manager role.
-INSERT OR IGNORE INTO role_permissions (role_id, permission_id, created_at)
+INSERT INTO role_permissions (role_id, permission_id, created_at)
 SELECT r.id, p.id, CURRENT_TIMESTAMP
 FROM roles r
 JOIN permissions p ON p.code IN (
@@ -18,7 +18,7 @@ JOIN permissions p ON p.code IN (
 )
 WHERE r.uid = 'role_university_human_resources';
 
-INSERT OR IGNORE INTO user_roles (user_id, role_id, department_uid, created_at)
+INSERT INTO user_roles (user_id, role_id, department_uid, created_at)
 SELECT ur.user_id, uhr.id, ur.department_uid, CURRENT_TIMESTAMP
 FROM user_roles ur
 JOIN roles hr ON hr.id = ur.role_id AND hr.uid = 'role_hr_manager'

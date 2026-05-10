@@ -24,14 +24,15 @@ func (r *AttendanceRecordRepository) Create(ctx context.Context, q ports.Querier
 		INSERT INTO attendance_records (
 			uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(device_uid, device_user_id, punched_at, punch_type) DO NOTHING`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT(device_uid, device_user_id, punched_at, punch_type) DO NOTHING
+		RETURNING id`
 
 	now := time.Now()
 	record.CreatedAt = now
 	record.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		record.UID,
 		record.EmployeeUID,
 		record.DeviceUID,
@@ -41,24 +42,15 @@ func (r *AttendanceRecordRepository) Create(ctx context.Context, q ports.Querier
 		record.RawPayload,
 		record.CreatedAt,
 		record.UpdatedAt,
-	)
+	).Scan(&record.ID)
+	
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// ON CONFLICT DO NOTHING was triggered, no row was inserted
+			return false, nil
+		}
 		slog.Error("attendance_record_repository.Create.exec_query", "error", err, "uid", record.UID)
 		return false, err
-	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-
-	if affected == 0 {
-		return false, nil
-	}
-
-	id, err := result.LastInsertId()
-	if err == nil {
-		record.ID = id
 	}
 
 	return true, nil
@@ -68,7 +60,7 @@ func (r *AttendanceRecordRepository) GetByUID(ctx context.Context, q ports.Queri
 	query := `
 		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
 		FROM attendance_records
-		WHERE uid = ?
+		WHERE uid = $1
 		LIMIT 1`
 
 	return r.scanRecord(q.QueryRowContext(ctx, query, uid))
@@ -90,7 +82,7 @@ func (r *AttendanceRecordRepository) GetByUIDs(ctx context.Context, q ports.Quer
 		if i > 0 {
 			query += ", "
 		}
-		query += "?"
+		query += fmt.Sprintf("$%d", i+1)
 		args[i] = uid
 	}
 	query += ")"
@@ -123,8 +115,8 @@ func (r *AttendanceRecordRepository) GetByUIDs(ctx context.Context, q ports.Quer
 func (r *AttendanceRecordRepository) Update(ctx context.Context, q ports.Querier, record *domain.AttendanceRecord) error {
 	query := `
 		UPDATE attendance_records
-		SET device_uid = ?, punched_at = ?, punch_type = ?, updated_at = ?
-		WHERE uid = ?`
+		SET device_uid = $1, punched_at = $2, punch_type = $3, updated_at = $4
+		WHERE uid = $5`
 
 	record.UpdatedAt = time.Now()
 
@@ -149,11 +141,11 @@ func (r *AttendanceRecordRepository) ListByDate(ctx context.Context, q ports.Que
 	query := `
 		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
 		FROM attendance_records
-		WHERE date(punched_at) = date(?)`
+		WHERE punched_at::date = $1::date`
 
 	args := []any{date.Format("2006-01-02")}
 	if employeeUID != nil {
-		query += ` AND employee_uid = ?`
+		query += ` AND employee_uid = $2`
 		args = append(args, *employeeUID)
 	}
 	query += ` ORDER BY punched_at ASC`
@@ -186,13 +178,13 @@ func (r *AttendanceRecordRepository) ListByDateRange(ctx context.Context, q port
 	query := `
 		SELECT id, uid, employee_uid, device_uid, device_user_id, punched_at, punch_type, raw_payload, created_at, updated_at
 		FROM attendance_records
-		WHERE datetime(punched_at) >= datetime(?)
-			AND datetime(punched_at) <= datetime(?)`
+		WHERE punched_at::timestamp >= $1::timestamp
+			AND punched_at::timestamp <= $2::timestamp`
 
 	inclusiveEndDate := makeInclusiveEndDate(endDate)
 	args := []any{startDate.Format(time.RFC3339), inclusiveEndDate.Format(time.RFC3339)}
 	if employeeUID != nil {
-		query += ` AND employee_uid = ?`
+		query += ` AND employee_uid = $3`
 		args = append(args, *employeeUID)
 	}
 	query += ` ORDER BY punched_at ASC, id ASC`
@@ -230,7 +222,7 @@ func (r *AttendanceRecordRepository) ListByDepartmentUID(ctx context.Context, q 
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		INNER JOIN attendance_devices ad ON ad.uid = ar.device_uid
-		WHERE e.department_uid = ?`
+		WHERE e.department_uid = $1`
 
 	whereClause, args := buildDepartmentAttendanceLogsWhere(departmentUID, filter)
 	orderBy, err := buildDepartmentAttendanceLogsOrderBy(params)
@@ -238,7 +230,7 @@ func (r *AttendanceRecordRepository) ListByDepartmentUID(ctx context.Context, q 
 		return nil, err
 	}
 
-	query := baseQuery + whereClause + orderBy + ` LIMIT ? OFFSET ?`
+	query := baseQuery + whereClause + orderBy + ` LIMIT $1 OFFSET $2`
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryAttendanceRecordsWithEmployee(ctx, q, query, args, "attendance_record_repository.ListByDepartmentUID", "department_uid", departmentUID)
@@ -249,7 +241,7 @@ func (r *AttendanceRecordRepository) CountByDepartmentUID(ctx context.Context, q
 		SELECT COUNT(*)
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
-		WHERE e.department_uid = ?`
+		WHERE e.department_uid = $1`
 
 	whereClause, args := buildDepartmentAttendanceLogsWhere(departmentUID, filter)
 	query := baseQuery + whereClause
@@ -271,7 +263,7 @@ func (r *AttendanceRecordRepository) ListByEmployeeUID(ctx context.Context, q po
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
 		INNER JOIN attendance_devices ad ON ad.uid = ar.device_uid
-		WHERE ar.employee_uid = ?`
+		WHERE ar.employee_uid = $1`
 
 	whereClause, args := buildEmployeeAttendanceLogsWhere(employeeUID, filter)
 	orderBy, err := buildDepartmentAttendanceLogsOrderBy(params)
@@ -279,7 +271,7 @@ func (r *AttendanceRecordRepository) ListByEmployeeUID(ctx context.Context, q po
 		return nil, err
 	}
 
-	query := baseQuery + whereClause + orderBy + ` LIMIT ? OFFSET ?`
+	query := baseQuery + whereClause + orderBy + ` LIMIT $1 OFFSET $2`
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryAttendanceRecordsWithEmployee(ctx, q, query, args, "attendance_record_repository.ListByEmployeeUID", "employee_uid", employeeUID)
@@ -290,7 +282,7 @@ func (r *AttendanceRecordRepository) CountByEmployeeUID(ctx context.Context, q p
 		SELECT COUNT(*)
 		FROM attendance_records ar
 		INNER JOIN employees e ON e.uid = ar.employee_uid
-		WHERE ar.employee_uid = ?`
+		WHERE ar.employee_uid = $1`
 
 	whereClause, args := buildEmployeeAttendanceLogsWhere(employeeUID, filter)
 	query := baseQuery + whereClause
@@ -305,70 +297,88 @@ func (r *AttendanceRecordRepository) CountByEmployeeUID(ctx context.Context, q p
 }
 
 func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Context, q ports.Querier, departmentUID string, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
-	baseQuery := `
+	whereClause, args := buildDepartmentAttendanceLogsWhere(departmentUID, filter)
+	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use CTE to avoid correlated subquery issues with GROUP BY
+	query := `
+		WITH daily_groups AS (
+			SELECT
+				ar.punched_at::date AS attendance_date,
+				ar.employee_uid,
+				e.name,
+				e.department_uid
+			FROM attendance_records ar
+			INNER JOIN employees e ON e.uid = ar.employee_uid
+			WHERE e.department_uid = $1` + whereClause + `
+			GROUP BY ar.punched_at::date, ar.employee_uid, e.name, e.department_uid
+		)
 		SELECT
-			date(ar.punched_at) AS attendance_date,
-			ar.employee_uid,
-			e.name,
-			e.department_uid,
+			dg.attendance_date,
+			dg.employee_uid,
+			dg.name,
+			dg.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
 			(
-			SELECT ar1.uid
-			FROM attendance_records ar1
-			WHERE ar1.employee_uid = ar.employee_uid
-				AND date(ar1.punched_at) = date(ar.punched_at)
-				AND ar1.punch_type IN ('check_in', 'unknown')
-			ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
-			LIMIT 1
+				SELECT ar1.uid
+				FROM attendance_records ar1
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
+					AND ar1.punch_type IN ('check_in', 'unknown')
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
+				LIMIT 1
 			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
-						 		(
-			SELECT ar2.uid
-			FROM attendance_records ar2
-			WHERE ar2.employee_uid = ar.employee_uid
-				AND date(ar2.punched_at) = date(ar.punched_at)
-				AND ar2.punch_type IN ('check_out', 'unknown')
-			ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
-			LIMIT 1
+			(
+				SELECT ar2.uid
+				FROM attendance_records ar2
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
+					AND ar2.punch_type IN ('check_out', 'unknown')
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
+				LIMIT 1
 			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device,
 			(
 				SELECT ad1.uid
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device_uid,
 			(
 				SELECT ad2.name
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device,
 			(
 				SELECT ad2.uid
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device_uid,
 			(
@@ -378,10 +388,10 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
-						WHERE ar1.employee_uid = ar.employee_uid
-							AND date(ar1.punched_at) = date(ar.punched_at)
+						WHERE ar1.employee_uid = dg.employee_uid
+							AND ar1.punched_at::date = dg.attendance_date
 							AND ar1.punch_type IN ('check_in', 'unknown')
-						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 						LIMIT 1
 					)
 				)
@@ -391,26 +401,20 @@ func (r *AttendanceRecordRepository) ListDailyByDepartmentUID(ctx context.Contex
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
-						WHERE ar2.employee_uid = ar.employee_uid
-							AND date(ar2.punched_at) = date(ar.punched_at)
+						WHERE ar2.employee_uid = dg.employee_uid
+							AND ar2.punched_at::date = dg.attendance_date
 							AND ar2.punch_type IN ('check_out', 'unknown')
-						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 						LIMIT 1
 					)
 				)
 			) AS has_edit_history
-		FROM attendance_records ar
-		INNER JOIN employees e ON e.uid = ar.employee_uid
-		WHERE e.department_uid = ?`
-
-	whereClause, args := buildDepartmentAttendanceLogsWhere(departmentUID, filter)
-	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
-	if err != nil {
-		return nil, err
-	}
-
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
-		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
+		FROM daily_groups dg
+		INNER JOIN attendance_records ar ON ar.employee_uid = dg.employee_uid AND ar.punched_at::date = dg.attendance_date
+		GROUP BY dg.attendance_date, dg.employee_uid, dg.name, dg.department_uid
+		HAVING MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) IS NOT NULL 
+			OR MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) IS NOT NULL
+	` + orderBy + ` LIMIT $` + fmt.Sprintf("%d", len(args)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(args)+2)
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDailyByDepartmentUID", "department_uid", departmentUID)
@@ -423,10 +427,10 @@ func (r *AttendanceRecordRepository) CountDailyByDepartmentUID(ctx context.Conte
 			SELECT 1
 			FROM attendance_records ar
 			INNER JOIN employees e ON e.uid = ar.employee_uid
-			WHERE e.department_uid = ?`
+			WHERE e.department_uid = $1`
 
 	whereClause, args := buildDepartmentAttendanceLogsWhere(departmentUID, filter)
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid
+	query := "SELECT * FROM (" + baseQuery + whereClause + ` GROUP BY ar.punched_at::date, ar.employee_uid
 		) grouped`
 
 	var total int
@@ -439,70 +443,88 @@ func (r *AttendanceRecordRepository) CountDailyByDepartmentUID(ctx context.Conte
 }
 
 func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context, q ports.Querier, employeeUID string, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
-	baseQuery := `
+	whereClause, args := buildEmployeeAttendanceLogsWhere(employeeUID, filter)
+	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use CTE to avoid correlated subquery issues with GROUP BY
+	query := `
+		WITH daily_groups AS (
+			SELECT
+				ar.punched_at::date AS attendance_date,
+				ar.employee_uid,
+				e.name,
+				e.department_uid
+			FROM attendance_records ar
+			INNER JOIN employees e ON e.uid = ar.employee_uid
+			WHERE ar.employee_uid = $1` + whereClause + `
+			GROUP BY ar.punched_at::date, ar.employee_uid, e.name, e.department_uid
+		)
 		SELECT
-			date(ar.punched_at) AS attendance_date,
-			ar.employee_uid,
-			e.name,
-			e.department_uid,
+			dg.attendance_date,
+			dg.employee_uid,
+			dg.name,
+			dg.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
 			(
 				SELECT ar1.uid
 				FROM attendance_records ar1
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
 			(
 				SELECT ar2.uid
 				FROM attendance_records ar2
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device,
 			(
 				SELECT ad1.uid
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device_uid,
 			(
 				SELECT ad2.name
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device,
 			(
 				SELECT ad2.uid
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device_uid,
 			(
@@ -512,10 +534,10 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
-						WHERE ar1.employee_uid = ar.employee_uid
-							AND date(ar1.punched_at) = date(ar.punched_at)
+						WHERE ar1.employee_uid = dg.employee_uid
+							AND ar1.punched_at::date = dg.attendance_date
 							AND ar1.punch_type IN ('check_in', 'unknown')
-						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 						LIMIT 1
 					)
 				)
@@ -525,26 +547,20 @@ func (r *AttendanceRecordRepository) ListDailyByEmployeeUID(ctx context.Context,
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
-						WHERE ar2.employee_uid = ar.employee_uid
-							AND date(ar2.punched_at) = date(ar.punched_at)
+						WHERE ar2.employee_uid = dg.employee_uid
+							AND ar2.punched_at::date = dg.attendance_date
 							AND ar2.punch_type IN ('check_out', 'unknown')
-						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 						LIMIT 1
 					)
 				)
 			) AS has_edit_history
-		FROM attendance_records ar
-		INNER JOIN employees e ON e.uid = ar.employee_uid
-		WHERE ar.employee_uid = ?`
-
-	whereClause, args := buildEmployeeAttendanceLogsWhere(employeeUID, filter)
-	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
-	if err != nil {
-		return nil, err
-	}
-
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
-		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
+		FROM daily_groups dg
+		INNER JOIN attendance_records ar ON ar.employee_uid = dg.employee_uid AND ar.punched_at::date = dg.attendance_date
+		GROUP BY dg.attendance_date, dg.employee_uid, dg.name, dg.department_uid
+		HAVING MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) IS NOT NULL 
+			OR MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) IS NOT NULL
+	` + orderBy + ` LIMIT $` + fmt.Sprintf("%d", len(args)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(args)+2)
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDailyByEmployeeUID", "employee_uid", employeeUID)
@@ -557,10 +573,10 @@ func (r *AttendanceRecordRepository) CountDailyByEmployeeUID(ctx context.Context
 			SELECT 1
 			FROM attendance_records ar
 			INNER JOIN employees e ON e.uid = ar.employee_uid
-			WHERE ar.employee_uid = ?`
+			WHERE ar.employee_uid = $1`
 
 	whereClause, args := buildEmployeeAttendanceLogsWhere(employeeUID, filter)
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid
+	query := "SELECT * FROM (" + baseQuery + whereClause + ` GROUP BY ar.punched_at::date, ar.employee_uid
 		) grouped`
 
 	var total int
@@ -573,70 +589,88 @@ func (r *AttendanceRecordRepository) CountDailyByEmployeeUID(ctx context.Context
 }
 
 func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Querier, filter ports.DepartmentAttendanceLogsFilter, params ports.ListParams) ([]*ports.DailyAttendanceGroup, error) {
-	baseQuery := `
+	whereClause, args := buildAttendanceLogsWhere(filter)
+	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use CTE to avoid correlated subquery issues with GROUP BY
+	query := `
+		WITH daily_groups AS (
+			SELECT
+				ar.punched_at::date AS attendance_date,
+				ar.employee_uid,
+				e.name,
+				e.department_uid
+			FROM attendance_records ar
+			INNER JOIN employees e ON e.uid = ar.employee_uid
+			WHERE 1 = 1` + whereClause + `
+			GROUP BY ar.punched_at::date, ar.employee_uid, e.name, e.department_uid
+		)
 		SELECT
-			date(ar.punched_at) AS attendance_date,
-			ar.employee_uid,
-			e.name,
-			e.department_uid,
+			dg.attendance_date,
+			dg.employee_uid,
+			dg.name,
+			dg.department_uid,
 			MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) AS check_in,
 			(
 				SELECT ar1.uid
 				FROM attendance_records ar1
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_log_uid,
 			MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) AS check_out,
 			(
 				SELECT ar2.uid
 				FROM attendance_records ar2
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_log_uid,
 			(
 				SELECT ad1.name
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device,
 			(
 				SELECT ad1.uid
 				FROM attendance_records ar1
 				INNER JOIN attendance_devices ad1 ON ad1.uid = ar1.device_uid
-				WHERE ar1.employee_uid = ar.employee_uid
-					AND date(ar1.punched_at) = date(ar.punched_at)
+				WHERE ar1.employee_uid = dg.employee_uid
+					AND ar1.punched_at::date = dg.attendance_date
 					AND ar1.punch_type IN ('check_in', 'unknown')
-				ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+				ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 				LIMIT 1
 			) AS check_in_device_uid,
 			(
 				SELECT ad2.name
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device,
 			(
 				SELECT ad2.uid
 				FROM attendance_records ar2
 				INNER JOIN attendance_devices ad2 ON ad2.uid = ar2.device_uid
-				WHERE ar2.employee_uid = ar.employee_uid
-					AND date(ar2.punched_at) = date(ar.punched_at)
+				WHERE ar2.employee_uid = dg.employee_uid
+					AND ar2.punched_at::date = dg.attendance_date
 					AND ar2.punch_type IN ('check_out', 'unknown')
-				ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+				ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 				LIMIT 1
 			) AS check_out_device_uid,
 			(
@@ -646,10 +680,10 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar1.uid
 						FROM attendance_records ar1
-						WHERE ar1.employee_uid = ar.employee_uid
-							AND date(ar1.punched_at) = date(ar.punched_at)
+						WHERE ar1.employee_uid = dg.employee_uid
+							AND ar1.punched_at::date = dg.attendance_date
 							AND ar1.punch_type IN ('check_in', 'unknown')
-						ORDER BY datetime(ar1.punched_at) ASC, ar1.id ASC
+						ORDER BY ar1.punched_at::timestamp ASC, ar1.id ASC
 						LIMIT 1
 					)
 				)
@@ -659,26 +693,20 @@ func (r *AttendanceRecordRepository) ListDaily(ctx context.Context, q ports.Quer
 					WHERE al.entity_type = 'attendance_record' AND al.entity_uid = (
 						SELECT ar2.uid
 						FROM attendance_records ar2
-						WHERE ar2.employee_uid = ar.employee_uid
-							AND date(ar2.punched_at) = date(ar.punched_at)
+						WHERE ar2.employee_uid = dg.employee_uid
+							AND ar2.punched_at::date = dg.attendance_date
 							AND ar2.punch_type IN ('check_out', 'unknown')
-						ORDER BY datetime(ar2.punched_at) DESC, ar2.id DESC
+						ORDER BY ar2.punched_at::timestamp DESC, ar2.id DESC
 						LIMIT 1
 					)
 				)
 			) AS has_edit_history
-		FROM attendance_records ar
-		INNER JOIN employees e ON e.uid = ar.employee_uid
-		WHERE 1 = 1`
-
-	whereClause, args := buildAttendanceLogsWhere(filter)
-	orderBy, err := buildDailyAttendanceLogsOrderBy(params)
-	if err != nil {
-		return nil, err
-	}
-
-	query := baseQuery + whereClause + ` GROUP BY date(ar.punched_at), ar.employee_uid, e.name, e.department_uid
-		HAVING check_in IS NOT NULL OR check_out IS NOT NULL` + orderBy + ` LIMIT ? OFFSET ?`
+		FROM daily_groups dg
+		INNER JOIN attendance_records ar ON ar.employee_uid = dg.employee_uid AND ar.punched_at::date = dg.attendance_date
+		GROUP BY dg.attendance_date, dg.employee_uid, dg.name, dg.department_uid
+		HAVING MIN(CASE WHEN ar.punch_type IN ('check_in', 'unknown') THEN ar.punched_at END) IS NOT NULL 
+			OR MAX(CASE WHEN ar.punch_type IN ('check_out', 'unknown') THEN ar.punched_at END) IS NOT NULL
+	` + orderBy + ` LIMIT $` + fmt.Sprintf("%d", len(args)+1) + ` OFFSET $` + fmt.Sprintf("%d", len(args)+2)
 	args = append(args, params.PageSize, params.Offset())
 
 	return r.queryDailyAttendanceGroups(ctx, q, query, args, "attendance_record_repository.ListDaily", "scope", "all")
@@ -688,7 +716,7 @@ func (r *AttendanceRecordRepository) ResolveEmployeeUIDByDeviceUserID(ctx contex
 	query := `
 		SELECT uid
 		FROM employees
-		WHERE university_id = ? OR government_id = ?
+		WHERE university_id = $1 OR government_id = $2
 		LIMIT 1`
 
 	var employeeUID string
@@ -832,13 +860,13 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 
 	groups := make([]*ports.DailyAttendanceGroup, 0)
 	for rows.Next() {
-		var dateValue string
+		var dateValue time.Time
 		var employeeUID string
 		var employeeName string
 		var departmentUID sql.NullString
-		var checkIn sql.NullString
+		var checkIn sql.NullTime
 		var checkInLogUID sql.NullString
-		var checkOut sql.NullString
+		var checkOut sql.NullTime
 		var checkOutLogUID sql.NullString
 		var checkInDevice sql.NullString
 		var checkInDeviceUID sql.NullString
@@ -851,18 +879,13 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 			return nil, err
 		}
 
-		dateParsed, err := time.Parse("2006-01-02", dateValue)
-		if err != nil {
-			return nil, err
-		}
-
 		var departmentUIDPtr *string
 		if departmentUID.Valid {
 			departmentUIDPtr = &departmentUID.String
 		}
 
 		group := &ports.DailyAttendanceGroup{
-			Date:           dateParsed,
+			Date:           dateValue,
 			EmployeeUID:    employeeUID,
 			EmployeeName:   employeeName,
 			DepartmentUID:  departmentUIDPtr,
@@ -870,18 +893,10 @@ func (r *AttendanceRecordRepository) queryDailyAttendanceGroups(ctx context.Cont
 		}
 
 		if checkIn.Valid {
-			t, err := parseAttendanceTimestamp(checkIn.String)
-			if err != nil {
-				return nil, err
-			}
-			group.CheckIn = &t
+			group.CheckIn = &checkIn.Time
 		}
 		if checkOut.Valid {
-			t, err := parseAttendanceTimestamp(checkOut.String)
-			if err != nil {
-				return nil, err
-			}
-			group.CheckOut = &t
+			group.CheckOut = &checkOut.Time
 		}
 		if checkInDevice.Valid {
 			group.CheckInDevice = &checkInDevice.String
@@ -967,12 +982,12 @@ func buildDepartmentAttendanceLogsWhere(departmentUID string, filter ports.Depar
 		args = append(args, *filter.PunchType)
 	}
 	if filter.StartDate != nil {
-		clauses = append(clauses, "datetime(ar.punched_at) >= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp >= ?::timestamp")
 		args = append(args, filter.StartDate.Format(time.RFC3339))
 	}
 	if filter.EndDate != nil {
 		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
-		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp <= ?::timestamp")
 		args = append(args, inclusiveEndDate.Format(time.RFC3339))
 	}
 
@@ -980,7 +995,9 @@ func buildDepartmentAttendanceLogsWhere(departmentUID string, filter ports.Depar
 		return "", args
 	}
 
-	return " AND " + strings.Join(clauses, " AND "), args
+	whereClause := " AND " + strings.Join(clauses, " AND ")
+	whereClause = convertPlaceholders(whereClause, 2) // Start from $2 since $1 is departmentUID
+	return whereClause, args
 }
 
 func buildAttendanceLogsWhere(filter ports.DepartmentAttendanceLogsFilter) (string, []any) {
@@ -1015,12 +1032,12 @@ func buildAttendanceLogsWhere(filter ports.DepartmentAttendanceLogsFilter) (stri
 		args = append(args, *filter.PunchType)
 	}
 	if filter.StartDate != nil {
-		clauses = append(clauses, "datetime(ar.punched_at) >= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp >= ?::timestamp")
 		args = append(args, filter.StartDate.Format(time.RFC3339))
 	}
 	if filter.EndDate != nil {
 		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
-		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp <= ?::timestamp")
 		args = append(args, inclusiveEndDate.Format(time.RFC3339))
 	}
 
@@ -1028,7 +1045,9 @@ func buildAttendanceLogsWhere(filter ports.DepartmentAttendanceLogsFilter) (stri
 		return "", args
 	}
 
-	return " AND " + strings.Join(clauses, " AND "), args
+	whereClause := " AND " + strings.Join(clauses, " AND ")
+	whereClause = convertPlaceholders(whereClause, 1) // Start from $1
+	return whereClause, args
 }
 
 func buildEmployeeAttendanceLogsWhere(employeeUID string, filter ports.DepartmentAttendanceLogsFilter) (string, []any) {
@@ -1059,12 +1078,12 @@ func buildEmployeeAttendanceLogsWhere(employeeUID string, filter ports.Departmen
 		args = append(args, *filter.PunchType)
 	}
 	if filter.StartDate != nil {
-		clauses = append(clauses, "datetime(ar.punched_at) >= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp >= ?::timestamp")
 		args = append(args, filter.StartDate.Format(time.RFC3339))
 	}
 	if filter.EndDate != nil {
 		inclusiveEndDate := makeInclusiveEndDate(*filter.EndDate)
-		clauses = append(clauses, "datetime(ar.punched_at) <= datetime(?)")
+		clauses = append(clauses, "ar.punched_at::timestamp <= ?::timestamp")
 		args = append(args, inclusiveEndDate.Format(time.RFC3339))
 	}
 
@@ -1072,7 +1091,9 @@ func buildEmployeeAttendanceLogsWhere(employeeUID string, filter ports.Departmen
 		return "", args
 	}
 
-	return " AND " + strings.Join(clauses, " AND "), args
+	whereClause := " AND " + strings.Join(clauses, " AND ")
+	whereClause = convertPlaceholders(whereClause, 2) // Start from $2 since $1 is employeeUID
+	return whereClause, args
 }
 
 func buildDepartmentAttendanceLogsOrderBy(params ports.ListParams) (string, error) {
@@ -1098,7 +1119,7 @@ func buildDepartmentAttendanceLogsOrderBy(params ports.ListParams) (string, erro
 func buildDailyAttendanceLogsOrderBy(params ports.ListParams) (string, error) {
 	allowedColumns := map[string]string{
 		"date":         "attendance_date",
-		"employeeName": "e.name",
+		"employeeName": "name",
 	}
 
 	column, ok := allowedColumns[params.SortBy]
@@ -1111,7 +1132,7 @@ func buildDailyAttendanceLogsOrderBy(params ports.ListParams) (string, error) {
 		order = "DESC"
 	}
 
-	return fmt.Sprintf(" ORDER BY %s %s, e.name ASC, ar.employee_uid ASC", column, order), nil
+	return fmt.Sprintf(" ORDER BY %s %s, name ASC, employee_uid ASC", column, order), nil
 }
 
 func makeInclusiveEndDate(value time.Time) time.Time {
@@ -1121,3 +1142,4 @@ func makeInclusiveEndDate(value time.Time) time.Time {
 
 	return value
 }
+

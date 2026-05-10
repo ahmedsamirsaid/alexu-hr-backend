@@ -1,5 +1,5 @@
 CREATE TABLE employees (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     mobile TEXT UNIQUE NOT NULL,
@@ -8,8 +8,8 @@ CREATE TABLE employees (
     email TEXT,
     hire_date TEXT NOT NULL,
     status TEXT DEFAULT 'active',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_employees_name ON employees(name);

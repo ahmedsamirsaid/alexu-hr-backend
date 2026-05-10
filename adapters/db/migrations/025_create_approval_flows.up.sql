@@ -1,13 +1,13 @@
 CREATE TABLE approval_flows (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     code TEXT UNIQUE NOT NULL,
     name_en TEXT NOT NULL,
     name_ar TEXT,
     description TEXT,
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_approval_flows_code ON approval_flows(code);

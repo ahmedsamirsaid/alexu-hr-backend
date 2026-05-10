@@ -22,13 +22,14 @@ func NewAttendanceDeviceRepository() *AttendanceDeviceRepository {
 func (r *AttendanceDeviceRepository) Create(ctx context.Context, q ports.Querier, device *domain.AttendanceDevice) error {
 	query := `
 		INSERT INTO attendance_devices (uid, ip, port, name, location, serial_number, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING id`
 
 	now := time.Now()
 	device.CreatedAt = now
 	device.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		device.UID,
 		device.IP,
 		device.Port,
@@ -38,18 +39,12 @@ func (r *AttendanceDeviceRepository) Create(ctx context.Context, q ports.Querier
 		string(device.Status),
 		device.CreatedAt,
 		device.UpdatedAt,
-	)
+	).Scan(&device.ID)
 	if err != nil {
 		slog.Error("attendance_device_repository.Create.exec_query", "error", err, "uid", device.UID, "serial_number", device.SerialNumber)
 		return err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("attendance_device_repository.Create.last_insert_id", "error", err, "uid", device.UID)
-		return err
-	}
-	device.ID = id
 	return nil
 }
 
@@ -57,7 +52,7 @@ func (r *AttendanceDeviceRepository) GetByUID(ctx context.Context, q ports.Queri
 	query := `
 		SELECT id, uid, ip, port, name, location, serial_number, status, created_at, updated_at
 		FROM attendance_devices
-		WHERE uid = ?`
+		WHERE uid = $1`
 	return r.scanDevice(q.QueryRowContext(ctx, query, uid))
 }
 
@@ -65,7 +60,7 @@ func (r *AttendanceDeviceRepository) GetBySerialNumber(ctx context.Context, q po
 	query := `
 		SELECT id, uid, ip, port, name, location, serial_number, status, created_at, updated_at
 		FROM attendance_devices
-		WHERE serial_number = ?`
+		WHERE serial_number = $1`
 	return r.scanDevice(q.QueryRowContext(ctx, query, serialNumber))
 }
 
@@ -73,15 +68,15 @@ func (r *AttendanceDeviceRepository) GetByAddress(ctx context.Context, q ports.Q
 	query := `
 		SELECT id, uid, ip, port, name, location, serial_number, status, created_at, updated_at
 		FROM attendance_devices
-		WHERE ip = ? AND port = ?`
+		WHERE ip = $1 AND port = $2`
 	return r.scanDevice(q.QueryRowContext(ctx, query, ip, port))
 }
 
 func (r *AttendanceDeviceRepository) Update(ctx context.Context, q ports.Querier, device *domain.AttendanceDevice) error {
 	query := `
 		UPDATE attendance_devices
-		SET ip = ?, port = ?, name = ?, location = ?, status = ?, updated_at = ?
-		WHERE uid = ?`
+		SET ip = $1, port = $2, name = $3, location = $4, status = $5, updated_at = $6
+		WHERE uid = $7`
 
 	device.UpdatedAt = time.Now()
 
@@ -109,7 +104,7 @@ func (r *AttendanceDeviceRepository) List(ctx context.Context, q ports.Querier, 
 		FROM attendance_devices
 		%s
 		ORDER BY created_at DESC
-		LIMIT ? OFFSET ?`, whereClause)
+		LIMIT $1 OFFSET $2`, whereClause)
 
 	args := append(whereArgs, limit, offset)
 
@@ -193,7 +188,7 @@ func (r *AttendanceDeviceRepository) CountFiltered(ctx context.Context, q ports.
 }
 
 func (r *AttendanceDeviceRepository) CountByStatus(ctx context.Context, q ports.Querier, status domain.AttendanceDeviceStatus) (int, error) {
-	query := `SELECT COUNT(*) FROM attendance_devices WHERE status = ?`
+	query := `SELECT COUNT(*) FROM attendance_devices WHERE status = $1`
 	var count int
 	if err := q.QueryRowContext(ctx, query, string(status)).Scan(&count); err != nil {
 		slog.Error("attendance_device_repository.CountByStatus.scan", "error", err, "status", status)
@@ -203,7 +198,7 @@ func (r *AttendanceDeviceRepository) CountByStatus(ctx context.Context, q ports.
 }
 
 func (r *AttendanceDeviceRepository) UpdateStatus(ctx context.Context, q ports.Querier, uid string, status domain.AttendanceDeviceStatus) error {
-	query := `UPDATE attendance_devices SET status = ?, updated_at = ? WHERE uid = ?`
+	query := `UPDATE attendance_devices SET status = $1, updated_at = $2 WHERE uid = $3`
 	_, err := q.ExecContext(ctx, query, string(status), time.Now(), uid)
 	if err != nil {
 		slog.Error("attendance_device_repository.UpdateStatus.exec", "error", err, "uid", uid)
@@ -212,7 +207,7 @@ func (r *AttendanceDeviceRepository) UpdateStatus(ctx context.Context, q ports.Q
 }
 
 func (r *AttendanceDeviceRepository) Delete(ctx context.Context, q ports.Querier, uid string) error {
-	query := `DELETE FROM attendance_devices WHERE uid = ?`
+	query := `DELETE FROM attendance_devices WHERE uid = $1`
 	_, err := q.ExecContext(ctx, query, uid)
 	if err != nil {
 		slog.Error("attendance_device_repository.Delete.exec", "error", err, "uid", uid)
@@ -281,16 +276,19 @@ func (r *AttendanceDeviceRepository) scanDeviceRow(rows *sql.Rows) (*domain.Atte
 func buildAttendanceDeviceWhereClause(filter ports.AttendanceDeviceListFilter) (string, []any) {
 	clauses := make([]string, 0, 2)
 	args := make([]any, 0, 5)
+	param := 1
 
 	if filter.Status != nil {
-		clauses = append(clauses, "status = ?")
+		clauses = append(clauses, fmt.Sprintf("status = $%d", param))
 		args = append(args, string(*filter.Status))
+		param++
 	}
 
 	if search := strings.TrimSpace(filter.Search); search != "" {
 		like := "%" + search + "%"
-		clauses = append(clauses, "(name LIKE ? OR location LIKE ? OR ip LIKE ? OR serial_number LIKE ? OR CAST(port AS TEXT) LIKE ?)")
+		clauses = append(clauses, fmt.Sprintf("(name LIKE $%d OR location LIKE $%d OR ip LIKE $%d OR serial_number LIKE $%d OR CAST(port AS TEXT) LIKE $%d)", param, param+1, param+2, param+3, param+4))
 		args = append(args, like, like, like, like, like)
+		param += 5
 	}
 
 	if len(clauses) == 0 {

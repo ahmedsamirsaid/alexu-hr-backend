@@ -225,7 +225,7 @@ func (a *auditorImpl) persist(ctx context.Context, b *Builder) {
 		OccurredAt: time.Now(),
 	}
 
-	// Retry logic for SQLite busy errors
+	// Retry logic for database busy errors
 	maxRetries := 3
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := a.repo.Create(ctx, a.db, entry)

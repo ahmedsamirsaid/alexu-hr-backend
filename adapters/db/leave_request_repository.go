@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -23,7 +22,7 @@ func (r *LeaveRequestRepository) GetByID(ctx context.Context, q ports.Querier, i
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanLeaveRequest(q.QueryRowContext(ctx, query, id))
 }
@@ -32,7 +31,7 @@ func (r *LeaveRequestRepository) GetByUID(ctx context.Context, q ports.Querier, 
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanLeaveRequest(q.QueryRowContext(ctx, query, uid))
 }
@@ -53,7 +52,7 @@ func (r *LeaveRequestRepository) GetByUIDs(ctx context.Context, q ports.Querier,
 		if i > 0 {
 			query += ", "
 		}
-		query += "?"
+		query += fmt.Sprintf("$%d", i+1)
 		args[i] = uid
 	}
 	query += ")"
@@ -86,7 +85,7 @@ func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q 
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
-		WHERE approval_request_uid = ?`
+		WHERE approval_request_uid = $1`
 
 	return r.scanLeaveRequest(q.QueryRowContext(ctx, query, approvalRequestUID))
 }
@@ -94,7 +93,8 @@ func (r *LeaveRequestRepository) GetByApprovalRequestUID(ctx context.Context, q 
 func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
 	query := `
 		INSERT INTO leave_requests (uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		RETURNING id`
 
 	now := time.Now()
 	request.CreatedAt = now
@@ -103,23 +103,16 @@ func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, re
 		request.SubmittedAt = now
 	}
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		request.UID, request.EmployeeUID, request.LeaveTypeUID, request.SubLeaveTypeUID, request.OtherSubLeaveName,
 		request.StartDate, request.EndDate, request.Days, request.Notes,
 		request.StudyDestination, request.Assignment, request.AssignmentCountry, request.SpouseWorkCountry,
 		request.SubmittedAt, request.DecidedAt, request.ApprovalRequestUID,
-		request.CreatedAt, request.UpdatedAt)
+		request.CreatedAt, request.UpdatedAt).Scan(&request.ID)
 	if err != nil {
 		slog.Error("leave_request_repository.Create.exec_query", "error", err, "uid", request.UID, "employee_uid", request.EmployeeUID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("leave_request_repository.Create.last_insert_id", "error", err, "uid", request.UID)
-		return err
-	}
-	request.ID = id
 
 	return nil
 }
@@ -127,10 +120,10 @@ func (r *LeaveRequestRepository) Create(ctx context.Context, q ports.Querier, re
 func (r *LeaveRequestRepository) Update(ctx context.Context, q ports.Querier, request *domain.LeaveRequest) error {
 	query := `
 		UPDATE leave_requests
-		SET leave_type_uid = ?, sub_leave_type_uid = ?, other_sub_leave_name = ?, start_date = ?, end_date = ?, days = ?, notes = ?,
-		    study_destination = ?, assignment = ?, assignment_country = ?, spouse_work_country = ?,
-		    decided_at = ?, updated_at = ?
-		WHERE id = ?`
+		SET leave_type_uid = $1, sub_leave_type_uid = $2, other_sub_leave_name = $3, start_date = $4, end_date = $5, days = $6, notes = $7,
+		    study_destination = $8, assignment = $9, assignment_country = $10, spouse_work_country = $11,
+		    decided_at = $12, updated_at = $13
+		WHERE id = $14`
 
 	request.UpdatedAt = time.Now()
 
@@ -148,7 +141,7 @@ func (r *LeaveRequestRepository) ListByEmployee(ctx context.Context, q ports.Que
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
-		WHERE employee_uid = ?
+		WHERE employee_uid = $1
 		ORDER BY submitted_at DESC`
 
 	return r.queryLeaveRequests(ctx, q, query, employeeUID)
@@ -158,15 +151,15 @@ func (r *LeaveRequestRepository) ListByEmployeePaginated(ctx context.Context, q 
 	query := `
 		SELECT id, uid, employee_uid, leave_type_uid, sub_leave_type_uid, other_sub_leave_name, start_date, end_date, days, notes, study_destination, assignment, assignment_country, spouse_work_country, submitted_at, decided_at, approval_request_uid, created_at, updated_at
 		FROM leave_requests
-		WHERE employee_uid = ?
+		WHERE employee_uid = $1
 		ORDER BY submitted_at DESC
-		LIMIT ? OFFSET ?`
+		LIMIT $2 OFFSET $3`
 
 	return r.queryLeaveRequests(ctx, q, query, employeeUID, limit, offset)
 }
 
 func (r *LeaveRequestRepository) CountByEmployee(ctx context.Context, q ports.Querier, employeeUID string) (int, error) {
-	query := `SELECT COUNT(*) FROM leave_requests WHERE employee_uid = ?`
+	query := `SELECT COUNT(*) FROM leave_requests WHERE employee_uid = $1`
 	var count int
 	err := q.QueryRowContext(ctx, query, employeeUID).Scan(&count)
 	if err != nil {
@@ -181,14 +174,14 @@ func (r *LeaveRequestRepository) HasOverlapping(ctx context.Context, q ports.Que
 		SELECT COUNT(*)
 		FROM leave_requests lr
 		JOIN approval_requests ar ON lr.approval_request_uid = ar.uid
-		WHERE lr.employee_uid = ?
+		WHERE lr.employee_uid = $1
 		AND ar.status IN ('pending', 'approved')
-		AND NOT (lr.end_date < ? OR lr.start_date > ?)`
+		AND NOT (lr.end_date < $2 OR lr.start_date > $3)`
 
 	args := []any{employeeUID, startDate, endDate}
 
 	if excludeUID != nil {
-		query += ` AND lr.uid != ?`
+		query += ` AND lr.uid != ` + nextPlaceholder(args)
 		args = append(args, *excludeUID)
 	}
 
@@ -211,18 +204,18 @@ func (r *LeaveRequestRepository) List(ctx context.Context, q ports.Querier, filt
 	args := []any{}
 
 	if filter.Status != nil {
-		query += ` AND ar.status = ?`
+		query += ` AND ar.status = ` + nextPlaceholder(args)
 		args = append(args, *filter.Status)
 	}
 
 	if filter.EmployeeUID != nil {
-		query += ` AND lr.employee_uid = ?`
+		query += ` AND lr.employee_uid = ` + nextPlaceholder(args)
 		args = append(args, *filter.EmployeeUID)
 	}
 
 	query, args = applyLeaveRequestDepartmentScope(query, args, filter.DepartmentUIDs)
 
-	query += ` ORDER BY lr.submitted_at DESC LIMIT ? OFFSET ?`
+	query += ` ORDER BY lr.submitted_at DESC LIMIT ` + nextPlaceholder(args) + ` OFFSET ` + nextPlaceholder(append(args, nil))
 	args = append(args, limit, offset)
 
 	return r.queryLeaveRequests(ctx, q, query, args...)
@@ -238,12 +231,12 @@ func (r *LeaveRequestRepository) Count(ctx context.Context, q ports.Querier, fil
 	args := []any{}
 
 	if filter.Status != nil {
-		query += ` AND ar.status = ?`
+		query += ` AND ar.status = ` + nextPlaceholder(args)
 		args = append(args, *filter.Status)
 	}
 
 	if filter.EmployeeUID != nil {
-		query += ` AND lr.employee_uid = ?`
+		query += ` AND lr.employee_uid = ` + nextPlaceholder(args)
 		args = append(args, *filter.EmployeeUID)
 	}
 
@@ -266,17 +259,18 @@ func applyLeaveRequestDepartmentScope(query string, args []any, departmentUIDs [
 		return query + ` AND 1=0`, args
 	}
 
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(departmentUIDs)), ",")
+	startIndex := len(args) + 1
+	for _, departmentUID := range departmentUIDs {
+		args = append(args, departmentUID)
+	}
+
+	placeholders := buildPlaceholders(len(departmentUIDs), startIndex)
 	query += ` AND EXISTS (
 		SELECT 1
 		FROM employees e
 		WHERE e.uid = lr.employee_uid
 		  AND e.department_uid IN (` + placeholders + `)
 	)`
-
-	for _, departmentUID := range departmentUIDs {
-		args = append(args, departmentUID)
-	}
 
 	return query, args
 }
@@ -364,8 +358,7 @@ func (r *LeaveRequestRepository) FindExpiredPending(ctx context.Context, q ports
 		JOIN approval_requests ar ON lr.approval_request_uid = ar.uid
 		WHERE ar.status = 'pending'
 		AND lr.decided_at IS NULL
-		AND lr.start_date < date('now', ?)`
+		AND lr.start_date::date < (CURRENT_DATE - $1 * INTERVAL '1 day')`
 
-	graceOffset := fmt.Sprintf("-%d days", graceDays)
-	return r.queryLeaveRequests(ctx, q, query, graceOffset)
+	return r.queryLeaveRequests(ctx, q, query, graceDays)
 }

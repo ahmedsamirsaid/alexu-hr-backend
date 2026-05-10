@@ -161,7 +161,7 @@ func (h *LeaveHandler) RecordLeave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var records []LeaveRecordResponse
+	records := make([]LeaveRecordResponse, 0)
 	for _, rec := range output.Records {
 		records = append(records, LeaveRecordResponse{
 			UID:       rec.UID,
@@ -208,7 +208,7 @@ func (h *LeaveHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var balances []BalanceResponse
+	balances := make([]BalanceResponse, 0)
 	for _, b := range output.Balances {
 		balances = append(balances, BalanceResponse{
 			LeaveTypeUID:     b.LeaveTypeUID,
@@ -289,7 +289,7 @@ func (h *LeaveHandler) ListLeaveRecords(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var records []LeaveRecordListItem
+	records := make([]LeaveRecordListItem, 0)
 	for _, rec := range output.Records {
 		records = append(records, LeaveRecordListItem{
 			UID:             rec.UID,
@@ -379,7 +379,7 @@ func (h *LeaveHandler) ListAllLeaveRecords(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var records []AllLeaveRecordListItem
+	records := make([]AllLeaveRecordListItem, 0)
 	for _, rec := range output.Records {
 		records = append(records, AllLeaveRecordListItem{
 			UID:             rec.UID,

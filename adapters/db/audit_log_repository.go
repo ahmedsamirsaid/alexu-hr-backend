@@ -10,7 +10,7 @@ import (
 	"github.com/banumusa/backend/core/ports"
 )
 
-// AuditLogRepository is the SQLite-backed implementation of ports.AuditLogRepository.
+// AuditLogRepository is the PostgreSQL-backed implementation of ports.AuditLogRepository.
 type AuditLogRepository struct{}
 
 func NewAuditLogRepository() *AuditLogRepository {
@@ -21,7 +21,8 @@ func NewAuditLogRepository() *AuditLogRepository {
 func (r *AuditLogRepository) Create(ctx context.Context, q ports.Querier, log *domain.AuditLog) error {
 	query := `
 		INSERT INTO audit_logs (uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	now := time.Now()
 	log.CreatedAt = now
@@ -29,11 +30,11 @@ func (r *AuditLogRepository) Create(ctx context.Context, q ports.Querier, log *d
 		log.OccurredAt = now
 	}
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		log.UID, log.ActorUID, log.Action,
 		log.EntityType, log.EntityUID, log.Meta,
 		log.OccurredAt, log.CreatedAt,
-	)
+	).Scan(&log.ID)
 	if err != nil {
 		slog.Error("audit_log_repository.Create.exec_query",
 			"error", err,
@@ -44,12 +45,6 @@ func (r *AuditLogRepository) Create(ctx context.Context, q ports.Querier, log *d
 		return err
 	}
 
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("audit_log_repository.Create.last_insert_id", "error", err, "uid", log.UID)
-		return err
-	}
-	log.ID = id
 	return nil
 }
 
@@ -58,7 +53,7 @@ func (r *AuditLogRepository) ListByEntity(ctx context.Context, q ports.Querier, 
 	query := `
 		SELECT id, uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at
 		FROM audit_logs
-		WHERE entity_type = ? AND entity_uid = ?
+		WHERE entity_type = $1 AND entity_uid = $2
 		ORDER BY occurred_at DESC`
 
 	rows, err := q.QueryContext(ctx, query, entityType, entityUID)
@@ -81,9 +76,9 @@ func (r *AuditLogRepository) ListByActor(ctx context.Context, q ports.Querier, a
 	query := `
 		SELECT id, uid, actor_uid, action, entity_type, entity_uid, meta, occurred_at, created_at
 		FROM audit_logs
-		WHERE actor_uid = ?
+		WHERE actor_uid = $1
 		ORDER BY occurred_at DESC
-		LIMIT ? OFFSET ?`
+		LIMIT $2 OFFSET $3`
 
 	rows, err := q.QueryContext(ctx, query, actorUID, p.PageSize, p.Offset())
 	if err != nil {
@@ -118,83 +113,75 @@ func (r *AuditLogRepository) ListAll(ctx context.Context, q ports.Querier, filte
 	// Apply filters
 	if filters.EntityType != "" {
 		if filters.ActorName != "" {
-			query += " AND al.entity_type = ?"
+			query += " AND al.entity_type = " + nextPlaceholder(args)
 		} else {
-			query += " AND entity_type = ?"
+			query += " AND entity_type = " + nextPlaceholder(args)
 		}
 		args = append(args, filters.EntityType)
 	}
 
 	if len(filters.EntityTypes) > 0 {
+		startIdx := len(args) + 1
 		if filters.ActorName != "" {
-			query += " AND al.entity_type IN ("
+			query += " AND al.entity_type IN (" + buildPlaceholders(len(filters.EntityTypes), startIdx) + ")"
 		} else {
-			query += " AND entity_type IN ("
+			query += " AND entity_type IN (" + buildPlaceholders(len(filters.EntityTypes), startIdx) + ")"
 		}
-		for i, et := range filters.EntityTypes {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
+		for _, et := range filters.EntityTypes {
 			args = append(args, et)
 		}
-		query += ")"
 	}
 
 	if filters.ActorUID != "" {
 		if filters.ActorName != "" {
-			query += " AND al.actor_uid = ?"
+			query += " AND al.actor_uid = " + nextPlaceholder(args)
 		} else {
-			query += " AND actor_uid = ?"
+			query += " AND actor_uid = " + nextPlaceholder(args)
 		}
 		args = append(args, filters.ActorUID)
 	}
 
 	if filters.ActorName != "" {
-		query += " AND e.name LIKE ?"
+		query += " AND e.name LIKE " + nextPlaceholder(args)
 		args = append(args, "%"+filters.ActorName+"%")
 	}
 
 	if len(filters.ActionTypes) > 0 {
+		startIdx := len(args) + 1
 		if filters.ActorName != "" {
-			query += " AND al.action IN ("
+			query += " AND al.action IN (" + buildPlaceholders(len(filters.ActionTypes), startIdx) + ")"
 		} else {
-			query += " AND action IN ("
+			query += " AND action IN (" + buildPlaceholders(len(filters.ActionTypes), startIdx) + ")"
 		}
-		for i, at := range filters.ActionTypes {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
+		for _, at := range filters.ActionTypes {
 			args = append(args, at)
 		}
-		query += ")"
 	}
 
 	if filters.SearchText != "" {
 		searchPattern := "%" + filters.SearchText + "%"
 		if filters.ActorName != "" {
-			query += " AND (al.entity_uid LIKE ? OR al.action LIKE ? OR al.meta LIKE ?)"
+			query += " AND (al.entity_uid LIKE " + nextPlaceholder(args) + " OR al.action LIKE " + nextPlaceholder(append(args, nil)) + " OR al.meta LIKE " + nextPlaceholder(append(args, nil, nil)) + ")"
 		} else {
-			query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+			query += " AND (entity_uid LIKE " + nextPlaceholder(args) + " OR action LIKE " + nextPlaceholder(append(args, nil)) + " OR meta LIKE " + nextPlaceholder(append(args, nil, nil)) + ")"
 		}
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
 
 	if filters.StartDate != nil {
 		if filters.ActorName != "" {
-			query += " AND al.occurred_at >= ?"
+			query += " AND al.occurred_at >= " + nextPlaceholder(args)
 		} else {
-			query += " AND occurred_at >= ?"
+			query += " AND occurred_at >= " + nextPlaceholder(args)
 		}
 		args = append(args, filters.StartDate.Format(time.RFC3339))
 	}
 
 	if filters.EndDate != nil {
 		if filters.ActorName != "" {
-			query += " AND al.occurred_at <= ?"
+			query += " AND al.occurred_at <= " + nextPlaceholder(args)
 		} else {
-			query += " AND occurred_at <= ?"
+			query += " AND occurred_at <= " + nextPlaceholder(args)
 		}
 		args = append(args, filters.EndDate.Format(time.RFC3339))
 	}
@@ -202,25 +189,21 @@ func (r *AuditLogRepository) ListAll(ctx context.Context, q ports.Querier, filte
 	if filters.HideSystemActions {
 		// Exclude system actions
 		systemActions := []string{"deduct_balance", "annual_reset", "auto_reject", "system_adjustment", "cascade_delete", "auto_create_transaction"}
+		startIdx := len(args) + 1
 		if filters.ActorName != "" {
-			query += " AND al.action NOT IN ("
+			query += " AND al.action NOT IN (" + buildPlaceholders(len(systemActions), startIdx) + ")"
 		} else {
-			query += " AND action NOT IN ("
+			query += " AND action NOT IN (" + buildPlaceholders(len(systemActions), startIdx) + ")"
 		}
-		for i := range systemActions {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
-			args = append(args, systemActions[i])
+		for _, sa := range systemActions {
+			args = append(args, sa)
 		}
-		query += ")"
 	}
 
 	if filters.ActorName != "" {
-		query += " ORDER BY al.occurred_at DESC LIMIT ? OFFSET ?"
+		query += " ORDER BY al.occurred_at DESC LIMIT " + nextPlaceholder(args) + " OFFSET " + nextPlaceholder(append(args, nil))
 	} else {
-		query += " ORDER BY occurred_at DESC LIMIT ? OFFSET ?"
+		query += " ORDER BY occurred_at DESC LIMIT " + nextPlaceholder(args) + " OFFSET " + nextPlaceholder(append(args, nil))
 	}
 	args = append(args, p.PageSize, p.Offset())
 
@@ -347,24 +330,20 @@ func (r *AuditLogRepository) CountAll(ctx context.Context, q ports.Querier, filt
 
 	// Apply the same filters as ListAll
 	if filters.EntityType != "" {
-		query += " AND entity_type = ?"
+		query += " AND entity_type = " + nextPlaceholder(args)
 		args = append(args, filters.EntityType)
 	}
 
 	if len(filters.EntityTypes) > 0 {
-		query += " AND entity_type IN ("
-		for i, et := range filters.EntityTypes {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
+		startIdx := len(args) + 1
+		query += " AND entity_type IN (" + buildPlaceholders(len(filters.EntityTypes), startIdx) + ")"
+		for _, et := range filters.EntityTypes {
 			args = append(args, et)
 		}
-		query += ")"
 	}
 
 	if filters.ActorUID != "" {
-		query += " AND actor_uid = ?"
+		query += " AND actor_uid = " + nextPlaceholder(args)
 		args = append(args, filters.ActorUID)
 	}
 
@@ -373,50 +352,42 @@ func (r *AuditLogRepository) CountAll(ctx context.Context, q ports.Querier, filt
 		query = `SELECT COUNT(*) FROM audit_logs al 
 			LEFT JOIN employees e ON al.actor_uid = e.uid 
 			WHERE 1=1`
-		query += " AND e.name LIKE ?"
+		query += " AND e.name LIKE " + nextPlaceholder(args)
 		args = append(args, "%"+filters.ActorName+"%")
 	}
 
 	if len(filters.ActionTypes) > 0 {
-		query += " AND action IN ("
-		for i, at := range filters.ActionTypes {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
+		startIdx := len(args) + 1
+		query += " AND action IN (" + buildPlaceholders(len(filters.ActionTypes), startIdx) + ")"
+		for _, at := range filters.ActionTypes {
 			args = append(args, at)
 		}
-		query += ")"
 	}
 
 	if filters.SearchText != "" {
 		searchPattern := "%" + filters.SearchText + "%"
-		query += " AND (entity_uid LIKE ? OR action LIKE ? OR meta LIKE ?)"
+		query += " AND (entity_uid LIKE " + nextPlaceholder(args) + " OR action LIKE " + nextPlaceholder(append(args, nil)) + " OR meta LIKE " + nextPlaceholder(append(args, nil, nil)) + ")"
 		args = append(args, searchPattern, searchPattern, searchPattern)
 	}
 
 	if filters.StartDate != nil {
-		query += " AND occurred_at >= ?"
+		query += " AND occurred_at >= " + nextPlaceholder(args)
 		args = append(args, filters.StartDate.Format(time.RFC3339))
 	}
 
 	if filters.EndDate != nil {
-		query += " AND occurred_at <= ?"
+		query += " AND occurred_at <= " + nextPlaceholder(args)
 		args = append(args, filters.EndDate.Format(time.RFC3339))
 	}
 
 	if filters.HideSystemActions {
 		// Exclude system actions
 		systemActions := []string{"deduct_balance", "annual_reset", "auto_reject", "system_adjustment", "cascade_delete", "auto_create_transaction"}
-		query += " AND action NOT IN ("
-		for i := range systemActions {
-			if i > 0 {
-				query += ", "
-			}
-			query += "?"
-			args = append(args, systemActions[i])
+		startIdx := len(args) + 1
+		query += " AND action NOT IN (" + buildPlaceholders(len(systemActions), startIdx) + ")"
+		for _, sa := range systemActions {
+			args = append(args, sa)
 		}
-		query += ")"
 	}
 
 	var count int

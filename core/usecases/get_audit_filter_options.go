@@ -93,10 +93,13 @@ func (uc *GetAuditFilterOptionsUseCase) Execute(ctx context.Context, input GetAu
 
 func (uc *GetAuditFilterOptionsUseCase) getDistinctEntityTypesExcludingSystemActions(ctx context.Context) ([]string, error) {
 	systemActions := systemAuditActionList()
-	placeholders := strings.TrimRight(strings.Repeat("?,", len(systemActions)), ",")
+	placeholders := make([]string, 0, len(systemActions))
+	for i := range systemActions {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+1))
+	}
 	query := fmt.Sprintf(
 		"SELECT DISTINCT entity_type FROM audit_logs WHERE action NOT IN (%s) ORDER BY entity_type ASC",
-		placeholders,
+		strings.Join(placeholders, ","),
 	)
 
 	args := make([]any, 0, len(systemActions))

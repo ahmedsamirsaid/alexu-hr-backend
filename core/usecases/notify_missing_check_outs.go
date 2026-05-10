@@ -112,13 +112,12 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyMissingCheckIns(ctx context.Conte
 		return 0, err
 	}
 
-	attendanceDate := today.Format("2006-01-02")
 	notifiedCount := 0
 	for _, employee := range employees {
 		if employee == nil {
 			continue
 		}
-		notified, err := uc.notifyEmployeeMissingCheckIn(ctx, now, today, attendanceDate, employee)
+		notified, err := uc.notifyEmployeeMissingCheckIn(ctx, now, today, employee)
 		if err != nil {
 			slog.Error("notify_missing_check_outs.notifyMissingCheckIns.notify_employee", "error", err, "employee_uid", employee.UID)
 			continue
@@ -131,8 +130,8 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyMissingCheckIns(ctx context.Conte
 	return notifiedCount, nil
 }
 
-func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx context.Context, now, today time.Time, attendanceDate string, employee *domain.Employee) (bool, error) {
-	existing, err := uc.attendanceReminderRepo.GetByEmployeeDateAndType(ctx, uc.db, employee.UID, attendanceDate, domain.AttendanceReminderTypeMissingCheckIn)
+func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx context.Context, now, today time.Time, employee *domain.Employee) (bool, error) {
+	existing, err := uc.attendanceReminderRepo.GetByEmployeeDateAndType(ctx, uc.db, employee.UID, today, domain.AttendanceReminderTypeMissingCheckIn)
 	if err != nil {
 		return false, err
 	}
@@ -186,7 +185,7 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx contex
 	data := ports.NotificationData{
 		"type":           "missing_check_in_reminder",
 		"employeeUid":    employee.UID,
-		"attendanceDate": attendanceDate,
+		"attendanceDate": today.Format("2006-01-02"),
 	}
 
 	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, nil, data)
@@ -197,7 +196,7 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx contex
 		return false, nil
 	}
 
-	reminder := domain.NewAttendanceReminder(employee.UID, attendanceDate, domain.AttendanceReminderTypeMissingCheckIn, now)
+	reminder := domain.NewAttendanceReminder(employee.UID, today, domain.AttendanceReminderTypeMissingCheckIn, now)
 	if err := uc.attendanceReminderRepo.Create(ctx, uc.db, reminder); err != nil {
 		return false, err
 	}
@@ -221,8 +220,7 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployee(ctx context.Context, now
 		return false, nil
 	}
 
-	attendanceDate := group.Date.Format("2006-01-02")
-	existing, err := uc.attendanceReminderRepo.GetByEmployeeDateAndType(ctx, uc.db, group.EmployeeUID, attendanceDate, domain.AttendanceReminderTypeMissingCheckOut)
+	existing, err := uc.attendanceReminderRepo.GetByEmployeeDateAndType(ctx, uc.db, group.EmployeeUID, group.Date, domain.AttendanceReminderTypeMissingCheckOut)
 	if err != nil {
 		return false, err
 	}
@@ -240,7 +238,7 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployee(ctx context.Context, now
 	data := ports.NotificationData{
 		"type":           "missing_check_out_reminder",
 		"employeeUid":    group.EmployeeUID,
-		"attendanceDate": attendanceDate,
+		"attendanceDate": group.Date.Format("2006-01-02"),
 	}
 
 	sentCount, err := uc.notificationService.SendToUser(user.UID, title, body, nil, data)
@@ -251,7 +249,7 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployee(ctx context.Context, now
 		return false, nil
 	}
 
-	reminder := domain.NewAttendanceReminder(group.EmployeeUID, attendanceDate, domain.AttendanceReminderTypeMissingCheckOut, now)
+	reminder := domain.NewAttendanceReminder(group.EmployeeUID, group.Date, domain.AttendanceReminderTypeMissingCheckOut, now)
 	if err := uc.attendanceReminderRepo.Create(ctx, uc.db, reminder); err != nil {
 		return false, err
 	}

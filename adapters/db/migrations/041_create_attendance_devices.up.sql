@@ -1,5 +1,5 @@
 CREATE TABLE attendance_devices (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     ip TEXT NOT NULL,
     port INTEGER NOT NULL,
@@ -7,8 +7,8 @@ CREATE TABLE attendance_devices (
     location TEXT NOT NULL DEFAULT '',
     serial_number TEXT UNIQUE NOT NULL,
     status TEXT NOT NULL DEFAULT 'offline' CHECK (status IN ('online', 'offline')),
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX idx_attendance_devices_serial_number ON attendance_devices(serial_number);

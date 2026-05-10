@@ -1,24 +1,12 @@
-CREATE TABLE attendance_reminders_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    uid TEXT UNIQUE NOT NULL,
-    employee_uid TEXT NOT NULL REFERENCES employees(uid) ON DELETE CASCADE,
-    attendance_date TEXT NOT NULL,
-    reminder_type TEXT NOT NULL CHECK (reminder_type IN ('missing_check_in', 'missing_check_out')),
-    sent_at TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    UNIQUE(employee_uid, attendance_date, reminder_type)
-);
+-- Expand attendance reminder types to include 'missing_check_in' and 'missing_check_out'
+-- PostgreSQL allows dropping and recreating constraints
 
-INSERT INTO attendance_reminders_new (
-    id, uid, employee_uid, attendance_date, reminder_type, sent_at, created_at, updated_at
-)
-SELECT
-    id, uid, employee_uid, attendance_date, reminder_type, sent_at, created_at, updated_at
-FROM attendance_reminders;
+-- Drop the old constraint
+ALTER TABLE attendance_reminders 
+DROP CONSTRAINT IF EXISTS attendance_reminders_reminder_type_check;
 
-DROP TABLE attendance_reminders;
+-- Add the new constraint with both reminder types
+ALTER TABLE attendance_reminders
+ADD CONSTRAINT attendance_reminders_reminder_type_check 
+CHECK (reminder_type IN ('missing_check_in', 'missing_check_out'));
 
-ALTER TABLE attendance_reminders_new RENAME TO attendance_reminders;
-
-CREATE INDEX idx_attendance_reminders_employee_date ON attendance_reminders(employee_uid, attendance_date);

@@ -21,28 +21,22 @@ func (r *DeviceTokenRepository) Create(ctx context.Context, q ports.Querier, tok
 	// Use INSERT OR REPLACE to handle duplicate tokens (same FCM token for potentially different user)
 	query := `
 		INSERT INTO device_tokens (uid, user_uid, token, platform, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT(token) DO UPDATE SET
 			user_uid = excluded.user_uid,
-			updated_at = excluded.updated_at`
+			updated_at = excluded.updated_at
+		RETURNING id`
 
 	now := time.Now()
 	token.CreatedAt = now
 	token.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
-		token.UID, token.UserUID, token.Token, token.Platform, token.CreatedAt, token.UpdatedAt)
+	err := q.QueryRowContext(ctx, query,
+		token.UID, token.UserUID, token.Token, token.Platform, token.CreatedAt, token.UpdatedAt).Scan(&token.ID)
 	if err != nil {
 		slog.Error("device_token_repository.Create.exec_query", "error", err, "user_uid", token.UserUID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("device_token_repository.Create.last_insert_id", "error", err, "user_uid", token.UserUID)
-		return err
-	}
-	token.ID = id
 
 	return nil
 }
@@ -51,7 +45,7 @@ func (r *DeviceTokenRepository) GetByUID(ctx context.Context, q ports.Querier, u
 	query := `
 		SELECT id, uid, user_uid, token, platform, created_at, updated_at
 		FROM device_tokens
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanToken(q.QueryRowContext(ctx, query, uid))
 }
@@ -60,7 +54,7 @@ func (r *DeviceTokenRepository) GetByToken(ctx context.Context, q ports.Querier,
 	query := `
 		SELECT id, uid, user_uid, token, platform, created_at, updated_at
 		FROM device_tokens
-		WHERE token = ?`
+		WHERE token = $1`
 
 	return r.scanToken(q.QueryRowContext(ctx, query, token))
 }
@@ -69,7 +63,7 @@ func (r *DeviceTokenRepository) GetByUserUID(ctx context.Context, q ports.Querie
 	query := `
 		SELECT id, uid, user_uid, token, platform, created_at, updated_at
 		FROM device_tokens
-		WHERE user_uid = ?
+		WHERE user_uid = $1
 		ORDER BY created_at DESC`
 
 	rows, err := q.QueryContext(ctx, query, userUID)
@@ -97,7 +91,7 @@ func (r *DeviceTokenRepository) GetByUserUID(ctx context.Context, q ports.Querie
 }
 
 func (r *DeviceTokenRepository) Delete(ctx context.Context, q ports.Querier, uid string) error {
-	query := `DELETE FROM device_tokens WHERE uid = ?`
+	query := `DELETE FROM device_tokens WHERE uid = $1`
 	_, err := q.ExecContext(ctx, query, uid)
 	if err != nil {
 		slog.Error("device_token_repository.Delete.exec_query", "error", err, "uid", uid)
@@ -106,7 +100,7 @@ func (r *DeviceTokenRepository) Delete(ctx context.Context, q ports.Querier, uid
 }
 
 func (r *DeviceTokenRepository) DeleteByToken(ctx context.Context, q ports.Querier, token string) error {
-	query := `DELETE FROM device_tokens WHERE token = ?`
+	query := `DELETE FROM device_tokens WHERE token = $1`
 	_, err := q.ExecContext(ctx, query, token)
 	if err != nil {
 		slog.Error("device_token_repository.DeleteByToken.exec_query", "error", err)
@@ -115,7 +109,7 @@ func (r *DeviceTokenRepository) DeleteByToken(ctx context.Context, q ports.Queri
 }
 
 func (r *DeviceTokenRepository) DeleteAllForUser(ctx context.Context, q ports.Querier, userUID string) error {
-	query := `DELETE FROM device_tokens WHERE user_uid = ?`
+	query := `DELETE FROM device_tokens WHERE user_uid = $1`
 	_, err := q.ExecContext(ctx, query, userUID)
 	if err != nil {
 		slog.Error("device_token_repository.DeleteAllForUser.exec_query", "error", err, "user_uid", userUID)

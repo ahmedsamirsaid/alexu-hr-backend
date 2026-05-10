@@ -1,5 +1,5 @@
 CREATE TABLE holiday_instances (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     definition_id INTEGER NOT NULL REFERENCES holiday_definitions(id) ON DELETE CASCADE,
     year INTEGER NOT NULL,
@@ -7,8 +7,8 @@ CREATE TABLE holiday_instances (
     observed_date TEXT NOT NULL,
     is_confirmed INTEGER DEFAULT 0,
     notes TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(definition_id, year)
 );
 

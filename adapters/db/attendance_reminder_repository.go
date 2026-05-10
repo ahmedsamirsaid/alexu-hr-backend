@@ -20,7 +20,7 @@ func NewAttendanceReminderRepository() *AttendanceReminderRepository {
 func (r *AttendanceReminderRepository) Create(ctx context.Context, q ports.Querier, reminder *domain.AttendanceReminder) error {
 	query := `
 		INSERT INTO attendance_reminders (uid, employee_uid, attendance_date, reminder_type, sent_at, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	now := time.Now()
 	if reminder.SentAt.IsZero() {
@@ -47,11 +47,11 @@ func (r *AttendanceReminderRepository) Create(ctx context.Context, q ports.Queri
 	return err
 }
 
-func (r *AttendanceReminderRepository) GetByEmployeeDateAndType(ctx context.Context, q ports.Querier, employeeUID, attendanceDate string, reminderType domain.AttendanceReminderType) (*domain.AttendanceReminder, error) {
+func (r *AttendanceReminderRepository) GetByEmployeeDateAndType(ctx context.Context, q ports.Querier, employeeUID string, attendanceDate time.Time, reminderType domain.AttendanceReminderType) (*domain.AttendanceReminder, error) {
 	query := `
 		SELECT id, uid, employee_uid, attendance_date, reminder_type, sent_at, created_at, updated_at
 		FROM attendance_reminders
-		WHERE employee_uid = ? AND attendance_date = ? AND reminder_type = ?
+		WHERE employee_uid = $1 AND attendance_date = $2 AND reminder_type = $3
 		LIMIT 1`
 
 	return r.scanReminder(q.QueryRowContext(ctx, query, employeeUID, attendanceDate, reminderType))

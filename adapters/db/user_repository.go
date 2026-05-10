@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -22,7 +21,7 @@ func (r *UserRepository) GetByID(ctx context.Context, q ports.Querier, id int64)
 	query := `
 		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanUser(q.QueryRowContext(ctx, query, id))
 }
@@ -31,7 +30,7 @@ func (r *UserRepository) GetByUID(ctx context.Context, q ports.Querier, uid stri
 	query := `
 		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanUser(q.QueryRowContext(ctx, query, uid))
 }
@@ -40,7 +39,7 @@ func (r *UserRepository) GetByPhone(ctx context.Context, q ports.Querier, phone 
 	query := `
 		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
-		WHERE phone = ?`
+		WHERE phone = $1`
 
 	return r.scanUser(q.QueryRowContext(ctx, query, phone))
 }
@@ -48,26 +47,20 @@ func (r *UserRepository) GetByPhone(ctx context.Context, q ports.Querier, phone 
 func (r *UserRepository) Create(ctx context.Context, q ports.Querier, user *domain.User) error {
 	query := `
 		INSERT INTO users (uid, phone, password_hash, employee_uid, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id`
 
 	now := time.Now()
 	user.CreatedAt = now
 	user.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		user.UID, user.Phone, user.PasswordHash, user.EmployeeUID,
-		user.IsActive, user.CreatedAt, user.UpdatedAt)
+		user.IsActive, user.CreatedAt, user.UpdatedAt).Scan(&user.ID)
 	if err != nil {
 		slog.Error("user_repository.Create.exec_query", "error", err, "uid", user.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("user_repository.Create.last_insert_id", "error", err, "uid", user.UID)
-		return err
-	}
-	user.ID = id
 
 	return nil
 }
@@ -75,8 +68,8 @@ func (r *UserRepository) Create(ctx context.Context, q ports.Querier, user *doma
 func (r *UserRepository) Update(ctx context.Context, q ports.Querier, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET phone = ?, password_hash = ?, employee_uid = ?, is_active = ?, updated_at = ?
-		WHERE id = ?`
+		SET phone = $1, password_hash = $2, employee_uid = $3, is_active = $4, updated_at = $5
+		WHERE id = $6`
 
 	user.UpdatedAt = time.Now()
 
@@ -95,7 +88,7 @@ func (r *UserRepository) List(ctx context.Context, q ports.Querier, limit, offse
 		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
 		ORDER BY id DESC
-		LIMIT ? OFFSET ?`
+		LIMIT $1 OFFSET $2`
 
 	rows, err := q.QueryContext(ctx, query, limit, offset)
 	if err != nil {
@@ -135,10 +128,9 @@ func (r *UserRepository) Count(ctx context.Context, q ports.Querier) (int, error
 func (r *UserRepository) scanUser(row *sql.Row) (*domain.User, error) {
 	var u domain.User
 	var createdAt, updatedAt domain.Time
-	var isActive int
 	err := row.Scan(
 		&u.ID, &u.UID, &u.Phone, &u.PasswordHash, &u.EmployeeUID,
-		&isActive, &u.PreferredLanguage, &createdAt, &updatedAt)
+		&u.IsActive, &u.PreferredLanguage, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -146,7 +138,6 @@ func (r *UserRepository) scanUser(row *sql.Row) (*domain.User, error) {
 		slog.Error("user_repository.scanUser.scan_row", "error", err)
 		return nil, err
 	}
-	u.IsActive = isActive == 1
 	u.CreatedAt = createdAt.Time
 	u.UpdatedAt = updatedAt.Time
 	return &u, nil
@@ -155,14 +146,12 @@ func (r *UserRepository) scanUser(row *sql.Row) (*domain.User, error) {
 func (r *UserRepository) scanUserRow(rows *sql.Rows) (*domain.User, error) {
 	var u domain.User
 	var createdAt, updatedAt domain.Time
-	var isActive int
 	err := rows.Scan(
 		&u.ID, &u.UID, &u.Phone, &u.PasswordHash, &u.EmployeeUID,
-		&isActive, &u.PreferredLanguage, &createdAt, &updatedAt)
+		&u.IsActive, &u.PreferredLanguage, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
-	u.IsActive = isActive == 1
 	u.CreatedAt = createdAt.Time
 	u.UpdatedAt = updatedAt.Time
 	return &u, nil
@@ -174,14 +163,13 @@ func (r *UserRepository) ExistingPhones(ctx context.Context, q ports.Querier, ph
 	}
 
 	// Build query with placeholders
-	placeholders := make([]string, len(phones))
 	args := make([]any, len(phones))
 	for i, phone := range phones {
-		placeholders[i] = "?"
 		args[i] = phone
 	}
 
-	query := `SELECT phone FROM users WHERE phone IN (` + strings.Join(placeholders, ",") + `)`
+	placeholders := buildPlaceholders(len(phones), 1)
+	query := `SELECT phone FROM users WHERE phone IN (` + placeholders + `)`
 
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -212,7 +200,7 @@ func (r *UserRepository) GetByEmployeeUID(ctx context.Context, q ports.Querier, 
 	query := `
 		SELECT id, uid, phone, password_hash, employee_uid, is_active, COALESCE(preferred_language,''), created_at, updated_at
 		FROM users
-		WHERE employee_uid = ?`
+		WHERE employee_uid = $1`
 
 	return r.scanUser(q.QueryRowContext(ctx, query, employeeUID))
 }

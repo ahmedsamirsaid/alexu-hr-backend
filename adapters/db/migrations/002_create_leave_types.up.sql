@@ -1,5 +1,5 @@
 CREATE TABLE leave_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     code TEXT UNIQUE NOT NULL,
     name_en TEXT NOT NULL,
@@ -9,6 +9,6 @@ CREATE TABLE leave_types (
     recording_deadline_days INTEGER,
     advance_notice_days INTEGER,
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

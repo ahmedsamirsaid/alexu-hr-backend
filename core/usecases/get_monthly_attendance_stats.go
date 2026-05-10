@@ -464,12 +464,12 @@ func (uc *GetMonthlyAttendanceStatsUseCase) listLeaveTypeNamesByDate(ctx context
 	}
 
 	rows, err := uc.db.QueryContext(ctx, `
-		SELECT substr(lr.start_date, 1, 10), substr(lr.end_date, 1, 10), lt.name_en
+		SELECT TO_CHAR(lr.start_date, 'YYYY-MM-DD'), TO_CHAR(lr.end_date, 'YYYY-MM-DD'), lt.name_en
 		FROM leave_records lr
 		INNER JOIN leave_types lt ON lt.id = lr.leave_type_id
-		WHERE lr.employee_id = ?
-			AND substr(lr.start_date, 1, 10) <= ?
-			AND substr(lr.end_date, 1, 10) >= ?
+		WHERE lr.employee_id = $1
+			AND lr.start_date <= $2
+			AND lr.end_date >= $3
 		ORDER BY lr.start_date ASC, lr.uid ASC
 	`, employeeID, end.Format("2006-01-02"), start.Format("2006-01-02"))
 	if err != nil {
@@ -486,11 +486,11 @@ func (uc *GetMonthlyAttendanceStatsUseCase) listLeaveTypeNamesByDate(ctx context
 			return nil, err
 		}
 
-		leaveStart, err := time.Parse("2006-01-02", leaveStartValue)
+		leaveStart, err := parseDateOrTimestamp(leaveStartValue)
 		if err != nil {
 			return nil, err
 		}
-		leaveEnd, err := time.Parse("2006-01-02", leaveEndValue)
+		leaveEnd, err := parseDateOrTimestamp(leaveEndValue)
 		if err != nil {
 			return nil, err
 		}

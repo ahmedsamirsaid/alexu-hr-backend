@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/banumusa/backend/core/domain"
@@ -22,7 +21,7 @@ func (r *LeaveRecordRepository) GetByID(ctx context.Context, q ports.Querier, id
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanLeaveRecord(q.QueryRowContext(ctx, query, id))
 }
@@ -31,7 +30,7 @@ func (r *LeaveRecordRepository) GetByUID(ctx context.Context, q ports.Querier, u
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanLeaveRecord(q.QueryRowContext(ctx, query, uid))
 }
@@ -39,28 +38,22 @@ func (r *LeaveRecordRepository) GetByUID(ctx context.Context, q ports.Querier, u
 func (r *LeaveRecordRepository) Create(ctx context.Context, q ports.Querier, record *domain.LeaveRecord) error {
 	query := `
 		INSERT INTO leave_records (uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id`
 
 	now := time.Now()
 	record.CreatedAt = now
 	record.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		record.UID, record.EmployeeID, record.LeaveTypeID,
 		record.StartDate, record.EndDate, record.Days,
 		record.RecordedAt, record.RecordedBy, record.Notes, record.LeaveRequestUID,
-		record.CreatedAt, record.UpdatedAt)
+		record.CreatedAt, record.UpdatedAt).Scan(&record.ID)
 	if err != nil {
 		slog.Error("leave_record_repository.Create.exec_query", "error", err, "uid", record.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("leave_record_repository.Create.last_insert_id", "error", err, "uid", record.UID)
-		return err
-	}
-	record.ID = id
 
 	return nil
 }
@@ -69,7 +62,7 @@ func (r *LeaveRecordRepository) ListByEmployee(ctx context.Context, q ports.Quer
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE employee_id = ?
+		WHERE employee_id = $1
 		ORDER BY start_date DESC`
 
 	return r.queryLeaveRecords(ctx, q, query, employeeID)
@@ -79,15 +72,15 @@ func (r *LeaveRecordRepository) ListByEmployeePaginated(ctx context.Context, q p
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE employee_id = ?
+		WHERE employee_id = $1
 		ORDER BY start_date DESC
-		LIMIT ? OFFSET ?`
+		LIMIT $2 OFFSET $3`
 
 	return r.queryLeaveRecords(ctx, q, query, employeeID, limit, offset)
 }
 
 func (r *LeaveRecordRepository) CountByEmployee(ctx context.Context, q ports.Querier, employeeID int64) (int, error) {
-	query := `SELECT COUNT(*) FROM leave_records WHERE employee_id = ?`
+	query := `SELECT COUNT(*) FROM leave_records WHERE employee_id = $1`
 
 	var count int
 	err := q.QueryRowContext(ctx, query, employeeID).Scan(&count)
@@ -102,7 +95,7 @@ func (r *LeaveRecordRepository) ListByEmployeeAndDateRange(ctx context.Context, 
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE employee_id = ? AND start_date >= ? AND end_date <= ?
+		WHERE employee_id = $1 AND start_date >= $2 AND end_date <= $3
 		ORDER BY start_date DESC`
 
 	return r.queryLeaveRecords(ctx, q, query, employeeID, start, end)
@@ -112,7 +105,7 @@ func (r *LeaveRecordRepository) ListByEmployeeAndType(ctx context.Context, q por
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, start_date, end_date, days, recorded_at, recorded_by, notes, leave_request_uid, created_at, updated_at
 		FROM leave_records
-		WHERE employee_id = ? AND leave_type_id = ?
+		WHERE employee_id = $1 AND leave_type_id = $2
 		ORDER BY start_date DESC`
 
 	return r.queryLeaveRecords(ctx, q, query, employeeID, leaveTypeID)
@@ -197,28 +190,28 @@ func (r *LeaveRecordRepository) ListAllPaginated(ctx context.Context, q ports.Qu
 	args := []any{}
 
 	if filter.Search != "" {
-		query += ` AND e.name LIKE ?`
+		query += ` AND e.name LIKE ` + nextPlaceholder(args)
 		args = append(args, "%"+filter.Search+"%")
 	}
 
 	if filter.LeaveTypeID != nil {
-		query += ` AND lr.leave_type_id = ?`
+		query += ` AND lr.leave_type_id = ` + nextPlaceholder(args)
 		args = append(args, *filter.LeaveTypeID)
 	}
 
 	if filter.StartDate != nil {
-		query += ` AND lr.start_date >= ?`
+		query += ` AND lr.start_date >= ` + nextPlaceholder(args)
 		args = append(args, *filter.StartDate)
 	}
 
 	if filter.EndDate != nil {
-		query += ` AND lr.start_date <= ?`
+		query += ` AND lr.start_date <= ` + nextPlaceholder(args)
 		args = append(args, *filter.EndDate)
 	}
 
 	query, args = applyLeaveRecordDepartmentScope(query, args, filter.DepartmentUIDs)
 
-	query += ` ORDER BY lr.start_date DESC LIMIT ? OFFSET ?`
+	query += ` ORDER BY lr.start_date DESC LIMIT ` + nextPlaceholder(args) + ` OFFSET ` + nextPlaceholder(append(args, nil))
 	args = append(args, limit, offset)
 
 	rows, err := q.QueryContext(ctx, query, args...)
@@ -276,22 +269,22 @@ func (r *LeaveRecordRepository) CountAll(ctx context.Context, q ports.Querier, f
 	args := []any{}
 
 	if filter.Search != "" {
-		query += ` AND e.name LIKE ?`
+		query += ` AND e.name LIKE ` + nextPlaceholder(args)
 		args = append(args, "%"+filter.Search+"%")
 	}
 
 	if filter.LeaveTypeID != nil {
-		query += ` AND lr.leave_type_id = ?`
+		query += ` AND lr.leave_type_id = ` + nextPlaceholder(args)
 		args = append(args, *filter.LeaveTypeID)
 	}
 
 	if filter.StartDate != nil {
-		query += ` AND lr.start_date >= ?`
+		query += ` AND lr.start_date >= ` + nextPlaceholder(args)
 		args = append(args, *filter.StartDate)
 	}
 
 	if filter.EndDate != nil {
-		query += ` AND lr.start_date <= ?`
+		query += ` AND lr.start_date <= ` + nextPlaceholder(args)
 		args = append(args, *filter.EndDate)
 	}
 
@@ -311,7 +304,7 @@ func (r *LeaveRecordRepository) CountOnLeaveToday(ctx context.Context, q ports.Q
 	query := `
 		SELECT COUNT(DISTINCT employee_id)
 		FROM leave_records
-		WHERE ? BETWEEN substr(start_date, 1, 10) AND substr(end_date, 1, 10)`
+		WHERE $1::date BETWEEN start_date::date AND end_date::date`
 
 	day := date.Format("2006-01-02")
 
@@ -328,8 +321,8 @@ func (r *LeaveRecordRepository) HasLeaveOnDate(ctx context.Context, q ports.Quer
 	query := `
 		SELECT COUNT(*)
 		FROM leave_records
-		WHERE employee_id = ?
-			AND ? BETWEEN substr(start_date, 1, 10) AND substr(end_date, 1, 10)`
+		WHERE employee_id = $1
+			AND $2::date BETWEEN start_date::date AND end_date::date`
 
 	day := date.Format("2006-01-02")
 
@@ -353,12 +346,12 @@ func applyLeaveRecordDepartmentScope(query string, args []any, departmentUIDs []
 		return query, args
 	}
 
-	placeholders := make([]string, 0, len(departmentUIDs))
+	startIndex := len(args) + 1
 	for _, departmentUID := range departmentUIDs {
-		placeholders = append(placeholders, "?")
 		args = append(args, departmentUID)
 	}
 
-	query += ` AND e.department_uid IN (` + strings.Join(placeholders, ",") + `)`
+	placeholders := buildPlaceholders(len(departmentUIDs), startIndex)
+	query += ` AND e.department_uid IN (` + placeholders + `)`
 	return query, args
 }

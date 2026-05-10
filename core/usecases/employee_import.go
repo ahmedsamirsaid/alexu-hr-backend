@@ -539,7 +539,7 @@ func (uc *ImportEmployeesUseCase) checkDatabaseUniqueness(ctx context.Context, e
 
 // isValidMobile validates mobile number format.
 // Accepts formats like: 01012345678, +201012345678, 201012345678
-var mobileRegex = regexp.MustCompile(`^(\+?2?0)?1[0125]\d{8}$`)
+var mobileRegex = regexp.MustCompile(`^(\+$12$20)$31[0125]\d{8}$`)
 
 func isValidMobile(mobile string) bool {
 	// Remove spaces and dashes

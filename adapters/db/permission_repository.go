@@ -20,7 +20,7 @@ func (r *PermissionRepository) GetByID(ctx context.Context, q ports.Querier, id 
 	query := `
 		SELECT id, uid, code, description, created_at
 		FROM permissions
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanPermission(q.QueryRowContext(ctx, query, id))
 }
@@ -29,7 +29,7 @@ func (r *PermissionRepository) GetByCode(ctx context.Context, q ports.Querier, c
 	query := `
 		SELECT id, uid, code, description, created_at
 		FROM permissions
-		WHERE code = ?`
+		WHERE code = $1`
 
 	return r.scanPermission(q.QueryRowContext(ctx, query, code))
 }
@@ -79,22 +79,19 @@ func (r *PermissionRepository) GetPermissionsForRoles(ctx context.Context, q por
 	}
 
 	// Build placeholders for IN clause
-	placeholders := make([]byte, 0, len(roleIDs)*2-1)
 	args := make([]any, len(roleIDs))
 	for i, id := range roleIDs {
-		if i > 0 {
-			placeholders = append(placeholders, ',')
-		}
-		placeholders = append(placeholders, '?')
 		args[i] = id
 		result[id] = []*domain.Permission{} // Initialize empty slice
 	}
+
+	placeholders := buildPlaceholders(len(roleIDs), 1)
 
 	query := `
 		SELECT rp.role_id, p.id, p.uid, p.code, p.description, p.created_at
 		FROM permissions p
 		JOIN role_permissions rp ON p.id = rp.permission_id
-		WHERE rp.role_id IN (` + string(placeholders) + `)
+		WHERE rp.role_id IN (` + placeholders + `)
 		ORDER BY p.code ASC`
 
 	rows, err := q.QueryContext(ctx, query, args...)

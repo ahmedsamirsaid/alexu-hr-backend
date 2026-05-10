@@ -1,5 +1,5 @@
 CREATE TABLE permissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     code TEXT UNIQUE NOT NULL,
     description TEXT,

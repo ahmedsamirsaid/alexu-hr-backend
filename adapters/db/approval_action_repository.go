@@ -21,7 +21,7 @@ func (r *ApprovalActionRepository) GetByID(ctx context.Context, q ports.Querier,
 	query := `
 		SELECT id, uid, approval_request_uid, action, step_order, actor_uid, comments, acted_at, created_at
 		FROM approval_actions
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanApprovalAction(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *ApprovalActionRepository) GetByUID(ctx context.Context, q ports.Querier
 	query := `
 		SELECT id, uid, approval_request_uid, action, step_order, actor_uid, comments, acted_at, created_at
 		FROM approval_actions
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanApprovalAction(q.QueryRowContext(ctx, query, uid))
 }
@@ -38,7 +38,8 @@ func (r *ApprovalActionRepository) GetByUID(ctx context.Context, q ports.Querier
 func (r *ApprovalActionRepository) Create(ctx context.Context, q ports.Querier, action *domain.ApprovalAction) error {
 	query := `
 		INSERT INTO approval_actions (uid, approval_request_uid, action, step_order, actor_uid, comments, acted_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	now := time.Now()
 	action.CreatedAt = now
@@ -46,21 +47,14 @@ func (r *ApprovalActionRepository) Create(ctx context.Context, q ports.Querier, 
 		action.ActedAt = now
 	}
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		action.UID, action.ApprovalRequestUID, action.Action,
 		action.StepOrder, action.ActorUID, action.Comments,
-		action.ActedAt, action.CreatedAt)
+		action.ActedAt, action.CreatedAt).Scan(&action.ID)
 	if err != nil {
 		slog.Error("approval_action_repository.Create.exec_query", "error", err, "uid", action.UID, "request_uid", action.ApprovalRequestUID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("approval_action_repository.Create.last_insert_id", "error", err, "uid", action.UID)
-		return err
-	}
-	action.ID = id
 
 	return nil
 }
@@ -69,7 +63,7 @@ func (r *ApprovalActionRepository) ListByRequest(ctx context.Context, q ports.Qu
 	query := `
 		SELECT id, uid, approval_request_uid, action, step_order, actor_uid, comments, acted_at, created_at
 		FROM approval_actions
-		WHERE approval_request_uid = ?
+		WHERE approval_request_uid = $1
 		ORDER BY acted_at ASC`
 
 	rows, err := q.QueryContext(ctx, query, approvalRequestUID)

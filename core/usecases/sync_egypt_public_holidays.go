@@ -18,7 +18,7 @@ import (
 )
 
 var holidayCodeSanitizer = regexp.MustCompile(`[^A-Z0-9]+`)
-var holidayDayOffPrefixSanitizer = regexp.MustCompile(`(?i)^day off for\s+`)
+var holidayDayOffPrefixSanitizer = regexp.MustCompile(`($1i)^day off for\s+`)
 
 var calendarificHolidayLocalizations = map[string]string{
 	"coptic-christmas-day":      "عيد الميلاد المجيد",
@@ -210,7 +210,7 @@ func deleteMissingUpcomingAutoHolidays(
 			continue
 		}
 
-		result, err := q.ExecContext(ctx, `DELETE FROM holiday_definitions WHERE id = ?`, definition.ID)
+		result, err := q.ExecContext(ctx, `DELETE FROM holiday_definitions WHERE id = $1`, definition.ID)
 		if err != nil {
 			return 0, err
 		}
@@ -432,9 +432,13 @@ func (uc *SyncEgyptPublicHolidaysUseCase) ensureDefinition(ctx context.Context, 
 			}
 			updateQuery := `
 				UPDATE holiday_definitions
-				SET name_en = ?, name_ar = ?, date = ?, is_manual = ?, updated_at = ?
-				WHERE id = ?`
-			if _, err := q.ExecContext(ctx, updateQuery, definition.NameEN, definition.NameAR, definition.Date, definition.IsManual, time.Now(), definition.ID); err != nil {
+				SET name_en = $1, name_ar = $2, date = $3, is_manual = $4, updated_at = $5
+				WHERE id = $6`
+			isManual := 0
+			if definition.IsManual {
+				isManual = 1
+			}
+			if _, err := q.ExecContext(ctx, updateQuery, definition.NameEN, definition.NameAR, definition.Date, isManual, time.Now(), definition.ID); err != nil {
 				return nil, false, err
 			}
 		}
@@ -479,13 +483,15 @@ func deleteAbsenceExceptionsByDates(ctx context.Context, q ports.Querier, dateSe
 	placeholders := make([]string, 0, len(dateSet))
 	args := make([]any, 0, len(dateSet)+1)
 	args = append(args, domain.AttendanceExceptionTypeAbsence)
+	i := 2
 	for dateValue := range dateSet {
-		placeholders = append(placeholders, "?")
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i))
 		args = append(args, dateValue)
+		i++
 	}
 
 	query := fmt.Sprintf(
-		"DELETE FROM attendance_exceptions WHERE exception_type = ? AND attendance_date IN (%s)",
+		"DELETE FROM attendance_exceptions WHERE exception_type = $1 AND attendance_date IN (%s)",
 		strings.Join(placeholders, ","),
 	)
 

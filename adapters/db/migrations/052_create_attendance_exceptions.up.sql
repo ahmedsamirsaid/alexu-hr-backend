@@ -1,5 +1,5 @@
 CREATE TABLE attendance_exceptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     employee_uid TEXT NOT NULL REFERENCES employees(uid) ON DELETE CASCADE,
     attendance_date TEXT NOT NULL,
@@ -8,8 +8,8 @@ CREATE TABLE attendance_exceptions (
     check_out TEXT,
     grace_minutes INTEGER,
     minutes_delta INTEGER,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(employee_uid, attendance_date, exception_type)
 );
 

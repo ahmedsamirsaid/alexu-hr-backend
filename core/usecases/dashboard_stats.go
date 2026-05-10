@@ -62,7 +62,7 @@ func (uc *GetDashboardStatsUseCase) Execute(ctx context.Context, input GetDashbo
 		return nil, err
 	}
 
-	// Use UTC day boundaries to stay consistent with SQLite date functions and
+	// Use UTC day boundaries to stay consistent with PostgreSQL date functions and
 	// frontend date filters that are based on ISO date strings.
 	today := time.Now().UTC()
 	leavesToday, err := uc.leaveRecordRepo.CountOnLeaveToday(ctx, uc.db, today)

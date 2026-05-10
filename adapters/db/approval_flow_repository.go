@@ -21,7 +21,7 @@ func (r *ApprovalFlowRepository) GetByID(ctx context.Context, q ports.Querier, i
 	query := `
 		SELECT id, uid, code, name_en, name_ar, description, is_active, created_at, updated_at
 		FROM approval_flows
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanApprovalFlow(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *ApprovalFlowRepository) GetByUID(ctx context.Context, q ports.Querier, 
 	query := `
 		SELECT id, uid, code, name_en, name_ar, description, is_active, created_at, updated_at
 		FROM approval_flows
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanApprovalFlow(q.QueryRowContext(ctx, query, uid))
 }
@@ -39,7 +39,7 @@ func (r *ApprovalFlowRepository) GetByCode(ctx context.Context, q ports.Querier,
 	query := `
 		SELECT id, uid, code, name_en, name_ar, description, is_active, created_at, updated_at
 		FROM approval_flows
-		WHERE code = ?`
+		WHERE code = $1`
 
 	return r.scanApprovalFlow(q.QueryRowContext(ctx, query, code))
 }
@@ -47,26 +47,20 @@ func (r *ApprovalFlowRepository) GetByCode(ctx context.Context, q ports.Querier,
 func (r *ApprovalFlowRepository) Create(ctx context.Context, q ports.Querier, flow *domain.ApprovalFlow) error {
 	query := `
 		INSERT INTO approval_flows (uid, code, name_en, name_ar, description, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	now := time.Now()
 	flow.CreatedAt = now
 	flow.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		flow.UID, flow.Code, flow.NameEN, flow.NameAR, flow.Description,
-		flow.IsActive, flow.CreatedAt, flow.UpdatedAt)
+		flow.IsActive, flow.CreatedAt, flow.UpdatedAt).Scan(&flow.ID)
 	if err != nil {
 		slog.Error("approval_flow_repository.Create.exec_query", "error", err, "uid", flow.UID, "code", flow.Code)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("approval_flow_repository.Create.last_insert_id", "error", err, "uid", flow.UID)
-		return err
-	}
-	flow.ID = id
 
 	return nil
 }
@@ -74,8 +68,8 @@ func (r *ApprovalFlowRepository) Create(ctx context.Context, q ports.Querier, fl
 func (r *ApprovalFlowRepository) Update(ctx context.Context, q ports.Querier, flow *domain.ApprovalFlow) error {
 	query := `
 		UPDATE approval_flows
-		SET code = ?, name_en = ?, name_ar = ?, description = ?, is_active = ?, updated_at = ?
-		WHERE id = ?`
+		SET code = $1, name_en = $2, name_ar = $3, description = $4, is_active = $5, updated_at = $6
+		WHERE id = $7`
 
 	flow.UpdatedAt = time.Now()
 
@@ -94,7 +88,7 @@ func (r *ApprovalFlowRepository) List(ctx context.Context, q ports.Querier, acti
 		FROM approval_flows`
 
 	if activeOnly {
-		query += ` WHERE is_active = 1`
+		query += ` WHERE is_active = true`
 	}
 
 	query += ` ORDER BY code ASC`
@@ -126,10 +120,9 @@ func (r *ApprovalFlowRepository) List(ctx context.Context, q ports.Querier, acti
 func (r *ApprovalFlowRepository) scanApprovalFlow(row *sql.Row) (*domain.ApprovalFlow, error) {
 	var f domain.ApprovalFlow
 	var createdAt, updatedAt domain.Time
-	var isActive int
 	err := row.Scan(
 		&f.ID, &f.UID, &f.Code, &f.NameEN, &f.NameAR, &f.Description,
-		&isActive, &createdAt, &updatedAt)
+		&f.IsActive, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -137,7 +130,6 @@ func (r *ApprovalFlowRepository) scanApprovalFlow(row *sql.Row) (*domain.Approva
 		slog.Error("approval_flow_repository.scanApprovalFlow.scan_row", "error", err)
 		return nil, err
 	}
-	f.IsActive = isActive == 1
 	f.CreatedAt = createdAt.Time
 	f.UpdatedAt = updatedAt.Time
 	return &f, nil
@@ -146,14 +138,12 @@ func (r *ApprovalFlowRepository) scanApprovalFlow(row *sql.Row) (*domain.Approva
 func (r *ApprovalFlowRepository) scanApprovalFlowRow(rows *sql.Rows) (*domain.ApprovalFlow, error) {
 	var f domain.ApprovalFlow
 	var createdAt, updatedAt domain.Time
-	var isActive int
 	err := rows.Scan(
 		&f.ID, &f.UID, &f.Code, &f.NameEN, &f.NameAR, &f.Description,
-		&isActive, &createdAt, &updatedAt)
+		&f.IsActive, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}
-	f.IsActive = isActive == 1
 	f.CreatedAt = createdAt.Time
 	f.UpdatedAt = updatedAt.Time
 	return &f, nil

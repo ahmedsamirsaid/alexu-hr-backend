@@ -17,6 +17,17 @@ type AppConfig struct {
 	LegacyDBName      string
 	LegacyDBUser      string
 	LegacyDBPassword  string
+	// PostgreSQL config
+	PostgresHost     string
+	PostgresPort     string
+	PostgresUser     string
+	PostgresPassword string
+	PostgresDB       string
+	PostgresSSLMode  string
+	// pgBouncer config
+	PgBouncerEnabled bool
+	PgBouncerHost    string
+	PgBouncerPort    string
 	// Auth config
 	AuthEnabled        bool
 	DevOTPBypass       bool
@@ -36,6 +47,8 @@ type AppConfig struct {
 	HolidaySyncCountry       string
 	HolidaySyncTimezone      string
 	SchedulerIntervalMinutes int
+	// Seed config
+	SeedDevData bool
 	// Storage config
 	MinIOEndpoint                string
 	MinIOAccessKey               string
@@ -63,6 +76,17 @@ func LoadConfig() *AppConfig {
 		LegacyDBName:      getEnv("BANU_MUSA_LEGACY_DB_NAME", ""),
 		LegacyDBUser:      getEnv("BANU_MUSA_LEGACY_DB_USER", ""),
 		LegacyDBPassword:  getEnv("BANU_MUSA_LEGACY_DB_PASSWORD", ""),
+			// PostgreSQL config
+		PostgresHost:     getEnv("BANU_MUSA_POSTGRES_HOST", "localhost"),
+		PostgresPort:     getEnv("BANU_MUSA_POSTGRES_PORT", "5432"),
+		PostgresUser:     getEnv("BANU_MUSA_POSTGRES_USER", "banumusa"),
+		PostgresPassword: getEnv("BANU_MUSA_POSTGRES_PASSWORD", "banumusa-secret"),
+		PostgresDB:       getEnv("BANU_MUSA_POSTGRES_DB", "banumusa"),
+		PostgresSSLMode:  getEnv("BANU_MUSA_POSTGRES_SSLMODE", "disable"),
+		// pgBouncer config
+		PgBouncerEnabled: getEnvBool("BANU_MUSA_PGBOUNCER_ENABLED", false),
+		PgBouncerHost:    getEnv("BANU_MUSA_PGBOUNCER_HOST", "localhost"),
+		PgBouncerPort:    getEnv("BANU_MUSA_PGBOUNCER_PORT", "6432"),
 		// Auth config
 		AuthEnabled:        getEnvBool("BANU_MUSA_AUTH_ENABLED", true),
 		DevOTPBypass:       getEnvBool("BANU_MUSA_DEV_OTP_BYPASS", true),
@@ -82,6 +106,9 @@ func LoadConfig() *AppConfig {
 		HolidaySyncAPIKey:        getEnv("BANU_MUSA_HOLIDAY_SYNC_API_KEY", "ysvLh7UNdrI0mbH9afetHcsaYcDGBiag"),
 		HolidaySyncCountry:       getEnv("BANU_MUSA_HOLIDAY_SYNC_COUNTRY", "EG"),
 		HolidaySyncTimezone:      getEnv("BANU_MUSA_HOLIDAY_SYNC_TIMEZONE", "Africa/Cairo"),
+
+		// Seed config
+		SeedDevData: getEnvBool("BANU_MUSA_SEED_DEV", true),
 
 		// Storage config
 		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "bucket-production-62aa.up.railway.app"),

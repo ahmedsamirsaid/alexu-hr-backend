@@ -27,23 +27,41 @@ import (
 	"github.com/banumusa/backend/core/ports"
 	"github.com/banumusa/backend/core/usecases"
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
 	cfg := LoadConfig()
 
-	sqliteDB, err := db.NewSQLiteDB(cfg.DBPath)
+	var dbHost, dbPort string
+	if cfg.PgBouncerEnabled {
+		dbHost = cfg.PgBouncerHost
+		dbPort = cfg.PgBouncerPort
+	} else {
+		dbHost = cfg.PostgresHost
+		dbPort = cfg.PostgresPort
+	}
+
+	pgDB, err := db.NewPostgresDB(dbHost, dbPort, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB, cfg.PostgresSSLMode)
 	if err != nil {
 		slog.Error("main.main.connect_database", "error", err)
 		os.Exit(1)
 	}
-	defer sqliteDB.Close()
+	defer pgDB.Close()
 
-	if err := runMigrations(sqliteDB.DB(), cfg.DBMigrationsPath); err != nil {
+	if err := runMigrations(pgDB.DB(), cfg.DBMigrationsPath); err != nil {
 		slog.Error("main.main.run_migrations", "error", err)
 		os.Exit(1)
+	}
+
+	// Run seed data if enabled
+	if cfg.SeedDevData {
+		if err := runSeedData(pgDB.DB()); err != nil {
+			slog.Error("main.main.run_seed_data", "error", err)
+			os.Exit(1)
+		}
+		slog.Info("main.main.seed_data_executed")
 	}
 
 	// Initialize I18n service
@@ -116,7 +134,7 @@ func main() {
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
 	auditLogRepo := db.NewAuditLogRepository()
-	auditor := audit.NewAuditor(sqliteDB, auditLogRepo)
+	auditor := audit.NewAuditor(pgDB, auditLogRepo)
 	var notificationService ports.NotificationService
 	if cfg.FCMEnabled {
 		fcmService, err := fcm.NewFCMNotificationService(context.Background(), fcm.Config{
@@ -124,7 +142,7 @@ func main() {
 			DeviceTokenRepo:        deviceTokenRepo,
 			UserRepo:               userRepo,
 			I18nService:            i18nService,
-			DB:                     sqliteDB,
+			DB:                     pgDB,
 		})
 		if err != nil {
 			slog.Error("main.main.init_fcm", "error", err)
@@ -141,82 +159,82 @@ func main() {
 	workingDaysCalc := usecases.NewWorkingDaysCalculator(weekendRepo, holidayDefinitionRepo)
 
 	recordLeaveUC := usecases.NewRecordLeaveUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo, workingDaysCalc, leaveSync, auditor,
+		pgDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo, workingDaysCalc, leaveSync, auditor,
 	)
-	getBalanceUC := usecases.NewGetBalanceUseCase(sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo)
-	listLeaveRecordsUC := usecases.NewListLeaveRecordsUseCase(sqliteDB, employeeRepo, leaveTypeRepo, leaveRecordRepo)
-	listAllLeaveRecordsUC := usecases.NewListAllLeaveRecordsUseCase(sqliteDB, leaveTypeRepo, leaveRecordRepo)
+	getBalanceUC := usecases.NewGetBalanceUseCase(pgDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo)
+	listLeaveRecordsUC := usecases.NewListLeaveRecordsUseCase(pgDB, employeeRepo, leaveTypeRepo, leaveRecordRepo)
+	listAllLeaveRecordsUC := usecases.NewListAllLeaveRecordsUseCase(pgDB, leaveTypeRepo, leaveRecordRepo)
 
-	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
+	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(pgDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
 
-	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo)
-	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
-	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
-	exportEmployeesUC := usecases.NewExportEmployeesUseCase(sqliteDB, employeeRepo)
-	exportEmployeesPDFUC := usecases.NewExportEmployeesPDFUseCase(sqliteDB, employeeRepo, cfg.FontPath)
+	getEmployeeUC := usecases.NewGetEmployeeUseCase(pgDB, employeeRepo)
+	listEmployeesUC := usecases.NewListEmployeesUseCase(pgDB, employeeRepo, userRepo, roleRepo)
+	importEmployeesUC := usecases.NewImportEmployeesUseCase(pgDB, employeeRepo, userRepo, roleRepo, auditor)
+	exportEmployeesUC := usecases.NewExportEmployeesUseCase(pgDB, employeeRepo)
+	exportEmployeesPDFUC := usecases.NewExportEmployeesPDFUseCase(pgDB, employeeRepo, cfg.FontPath)
 	generateTemplateUC := usecases.NewGenerateImportTemplateUseCase()
-	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(sqliteDB, employeeRepo, departmentRepo, auditor)
-	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(sqliteDB, employeeRepo, auditor)
-	listShiftsUC := usecases.NewListShiftsUseCase(sqliteDB, shiftRepo)
-	getShiftUC := usecases.NewGetShiftUseCase(sqliteDB, shiftRepo)
-	createShiftUC := usecases.NewCreateShiftUseCase(sqliteDB, shiftRepo)
-	updateShiftUC := usecases.NewUpdateShiftUseCase(sqliteDB, shiftRepo)
+	assignEmployeeDepartmentUC := usecases.NewAssignEmployeeDepartmentUseCase(pgDB, employeeRepo, departmentRepo, auditor)
+	removeEmployeeDepartmentUC := usecases.NewRemoveEmployeeDepartmentUseCase(pgDB, employeeRepo, auditor)
+	listShiftsUC := usecases.NewListShiftsUseCase(pgDB, shiftRepo)
+	getShiftUC := usecases.NewGetShiftUseCase(pgDB, shiftRepo)
+	createShiftUC := usecases.NewCreateShiftUseCase(pgDB, shiftRepo)
+	updateShiftUC := usecases.NewUpdateShiftUseCase(pgDB, shiftRepo)
 
 	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret, cfg.AccessTokenMinutes)
 
-	requestOTPUC := usecases.NewRequestOTPUseCase(sqliteDB, otpRepo, userRepo)
+	requestOTPUC := usecases.NewRequestOTPUseCase(pgDB, otpRepo, userRepo)
 	verifyOTPUC := usecases.NewVerifyOTPUseCase(
-		sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo, otpRepo, refreshTokenRepo,
+		pgDB, userRepo, roleRepo, permissionRepo, employeeRepo, otpRepo, refreshTokenRepo,
 		jwtService, cfg.DevOTPBypass, cfg.DevBypassOTP, cfg.RefreshTokenDays, auditor,
 	)
 	loginPasswordUC := usecases.NewLoginPasswordUseCase(
-		sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo, refreshTokenRepo,
+		pgDB, userRepo, roleRepo, permissionRepo, employeeRepo, refreshTokenRepo,
 		jwtService, cfg.DevOTPBypass, cfg.DevBypassOTP, cfg.RefreshTokenDays, auditor,
 	)
 	refreshTokenUC := usecases.NewRefreshTokenUseCase(
-		sqliteDB, userRepo, roleRepo, permissionRepo, refreshTokenRepo, jwtService, cfg.RefreshTokenDays,
+		pgDB, userRepo, roleRepo, permissionRepo, refreshTokenRepo, jwtService, cfg.RefreshTokenDays,
 	)
-	logoutUC := usecases.NewLogoutUseCase(sqliteDB, refreshTokenRepo, userRepo, auditor)
-	getCurrentUserUC := usecases.NewGetCurrentUserUseCase(sqliteDB, userRepo, roleRepo, permissionRepo, employeeRepo)
+	logoutUC := usecases.NewLogoutUseCase(pgDB, refreshTokenRepo, userRepo, auditor)
+	getCurrentUserUC := usecases.NewGetCurrentUserUseCase(pgDB, userRepo, roleRepo, permissionRepo, employeeRepo)
 
-	listUsersUC := usecases.NewListUsersUseCase(sqliteDB, userRepo, roleRepo, employeeRepo)
-	createUserUC := usecases.NewCreateUserUseCase(sqliteDB, userRepo, auditor)
-	updateUserUC := usecases.NewUpdateUserUseCase(sqliteDB, userRepo, auditor)
-	assignRoleUC := usecases.NewAssignRoleUseCase(sqliteDB, userRepo, roleRepo, departmentRepo, auditor)
-	removeRoleUC := usecases.NewRemoveRoleUseCase(sqliteDB, userRepo, roleRepo, auditor)
+	listUsersUC := usecases.NewListUsersUseCase(pgDB, userRepo, roleRepo, employeeRepo)
+	createUserUC := usecases.NewCreateUserUseCase(pgDB, userRepo, auditor)
+	updateUserUC := usecases.NewUpdateUserUseCase(pgDB, userRepo, auditor)
+	assignRoleUC := usecases.NewAssignRoleUseCase(pgDB, userRepo, roleRepo, departmentRepo, auditor)
+	removeRoleUC := usecases.NewRemoveRoleUseCase(pgDB, userRepo, roleRepo, auditor)
 
-	listRolesUC := usecases.NewListRolesUseCase(sqliteDB, roleRepo, permissionRepo)
-	createRoleUC := usecases.NewCreateRoleUseCase(sqliteDB, roleRepo, auditor)
-	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(sqliteDB, roleRepo, auditor)
-	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(sqliteDB, roleRepo, permissionRepo, auditor)
-	listPermissionsUC := usecases.NewListPermissionsUseCase(sqliteDB, permissionRepo)
+	listRolesUC := usecases.NewListRolesUseCase(pgDB, roleRepo, permissionRepo)
+	createRoleUC := usecases.NewCreateRoleUseCase(pgDB, roleRepo, auditor)
+	setRoleScopeUC := usecases.NewSetRoleScopeUseCase(pgDB, roleRepo, auditor)
+	setPermissionsUC := usecases.NewSetRolePermissionsUseCase(pgDB, roleRepo, permissionRepo, auditor)
+	listPermissionsUC := usecases.NewListPermissionsUseCase(pgDB, permissionRepo)
 
-	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(sqliteDB, approvalFlowRepo)
-	getApprovalFlowUC := usecases.NewGetApprovalFlowUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
+	listApprovalFlowsUC := usecases.NewListApprovalFlowsUseCase(pgDB, approvalFlowRepo)
+	getApprovalFlowUC := usecases.NewGetApprovalFlowUseCase(pgDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 
-	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(sqliteDB, approvalFlowRepo, auditor)
-	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(sqliteDB, approvalFlowRepo, auditor)
-	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo)
-	createApprovalFlowStepUC := usecases.NewCreateApprovalFlowStepUseCase(sqliteDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo, auditor)
-	updateApprovalFlowStepUC := usecases.NewUpdateApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, roleRepo, auditor)
-	deleteApprovalFlowStepUC := usecases.NewDeleteApprovalFlowStepUseCase(sqliteDB, approvalFlowStepRepo, auditor)
+	createApprovalFlowUC := usecases.NewCreateApprovalFlowUseCase(pgDB, approvalFlowRepo, auditor)
+	updateApprovalFlowUC := usecases.NewUpdateApprovalFlowUseCase(pgDB, approvalFlowRepo, auditor)
+	listApprovalFlowStepsUC := usecases.NewListApprovalFlowStepsUseCase(pgDB, approvalFlowRepo, approvalFlowStepRepo)
+	createApprovalFlowStepUC := usecases.NewCreateApprovalFlowStepUseCase(pgDB, approvalFlowRepo, approvalFlowStepRepo, roleRepo, auditor)
+	updateApprovalFlowStepUC := usecases.NewUpdateApprovalFlowStepUseCase(pgDB, approvalFlowStepRepo, roleRepo, auditor)
+	deleteApprovalFlowStepUC := usecases.NewDeleteApprovalFlowStepUseCase(pgDB, approvalFlowStepRepo, auditor)
 
-	listDepartmentsUC := usecases.NewListDepartmentsUseCase(sqliteDB, departmentRepo)
-	getDepartmentUC := usecases.NewGetDepartmentUseCase(sqliteDB, departmentRepo, roleRepo, employeeRepo)
-	createDepartmentUC := usecases.NewCreateDepartmentUseCase(sqliteDB, departmentRepo, auditor)
-	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(sqliteDB, departmentRepo, auditor)
-	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo, employeeRepo, auditor)
-	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo, userRepo, employeeRepo, auditor)
+	listDepartmentsUC := usecases.NewListDepartmentsUseCase(pgDB, departmentRepo)
+	getDepartmentUC := usecases.NewGetDepartmentUseCase(pgDB, departmentRepo, roleRepo, employeeRepo)
+	createDepartmentUC := usecases.NewCreateDepartmentUseCase(pgDB, departmentRepo, auditor)
+	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(pgDB, departmentRepo, auditor)
+	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(pgDB, departmentRepo, userRepo, roleRepo, employeeRepo, auditor)
+	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(pgDB, departmentRepo, roleRepo, userRepo, employeeRepo, auditor)
 
-	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(sqliteDB, leaveTypeRepo, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
-	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
-	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
-	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(sqliteDB, leaveTypeRepo, auditor)
-	setLeaveTypeApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(sqliteDB, leaveTypeRepo, approvalFlowRepo, auditor)
-	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(sqliteDB, leaveTypeRepo, auditor)
-	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(sqliteDB, weekendRepo)
-	listHolidaysUC := usecases.NewListHolidaysUseCase(sqliteDB, holidayDefinitionRepo)
-	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo, auditor)
+	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(pgDB, leaveTypeRepo, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
+	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(pgDB, leaveTypeRepo)
+	listSubLeaveTypesUC := usecases.NewListSubLeaveTypesUseCase(pgDB, leaveTypeRepo)
+	updateLeaveTypeUC := usecases.NewUpdateLeaveTypeUseCase(pgDB, leaveTypeRepo, auditor)
+	setLeaveTypeApprovalFlowUC := usecases.NewSetLeaveTypeApprovalFlowUseCase(pgDB, leaveTypeRepo, approvalFlowRepo, auditor)
+	toggleLeaveTypeUC := usecases.NewToggleLeaveTypeUseCase(pgDB, leaveTypeRepo, auditor)
+	listWeekendDaysUC := usecases.NewListWeekendDaysUseCase(pgDB, weekendRepo)
+	listHolidaysUC := usecases.NewListHolidaysUseCase(pgDB, holidayDefinitionRepo)
+	createManualHolidayUC := usecases.NewCreateManualHolidayUseCase(pgDB, holidayDefinitionRepo, weekendRepo, auditor)
 	generateDocumentUploadURLUC := usecases.NewGenerateDocumentUploadURLUseCase(
 		minioService,
 		cfg.MinIODocumentsBucket,
@@ -227,109 +245,109 @@ func main() {
 		cfg.MinIODocumentsBucket,
 		cfg.MinIODownloadExpiryMinutes,
 	)
-	updateHolidayUC := usecases.NewUpdateHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo, auditor)
-	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(sqliteDB, holidayDefinitionRepo, auditor)
+	updateHolidayUC := usecases.NewUpdateHolidayUseCase(pgDB, holidayDefinitionRepo, weekendRepo, auditor)
+	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(pgDB, holidayDefinitionRepo, auditor)
 
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
-		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
+		pgDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
 		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc,
 		generateDocumentUploadURLUC, notificationService, roleRepo, auditor,
 	)
 	cancelLeaveRequestUC := usecases.NewCancelLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, auditor,
+		pgDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, auditor,
 	)
 	updateRejectedLeaveRequestUC := usecases.NewUpdateRejectedLeaveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC, auditor,
+		pgDB, employeeRepo, leaveTypeRepo, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, approvalActionRepo, workingDaysCalc, generateDocumentUploadURLUC, auditor,
 	)
-	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(sqliteDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
+	listLeaveRequestsUC := usecases.NewListLeaveRequestsUseCase(pgDB, leaveRequestRepo, approvalRequestRepo, leaveTypeRepo)
 	getLeaveRequestUC := usecases.NewGetLeaveRequestUseCase(
-		sqliteDB, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo, generateDocumentDownloadURLUC,
+		pgDB, leaveRequestRepo, leaveRequestDocumentRepo, approvalRequestRepo, employeeRepo, leaveTypeRepo, generateDocumentDownloadURLUC,
 	)
 
 	listPendingApprovalsUC := usecases.NewListPendingApprovalsUseCase(
-		sqliteDB, userRepo, employeeRepo, leaveTypeRepo, leaveRequestRepo, approvalRequestRepo, approvalFlowStepRepo, roleRepo,
+		pgDB, userRepo, employeeRepo, leaveTypeRepo, leaveRequestRepo, approvalRequestRepo, approvalFlowStepRepo, roleRepo,
 	)
 	approveRequestUC := usecases.NewApproveRequestUseCase(
-		sqliteDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo,
+		pgDB, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRecordRepo, balanceTxRepo,
 		leaveRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo,
 		notificationService, userRepo, auditor,
 	)
 	rejectRequestUC := usecases.NewRejectRequestUseCase(
-		sqliteDB, employeeRepo, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
+		pgDB, employeeRepo, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
 		roleRepo, notificationService, leaveTypeRepo, userRepo, auditor,
 	)
 	submitPermissionUC := usecases.NewSubmitPermissionRequestUseCase(
-		sqliteDB, userRepo, employeeRepo, departmentRepo, shiftRepo,
+		pgDB, userRepo, employeeRepo, departmentRepo, shiftRepo,
 		permissionRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
 		weekendRepo, roleRepo, notificationService, auditor,
 	)
 	updatePermissionUC := usecases.NewUpdatePermissionRequestUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo,
 		employeeRepo, departmentRepo, shiftRepo, weekendRepo, auditor,
 	)
 	cancelPermissionUC := usecases.NewCancelPermissionRequestUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo,
 		employeeRepo, departmentRepo, shiftRepo, userRepo, notificationService, auditor,
 	)
 	listPermissionRequestsUC := usecases.NewListPermissionRequestsUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, employeeRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, employeeRepo,
 	)
 	getPermissionRequestUC := usecases.NewGetPermissionRequestUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalFlowStepRepo, employeeRepo, roleRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalFlowStepRepo, employeeRepo, roleRepo,
 	)
 	listPendingPermissionApprovalsUC := usecases.NewListPendingPermissionApprovalsUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalFlowStepRepo, employeeRepo, roleRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalFlowStepRepo, employeeRepo, roleRepo,
 	)
 	approvePermissionUC := usecases.NewApprovePermissionRequestUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
 		employeeRepo, departmentRepo, shiftRepo, roleRepo, userRepo, notificationService, auditor,
 	)
 	rejectPermissionUC := usecases.NewRejectPermissionRequestUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo,
 		employeeRepo, roleRepo, userRepo, notificationService, auditor,
 	)
 	autoRejectExpiredPermissionsUC := usecases.NewAutoRejectExpiredPermissionRequestsUseCase(
-		sqliteDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo,
+		pgDB, permissionRequestRepo, approvalRequestRepo, approvalActionRepo,
 		employeeRepo, departmentRepo, shiftRepo, cfg.HolidaySyncTimezone,
 	)
 	permissionEligibilityUC := usecases.NewGetPermissionEligibilityUseCase(
-		sqliteDB, employeeRepo, departmentRepo, shiftRepo, permissionRequestRepo, weekendRepo, cfg.HolidaySyncTimezone,
+		pgDB, employeeRepo, departmentRepo, shiftRepo, permissionRequestRepo, weekendRepo, cfg.HolidaySyncTimezone,
 	)
 
 	getApprovalHistoryUC := usecases.NewGetApprovalHistoryUseCase(
-		sqliteDB, approvalRequestRepo, approvalActionRepo, employeeRepo,
+		pgDB, approvalRequestRepo, approvalActionRepo, employeeRepo,
 	)
 
-	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
-	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
+	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, pgDB)
+	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, pgDB)
 	notifyMissingCheckOutsUC := usecases.NewNotifyMissingCheckOutsUseCase(
-		sqliteDB, attendanceRecordRepo, attendanceReminderRepo, employeeRepo, departmentRepo, shiftRepo, holidayDefinitionRepo, leaveRecordRepo, userRepo, notificationService,
+		pgDB, attendanceRecordRepo, attendanceReminderRepo, employeeRepo, departmentRepo, shiftRepo, holidayDefinitionRepo, leaveRecordRepo, userRepo, notificationService,
 	)
-	sendTestPushUC := usecases.NewSendTestPushNotificationUseCase(sqliteDB, userRepo, notificationService)
+	sendTestPushUC := usecases.NewSendTestPushNotificationUseCase(pgDB, userRepo, notificationService)
 
-	listDepartmentAttendanceLogsUC := usecases.NewListDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo)
-	listEmployeeAttendanceLogsUC := usecases.NewListEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo)
-	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo, permissionRequestRepo)
-	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(sqliteDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo, permissionRequestRepo)
-	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
-	departmentAttendanceReportUC := usecases.NewGetDepartmentAttendanceReportUseCase(sqliteDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, weekendRepo, holidayDefinitionRepo)
+	listDepartmentAttendanceLogsUC := usecases.NewListDepartmentAttendanceLogsUseCase(pgDB, departmentRepo, attendanceRecordRepo)
+	listEmployeeAttendanceLogsUC := usecases.NewListEmployeeAttendanceLogsUseCase(pgDB, employeeRepo, attendanceRecordRepo)
+	listDailyDepartmentAttendanceLogsUC := usecases.NewListDailyDepartmentAttendanceLogsUseCase(pgDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo, permissionRequestRepo)
+	listDailyEmployeeAttendanceLogsUC := usecases.NewListDailyEmployeeAttendanceLogsUseCase(pgDB, employeeRepo, attendanceRecordRepo, departmentRepo, shiftRepo, leaveRecordRepo, weekendRepo, holidayDefinitionRepo, permissionRequestRepo)
+	getDailyAttendanceSummaryUC := usecases.NewGetDailyAttendanceSummaryUseCase(pgDB, attendanceRecordRepo, employeeRepo, departmentRepo, shiftRepo)
+	departmentAttendanceReportUC := usecases.NewGetDepartmentAttendanceReportUseCase(pgDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, weekendRepo, holidayDefinitionRepo)
 	exportDepartmentAttendanceReportUC := usecases.NewExportDepartmentAttendanceReportUseCase(departmentAttendanceReportUC)
 
-	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
-	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(sqliteDB, attendanceDeviceRepo)
-	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo)
-	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
-	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
-	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(sqliteDB, attendanceDeviceRepo, auditor)
-	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(sqliteDB, attendanceDeviceRepo)
-	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(sqliteDB, attendanceDeviceRepo)
-	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
-	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
-	importAttendanceLogsUC := usecases.NewImportAttendanceLogsUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
-	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
+	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo, auditor)
+	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(pgDB, attendanceDeviceRepo)
+	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo)
+	updateAttendanceDeviceUC := usecases.NewUpdateAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo, auditor)
+	deleteAttendanceDeviceUC := usecases.NewDeleteAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo, auditor)
+	activateAttendanceDeviceUC := usecases.NewActivateAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo, auditor)
+	attendanceDeviceStatsUC := usecases.NewGetAttendanceDeviceStatsUseCase(pgDB, attendanceDeviceRepo)
+	checkAttendanceDeviceConnectionUC := usecases.NewCheckAttendanceDeviceConnectionUseCase(pgDB, attendanceDeviceRepo)
+	checkAllAttendanceDevicesConnectionUC := usecases.NewCheckAllAttendanceDevicesConnectionUseCase(pgDB, attendanceDeviceRepo)
+	createAttendanceLogUC := usecases.NewCreateAttendanceLogUseCase(pgDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(pgDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	importAttendanceLogsUC := usecases.NewImportAttendanceLogsUseCase(pgDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
+	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(pgDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
-		sqliteDB,
+		pgDB,
 		attendanceRecordRepo,
 		usecases.MonthlyAttendanceStatsDependencies{
 			EmployeeRepo: employeeRepo,
@@ -342,10 +360,10 @@ func main() {
 	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
 
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
-		sqliteDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
+		pgDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
 	)
 	holidaySyncUC := usecases.NewSyncEgyptPublicHolidaysUseCase(
-		sqliteDB,
+		pgDB,
 		holidayDefinitionRepo,
 		cfg.HolidaySyncEndpoint,
 		cfg.HolidaySyncAPIKey,
@@ -353,7 +371,7 @@ func main() {
 		cfg.HolidaySyncTimezone,
 	)
 	absenceSyncUC := usecases.NewSyncDailyAbsencesUseCase(
-		sqliteDB,
+		pgDB,
 		leaveRecordRepo,
 		weekendRepo,
 		holidayDefinitionRepo,
@@ -398,7 +416,7 @@ func main() {
 	)
 	leaveTypeHandler := httpAdapter.NewLeaveTypeHandler(getLeaveTypeDetailsUC, listLeaveTypesUC, listSubLeaveTypesUC, updateLeaveTypeUC, setLeaveTypeApprovalFlowUC, toggleLeaveTypeUC, i18nService)
 	weekendHandler := httpAdapter.NewWeekendHandler(listWeekendDaysUC)
-	holidayHandler := httpAdapter.NewHolidayHandler(sqliteDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
+	holidayHandler := httpAdapter.NewHolidayHandler(pgDB, listHolidaysUC, listWeekendDaysUC, createManualHolidayUC, updateHolidayUC, deleteHolidayUC, employeeRepo)
 	shiftHandler := httpAdapter.NewShiftHandler(listShiftsUC, getShiftUC, createShiftUC, updateShiftUC)
 	debugHandler := httpAdapter.NewDebugHandler(sendTestPushUC)
 	attendanceHandler := httpAdapter.NewAttendanceHandler(
@@ -418,13 +436,13 @@ func main() {
 			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
 		},
 	)
-    getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo, i18nService)
-	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo, i18nService)
-	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB, i18nService)
+    getAuditTrailUC := usecases.NewGetAuditTrailUseCase(pgDB, auditLogRepo, employeeRepo, i18nService)
+	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(pgDB, auditLogRepo, i18nService)
+	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, pgDB, i18nService)
 	listEnrichedAuditLogsUC := usecases.NewListEnrichedAuditLogsUseCase(
-		auditLogRepo, employeeRepo, departmentRepo, leaveRequestRepo, leaveTypeRepo, attendanceRecordRepo, sqliteDB, i18nService,
+		auditLogRepo, employeeRepo, departmentRepo, leaveRequestRepo, leaveTypeRepo, attendanceRecordRepo, pgDB, i18nService,
 	)
-	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB, i18nService)
+	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, pgDB, i18nService)
 	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC, listEnrichedAuditLogsUC, getAuditFilterOptionsUC)
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,
@@ -507,14 +525,14 @@ func runMigrations(sqlDB *sql.DB, migrationsPath string) error {
 		return fmt.Errorf("failed to reconcile migration version: %w", err)
 	}
 
-	driver, err := sqlite.WithInstance(sqlDB, &sqlite.Config{})
+	driver, err := postgres.WithInstance(sqlDB, &postgres.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
 		fmt.Sprintf("file://%s", migrationsPath),
-		"sqlite",
+		"postgres",
 		driver,
 	)
 	if err != nil {
@@ -551,7 +569,7 @@ func reconcileMigrationVersion(sqlDB *sql.DB, migrationsPath string) error {
 		return nil
 	}
 
-	if _, err := sqlDB.Exec(`UPDATE schema_migrations SET version = ?`, targetVersion); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE schema_migrations SET version = $1`, targetVersion); err != nil {
 		return err
 	}
 
@@ -561,7 +579,7 @@ func reconcileMigrationVersion(sqlDB *sql.DB, migrationsPath string) error {
 
 func readSchemaMigrationVersion(sqlDB *sql.DB) (version uint64, dirty bool, hasVersion bool, err error) {
 	var count int
-	if err = sqlDB.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&count); err != nil {
+	if err = sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'schema_migrations'`).Scan(&count); err != nil {
 		return 0, false, false, err
 	}
 	if count == 0 {
@@ -624,4 +642,20 @@ func legacyOrdinalToVersion(legacyVersion uint64, versions map[uint64]struct{}) 
 	}
 
 	return ordered[legacyVersion-1], true
+}
+
+func runSeedData(sqlDB *sql.DB) error {
+	// Read the seed file
+	seedPath := "./adapters/db/seed/seed_dev_consolidated.sql"
+	seedSQL, err := os.ReadFile(seedPath)
+	if err != nil {
+		return fmt.Errorf("failed to read seed file: %w", err)
+	}
+
+	// Execute the seed SQL
+	if _, err := sqlDB.Exec(string(seedSQL)); err != nil {
+		return fmt.Errorf("failed to execute seed data: %w", err)
+	}
+
+	return nil
 }

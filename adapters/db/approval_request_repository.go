@@ -21,7 +21,7 @@ func (r *ApprovalRequestRepository) GetByID(ctx context.Context, q ports.Querier
 	query := `
 		SELECT id, uid, approval_flow_uid, requester_uid, current_step, max_step, status, created_at, updated_at
 		FROM approval_requests
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanApprovalRequest(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *ApprovalRequestRepository) GetByUID(ctx context.Context, q ports.Querie
 	query := `
 		SELECT id, uid, approval_flow_uid, requester_uid, current_step, max_step, status, created_at, updated_at
 		FROM approval_requests
-		WHERE uid = ?`
+		WHERE uid = $1`
 
 	return r.scanApprovalRequest(q.QueryRowContext(ctx, query, uid))
 }
@@ -38,27 +38,21 @@ func (r *ApprovalRequestRepository) GetByUID(ctx context.Context, q ports.Querie
 func (r *ApprovalRequestRepository) Create(ctx context.Context, q ports.Querier, request *domain.ApprovalRequest) error {
 	query := `
 		INSERT INTO approval_requests (uid, approval_flow_uid, requester_uid, current_step, max_step, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	now := time.Now()
 	request.CreatedAt = now
 	request.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		request.UID, request.ApprovalFlowUID, request.RequesterUID,
 		request.CurrentStep, request.MaxStep, request.Status,
-		request.CreatedAt, request.UpdatedAt)
+		request.CreatedAt, request.UpdatedAt).Scan(&request.ID)
 	if err != nil {
 		slog.Error("approval_request_repository.Create.exec_query", "error", err, "uid", request.UID, "requester_uid", request.RequesterUID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("approval_request_repository.Create.last_insert_id", "error", err, "uid", request.UID)
-		return err
-	}
-	request.ID = id
 
 	return nil
 }
@@ -66,8 +60,8 @@ func (r *ApprovalRequestRepository) Create(ctx context.Context, q ports.Querier,
 func (r *ApprovalRequestRepository) Update(ctx context.Context, q ports.Querier, request *domain.ApprovalRequest) error {
 	query := `
 		UPDATE approval_requests
-		SET approval_flow_uid = ?, current_step = ?, max_step = ?, status = ?, updated_at = ?
-		WHERE id = ?`
+		SET approval_flow_uid = $1, current_step = $2, max_step = $3, status = $4, updated_at = $5
+		WHERE id = $6`
 
 	request.UpdatedAt = time.Now()
 
@@ -83,7 +77,7 @@ func (r *ApprovalRequestRepository) ListByRequester(ctx context.Context, q ports
 	query := `
 		SELECT id, uid, approval_flow_uid, requester_uid, current_step, max_step, status, created_at, updated_at
 		FROM approval_requests
-		WHERE requester_uid = ?
+		WHERE requester_uid = $1
 		ORDER BY created_at DESC`
 
 	return r.queryApprovalRequests(ctx, q, query, requesterUID)
@@ -103,7 +97,7 @@ func (r *ApprovalRequestRepository) ListPendingByFlowAndStep(ctx context.Context
 	query := `
 		SELECT id, uid, approval_flow_uid, requester_uid, current_step, max_step, status, created_at, updated_at
 		FROM approval_requests
-		WHERE approval_flow_uid = ? AND current_step = ? AND status = 'pending'
+		WHERE approval_flow_uid = $1 AND current_step = $2 AND status = 'pending'
 		ORDER BY created_at ASC`
 
 	return r.queryApprovalRequests(ctx, q, query, approvalFlowUID, stepOrder)
@@ -113,7 +107,7 @@ func (r *ApprovalRequestRepository) CountPendingByFlowAndStep(ctx context.Contex
 	query := `
 		SELECT COUNT(*)
 		FROM approval_requests
-		WHERE approval_flow_uid = ? AND current_step = ? AND status = 'pending'`
+		WHERE approval_flow_uid = $1 AND current_step = $2 AND status = 'pending'`
 
 	var count int
 	err := q.QueryRowContext(ctx, query, approvalFlowUID, stepOrder).Scan(&count)

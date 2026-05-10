@@ -1,5 +1,5 @@
 CREATE TABLE leave_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     employee_uid TEXT NOT NULL REFERENCES employees(uid) ON DELETE RESTRICT,
     leave_type_uid TEXT NOT NULL REFERENCES leave_types(uid) ON DELETE RESTRICT,
@@ -11,11 +11,11 @@ CREATE TABLE leave_requests (
     assignment TEXT,
     assignment_country TEXT,
     spouse_work_country TEXT,
-    submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+    submitted_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
     decided_at TEXT,
     approval_request_uid TEXT NOT NULL REFERENCES approval_requests(uid) ON DELETE RESTRICT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT valid_date_range CHECK (end_date >= start_date)
 );

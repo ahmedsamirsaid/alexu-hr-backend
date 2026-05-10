@@ -11,6 +11,13 @@ import (
 
 var ErrShiftNotFound = errors.New("shift not found")
 
+func parseShiftTime(value string) (time.Time, error) {
+	if t, err := time.Parse("15:04:05", value); err == nil {
+		return t, nil
+	}
+	return time.Parse("15:04", value)
+}
+
 type ListShiftsOutput struct {
 	Shifts []*domain.Shift
 }
@@ -80,11 +87,11 @@ func (uc *CreateShiftUseCase) Execute(ctx context.Context, input CreateShiftInpu
 		return nil, ErrInvalidGraceMinutes
 	}
 
-	start, err := time.Parse("15:04", input.StartTime)
+	start, err := parseShiftTime(input.StartTime)
 	if err != nil {
 		return nil, ErrInvalidWorkDayStart
 	}
-	end, err := time.Parse("15:04", input.EndTime)
+	end, err := parseShiftTime(input.EndTime)
 	if err != nil {
 		return nil, ErrInvalidWorkDayEnd
 	}
@@ -144,11 +151,11 @@ func (uc *UpdateShiftUseCase) Execute(ctx context.Context, input UpdateShiftInpu
 		shift.GraceMinutes = *input.GraceMinutes
 	}
 
-	start, err := time.Parse("15:04", shift.StartTime)
+	start, err := parseShiftTime(shift.StartTime)
 	if err != nil {
 		return nil, ErrInvalidWorkDayStart
 	}
-	end, err := time.Parse("15:04", shift.EndTime)
+	end, err := parseShiftTime(shift.EndTime)
 	if err != nil {
 		return nil, ErrInvalidWorkDayEnd
 	}

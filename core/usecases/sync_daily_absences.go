@@ -145,7 +145,7 @@ func deleteAbsenceExceptionsForDate(ctx context.Context, db ports.DB, targetDate
 
 	if len(keepEmployeeUIDs) == 0 {
 		result, err := db.ExecContext(ctx,
-			`DELETE FROM attendance_exceptions WHERE attendance_date = ? AND exception_type = ?`,
+			`DELETE FROM attendance_exceptions WHERE attendance_date = $1 AND exception_type = $2`,
 			dateStr,
 			domain.AttendanceExceptionTypeAbsence,
 		)
@@ -159,19 +159,18 @@ func deleteAbsenceExceptionsForDate(ctx context.Context, db ports.DB, targetDate
 		return int(affected), nil
 	}
 
-	placeholders := make([]string, 0, len(keepEmployeeUIDs))
 	args := make([]any, 0, len(keepEmployeeUIDs)+2)
 	args = append(args, dateStr, domain.AttendanceExceptionTypeAbsence)
-	for _, uid := range keepEmployeeUIDs {
-		placeholders = append(placeholders, "?")
+	placeholders := make([]string, 0, len(keepEmployeeUIDs))
+	for i, uid := range keepEmployeeUIDs {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", i+3))
 		args = append(args, uid)
 	}
 
 	query := fmt.Sprintf(
-		`DELETE FROM attendance_exceptions WHERE attendance_date = ? AND exception_type = ? AND employee_uid NOT IN (%s)`,
+		`DELETE FROM attendance_exceptions WHERE attendance_date = $1 AND exception_type = $2 AND employee_uid NOT IN (%s)`,
 		strings.Join(placeholders, ","),
 	)
-
 	result, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
@@ -187,7 +186,7 @@ func deleteAbsenceExceptionsForDate(ctx context.Context, db ports.DB, targetDate
 func listPresentEmployeeUIDsForDate(ctx context.Context, db ports.DB, targetDate time.Time) (map[string]struct{}, error) {
 	rows, err := db.QueryContext(
 		ctx,
-		`SELECT DISTINCT employee_uid FROM attendance_records WHERE substr(punched_at, 1, 10) = ?`,
+		`SELECT DISTINCT employee_uid FROM attendance_records WHERE TO_CHAR(punched_at, 'YYYY-MM-DD') = $1`,
 		targetDate.Format("2006-01-02"),
 	)
 	if err != nil {
@@ -215,7 +214,7 @@ func listActiveEmployeesForAbsenceSync(ctx context.Context, db ports.DB) ([]depa
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, uid, name, department_uid, hire_date, status
 		FROM employees
-		WHERE status = ?
+		WHERE status = $1
 		ORDER BY uid ASC
 	`, domain.EmployeeStatusActive)
 	if err != nil {
@@ -257,9 +256,8 @@ func hasLeaveOnDateForAbsenceSync(ctx context.Context, db ports.DB, leaveRepo po
 	var count int
 	err := db.QueryRowContext(
 		ctx,
-		`SELECT COUNT(*) FROM leave_records WHERE employee_id = ? AND date(?) BETWEEN date(start_date) AND date(end_date)`,
-		employeeID,
-		dateStr,
+		`SELECT COUNT(*) FROM leave_records WHERE employee_id = $1 AND $2 BETWEEN TO_CHAR(start_date, 'YYYY-MM-DD') AND TO_CHAR(end_date, 'YYYY-MM-DD')`,
+		employeeID, dateStr,
 	).Scan(&count)
 	if err != nil {
 		return false, err

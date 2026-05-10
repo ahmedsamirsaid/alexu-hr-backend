@@ -1,11 +1,11 @@
 CREATE TABLE approval_flow_steps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id BIGSERIAL PRIMARY KEY,
     uid TEXT UNIQUE NOT NULL,
     approval_flow_uid TEXT NOT NULL REFERENCES approval_flows(uid) ON DELETE RESTRICT,
     step_order INTEGER NOT NULL CHECK (step_order > 0),
     role_uid TEXT NOT NULL REFERENCES roles(uid) ON DELETE RESTRICT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE(approval_flow_uid, step_order)
 );

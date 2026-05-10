@@ -21,7 +21,7 @@ func (r *LeaveBalanceRepository) GetByID(ctx context.Context, q ports.Querier, i
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, year, total_days, used_days, created_at, updated_at
 		FROM leave_balances
-		WHERE id = ?`
+		WHERE id = $1`
 
 	return r.scanLeaveBalance(q.QueryRowContext(ctx, query, id))
 }
@@ -30,7 +30,7 @@ func (r *LeaveBalanceRepository) GetByEmployeeAndTypeAndYear(ctx context.Context
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, year, total_days, used_days, created_at, updated_at
 		FROM leave_balances
-		WHERE employee_id = ? AND leave_type_id = ? AND year = ?`
+		WHERE employee_id = $1 AND leave_type_id = $2 AND year = $3`
 
 	return r.scanLeaveBalance(q.QueryRowContext(ctx, query, employeeID, leaveTypeID, year))
 }
@@ -38,26 +38,20 @@ func (r *LeaveBalanceRepository) GetByEmployeeAndTypeAndYear(ctx context.Context
 func (r *LeaveBalanceRepository) Create(ctx context.Context, q ports.Querier, balance *domain.LeaveBalance) error {
 	query := `
 		INSERT INTO leave_balances (uid, employee_id, leave_type_id, year, total_days, used_days, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id`
 
 	now := time.Now()
 	balance.CreatedAt = now
 	balance.UpdatedAt = now
 
-	result, err := q.ExecContext(ctx, query,
+	err := q.QueryRowContext(ctx, query,
 		balance.UID, balance.EmployeeID, balance.LeaveTypeID, balance.Year,
-		balance.TotalDays, balance.UsedDays, balance.CreatedAt, balance.UpdatedAt)
+		balance.TotalDays, balance.UsedDays, balance.CreatedAt, balance.UpdatedAt).Scan(&balance.ID)
 	if err != nil {
 		slog.Error("leave_balance_repository.Create.exec_query", "error", err, "uid", balance.UID)
 		return err
 	}
-
-	id, err := result.LastInsertId()
-	if err != nil {
-		slog.Error("leave_balance_repository.Create.last_insert_id", "error", err, "uid", balance.UID)
-		return err
-	}
-	balance.ID = id
 
 	return nil
 }
@@ -65,8 +59,8 @@ func (r *LeaveBalanceRepository) Create(ctx context.Context, q ports.Querier, ba
 func (r *LeaveBalanceRepository) Update(ctx context.Context, q ports.Querier, balance *domain.LeaveBalance) error {
 	query := `
 		UPDATE leave_balances
-		SET total_days = ?, used_days = ?, updated_at = ?
-		WHERE id = ?`
+		SET total_days = $1, used_days = $2, updated_at = $3
+		WHERE id = $4`
 
 	balance.UpdatedAt = time.Now()
 
@@ -83,7 +77,7 @@ func (r *LeaveBalanceRepository) ListByEmployee(ctx context.Context, q ports.Que
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, year, total_days, used_days, created_at, updated_at
 		FROM leave_balances
-		WHERE employee_id = ?
+		WHERE employee_id = $1
 		ORDER BY year DESC, leave_type_id`
 
 	return r.queryLeaveBalances(ctx, q, query, employeeID)
@@ -93,7 +87,7 @@ func (r *LeaveBalanceRepository) ListByEmployeeAndYear(ctx context.Context, q po
 	query := `
 		SELECT id, uid, employee_id, leave_type_id, year, total_days, used_days, created_at, updated_at
 		FROM leave_balances
-		WHERE employee_id = ? AND year = ?
+		WHERE employee_id = $1 AND year = $2
 		ORDER BY leave_type_id`
 
 	return r.queryLeaveBalances(ctx, q, query, employeeID, year)

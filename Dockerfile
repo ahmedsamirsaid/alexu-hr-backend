@@ -18,6 +18,7 @@ COPY --from=builder --chown=nonroot:nonroot /out/hr-backend /app/hr-backend
 COPY --from=builder --chown=nonroot:nonroot /out/data /app/data
 COPY --chown=nonroot:nonroot adapters/db/migrations /app/adapters/db/migrations
 COPY --chown=nonroot:nonroot assets /app/assets
+COPY --chown=nonroot:nonroot locales /app/locales
 
 EXPOSE 8080
 

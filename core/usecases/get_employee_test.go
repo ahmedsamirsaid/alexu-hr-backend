@@ -56,7 +56,7 @@ func TestGetEmployeeUseCase_Execute(t *testing.T) {
 			db := &mockDB{tx: mockTx}
 			employeeRepo := &mockEmployeeRepo{employee: tt.employee}
 
-			uc := usecases.NewGetEmployeeUseCase(db, employeeRepo)
+			uc := usecases.NewGetEmployeeUseCase(db, employeeRepo, nil)
 
 			output, err := uc.Execute(context.Background(), tt.input)
 

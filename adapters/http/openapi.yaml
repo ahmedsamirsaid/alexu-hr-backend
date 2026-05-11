@@ -1760,6 +1760,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/employees/me/profile:
+    put:
+      tags: [Employees]
+      summary: Update my employee profile
+      description: Updates the authenticated employee's own profile fields. This endpoint is self-service only and does not accept a target employee UID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, mobile]
+              properties:
+                name:
+                  type: string
+                  example: "Ahmed Mohamed"
+                mobile:
+                  type: string
+                  example: "01012345678"
+                telephoneNumber:
+                  type: string
+                  nullable: true
+                  example: "0234567890"
+                email:
+                  type: string
+                  nullable: true
+                  example: "ahmed@example.com"
+      responses:
+        "200":
+          description: Updated employee profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                    example: "emp_xyz789"
+                  name:
+                    type: string
+                    example: "Ahmed Mohamed"
+                  mobile:
+                    type: string
+                    example: "01012345678"
+                  telephoneNumber:
+                    type: string
+                    nullable: true
+                    example: "0234567890"
+                  email:
+                    type: string
+                    nullable: true
+                    example: "ahmed@example.com"
+        "400":
+          description: Invalid request or no linked employee profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Mobile number conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/employees/{uid}/department:
     put:
       tags: [Employees]

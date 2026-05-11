@@ -105,6 +105,7 @@ func main() {
 	approvalFlowStepRepo := db.NewApprovalFlowStepRepository()
 	approvalRequestRepo := db.NewApprovalRequestRepository()
 	approvalActionRepo := db.NewApprovalActionRepository()
+	profileChangeRequestRepo := db.NewEmployeeProfileChangeRequestRepository()
 	leaveRequestRepo := db.NewLeaveRequestRepository()
 	permissionRequestRepo := db.NewPermissionRequestRepository()
 	leaveRequestDocumentRepo := db.NewLeaveRequestDocumentRepository()
@@ -115,6 +116,9 @@ func main() {
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
+	penaltyRepo := db.NewPenaltyRepository()
+	incentiveBonusRepo := db.NewIncentiveBonusRepository()
+	annualReportRepo := db.NewAnnualReportRepository()
 	auditLogRepo := db.NewAuditLogRepository()
 	auditor := audit.NewAuditor(sqliteDB, auditLogRepo)
 	var notificationService ports.NotificationService
@@ -149,7 +153,6 @@ func main() {
 
 	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
 
-	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo)
 	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
 	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
 	exportEmployeesUC := usecases.NewExportEmployeesUseCase(sqliteDB, employeeRepo)
@@ -227,6 +230,20 @@ func main() {
 		cfg.MinIODocumentsBucket,
 		cfg.MinIODownloadExpiryMinutes,
 	)
+	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo, generateDocumentDownloadURLUC)
+	createEmployeeUC := usecases.NewCreateEmployeeUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
+	updateOwnEmployeeProfileUC := usecases.NewUpdateOwnEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, auditor)
+	updateEmployeeProfileUC := usecases.NewUpdateEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
+	listEmployeePenaltiesUC := usecases.NewListEmployeePenaltiesUseCase(sqliteDB, employeeRepo, penaltyRepo, generateDocumentDownloadURLUC)
+	createEmployeePenaltyUC := usecases.NewCreateEmployeePenaltyUseCase(sqliteDB, employeeRepo, penaltyRepo, generateDocumentUploadURLUC)
+	createEmployeePenaltyRemovalUC := usecases.NewCreateEmployeePenaltyRemovalUseCase(sqliteDB, penaltyRepo, generateDocumentUploadURLUC)
+	updateEmployeePenaltiesUC := usecases.NewUpdateEmployeePenaltiesUseCase(sqliteDB, employeeRepo, penaltyRepo)
+	listEmployeeIncentiveBonusesUC := usecases.NewListEmployeeIncentiveBonusesUseCase(sqliteDB, employeeRepo, incentiveBonusRepo, generateDocumentDownloadURLUC)
+	createEmployeeIncentiveBonusUC := usecases.NewCreateEmployeeIncentiveBonusUseCase(sqliteDB, employeeRepo, incentiveBonusRepo, generateDocumentUploadURLUC)
+	updateEmployeeIncentiveBonusesUC := usecases.NewUpdateEmployeeIncentiveBonusesUseCase(sqliteDB, employeeRepo, incentiveBonusRepo)
+	listEmployeeAnnualReportsUC := usecases.NewListEmployeeAnnualReportsUseCase(sqliteDB, employeeRepo, annualReportRepo, generateDocumentDownloadURLUC)
+	createEmployeeAnnualReportUC := usecases.NewCreateEmployeeAnnualReportUseCase(sqliteDB, employeeRepo, annualReportRepo, generateDocumentUploadURLUC)
+	updateEmployeeAnnualReportsUC := usecases.NewUpdateEmployeeAnnualReportsUseCase(sqliteDB, employeeRepo, annualReportRepo)
 	updateHolidayUC := usecases.NewUpdateHolidayUseCase(sqliteDB, holidayDefinitionRepo, weekendRepo, auditor)
 	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(sqliteDB, holidayDefinitionRepo, auditor)
 
@@ -299,6 +316,24 @@ func main() {
 	getApprovalHistoryUC := usecases.NewGetApprovalHistoryUseCase(
 		sqliteDB, approvalRequestRepo, approvalActionRepo, employeeRepo,
 	)
+	submitEmployeeProfileChangeRequestUC := usecases.NewSubmitEmployeeProfileChangeRequestUseCase(
+		sqliteDB, employeeRepo, roleRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, profileChangeRequestRepo, auditor,
+	)
+	getEmployeeProfileChangeRequestUC := usecases.NewGetEmployeeProfileChangeRequestUseCase(
+		sqliteDB, roleRepo, profileChangeRequestRepo, approvalRequestRepo, employeeRepo,
+	)
+	listEmployeeProfileChangeRequestsUC := usecases.NewListEmployeeProfileChangeRequestsUseCase(
+		sqliteDB, roleRepo, profileChangeRequestRepo, getEmployeeProfileChangeRequestUC,
+	)
+	listPendingEmployeeProfileChangeRequestsUC := usecases.NewListPendingEmployeeProfileChangeRequestsUseCase(
+		sqliteDB, profileChangeRequestRepo, roleRepo, getEmployeeProfileChangeRequestUC,
+	)
+	approveEmployeeProfileChangeRequestUC := usecases.NewApproveEmployeeProfileChangeRequestUseCase(
+		sqliteDB, employeeRepo, profileChangeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, auditor,
+	)
+	rejectEmployeeProfileChangeRequestUC := usecases.NewRejectEmployeeProfileChangeRequestUseCase(
+		sqliteDB, profileChangeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, auditor,
+	)
 
 	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
 	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, sqliteDB)
@@ -328,6 +363,7 @@ func main() {
 	updateAttendanceLogUC := usecases.NewUpdateAttendanceLogUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	importAttendanceLogsUC := usecases.NewImportAttendanceLogsUseCase(sqliteDB, attendanceRecordRepo, employeeRepo, attendanceDeviceRepo, auditor)
 	getAttendanceLogHistoryUC := usecases.NewGetAttendanceLogHistoryUseCase(sqliteDB, attendanceRecordRepo, auditLogRepo, employeeRepo, userRepo)
+
 	getMonthlyAttendanceStatsUC := usecases.NewGetMonthlyAttendanceStatsUseCase(
 		sqliteDB,
 		attendanceRecordRepo,
@@ -361,7 +397,28 @@ func main() {
 	)
 
 	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC, i18nService)
-	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
+	employeeHandler := httpAdapter.NewEmployeeHandler(
+		createEmployeeUC,
+		getEmployeeUC,
+		listEmployeesUC,
+		updateOwnEmployeeProfileUC,
+		importEmployeesUC,
+		exportEmployeesUC,
+		exportEmployeesPDFUC,
+		generateTemplateUC,
+		assignEmployeeDepartmentUC,
+		removeEmployeeDepartmentUC,
+		listEmployeePenaltiesUC,
+		createEmployeePenaltyUC,
+		createEmployeePenaltyRemovalUC,
+		updateEmployeePenaltiesUC,
+		listEmployeeIncentiveBonusesUC,
+		createEmployeeIncentiveBonusUC,
+		updateEmployeeIncentiveBonusesUC,
+		listEmployeeAnnualReportsUC,
+		createEmployeeAnnualReportUC,
+		updateEmployeeAnnualReportsUC,
+	)
 	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, i18nService)
 	meHandler := httpAdapter.NewMeHandler(updateUserUC)
 	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
@@ -380,6 +437,17 @@ func main() {
 		listPermissionRequestsUC, getPermissionRequestUC,
 		listPendingPermissionApprovalsUC, approvePermissionUC, rejectPermissionUC,
 		getApprovalHistoryUC, permissionEligibilityUC, getCurrentUserUC,
+	)
+	employeeProfileChangeHandler := httpAdapter.NewEmployeeProfileChangeHandler(
+		submitEmployeeProfileChangeRequestUC,
+		listEmployeeProfileChangeRequestsUC,
+		getEmployeeProfileChangeRequestUC,
+		listPendingEmployeeProfileChangeRequestsUC,
+		approveEmployeeProfileChangeRequestUC,
+		rejectEmployeeProfileChangeRequestUC,
+		getApprovalHistoryUC,
+		updateEmployeeProfileUC,
+		getCurrentUserUC,
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
 		listDepartmentsUC, getDepartmentUC, createDepartmentUC, updateDepartmentUC,
@@ -427,6 +495,7 @@ func main() {
 	)
 	getAuditFilterOptionsUC := usecases.NewGetAuditFilterOptionsUseCase(auditLogRepo, sqliteDB, i18nService)
 	auditHandler := httpAdapter.NewAuditHandler(getAuditTrailUC, getActorAuditEventsUC, listAllAuditLogsUC, listEnrichedAuditLogsUC, getAuditFilterOptionsUC)
+
 	documentHandler := httpAdapter.NewDocumentHandler(
 		generateDocumentUploadURLUC,
 		generateDocumentDownloadURLUC,
@@ -455,6 +524,7 @@ func main() {
 		DebugHandler:            debugHandler,
 		JWTService:              jwtService,
 		AuthEnabled:             cfg.AuthEnabled,
+    EmployeeProfileChangeHandler: employeeProfileChangeHandler,
 		DocumentHandler:         documentHandler,
 		I18nService:             i18nService,
 	})

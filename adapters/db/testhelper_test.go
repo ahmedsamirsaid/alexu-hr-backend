@@ -78,6 +78,10 @@ func (tdb *TestDB) clearSeedData() {
 
 	// Clear seed data tables (order matters for foreign keys)
 	tables := []string{
+		"annual_reports",
+		"incentive_bonus",
+		"penalties_removed",
+		"penalties",
 		"leave_request_documents",
 		"sub_leave_types",
 		"leave_requests",

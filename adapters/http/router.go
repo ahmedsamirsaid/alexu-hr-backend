@@ -29,6 +29,7 @@ type RouterConfig struct {
 	DocumentHandler         *DocumentHandler
 	I18nService             ports.I18nService
 	PermissionRequestHandler *PermissionRequestHandler
+  EmployeeProfileChangeHandler *EmployeeProfileChangeHandler
 	MeHandler                *MeHandler
 }
 
@@ -56,6 +57,21 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	protectedMux.Handle("GET /api/v1/employees/{uid}", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.GetEmployee)))
 	protectedMux.Handle("GET /api/v1/employees", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.ListEmployees)))
+	protectedMux.HandleFunc("PUT /api/v1/employees/me/profile", cfg.EmployeeHandler.UpdateOwnProfile)
+	protectedMux.Handle("PATCH /api/v1/employees/{uid}", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.UpdateEmployee)))
+	protectedMux.Handle("POST /api/v1/employees", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.Create)))
+	protectedMux.Handle("POST /api/v1/employees/{uid}/profile-change-requests", RequirePermission("employee-profile-changes:write")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.Submit)))
+	protectedMux.Handle("GET /api/v1/employees/{uid}/profile-change-requests", RequireAnyPermission("employee-profile-changes:write", "employee-profile-changes:read", "employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.ListByEmployee)))
+	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/penalties", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.ListPenalties)))
+	protectedMux.Handle("POST /api/v1/employees/{employeeUid}/penalties", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.CreatePenalty)))
+	protectedMux.Handle("POST /api/v1/penalties/{penaltyId}/removals", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.CreatePenaltyRemoval)))
+	protectedMux.Handle("PUT /api/v1/employees/{employeeUid}/penalties", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.UpdatePenalties)))
+	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/incentive-bonuses", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.ListIncentiveBonuses)))
+	protectedMux.Handle("POST /api/v1/employees/{employeeUid}/incentive-bonuses", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.CreateIncentiveBonus)))
+	protectedMux.Handle("PUT /api/v1/employees/{employeeUid}/incentive-bonuses", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.UpdateIncentiveBonuses)))
+	protectedMux.Handle("GET /api/v1/employees/{employeeUid}/annual-reports", RequirePermission("employees:read")(http.HandlerFunc(cfg.EmployeeHandler.ListAnnualReports)))
+	protectedMux.Handle("POST /api/v1/employees/{employeeUid}/annual-reports", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.CreateAnnualReport)))
+	protectedMux.Handle("PUT /api/v1/employees/{employeeUid}/annual-reports", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.UpdateAnnualReports)))
 	protectedMux.Handle("POST /api/v1/employees/import", RequirePermission("employees:import")(http.HandlerFunc(cfg.EmployeeHandler.ImportEmployees)))
 	protectedMux.Handle("GET /api/v1/employees/export", RequirePermission("employees:export")(http.HandlerFunc(cfg.EmployeeHandler.ExportEmployees)))
 	protectedMux.Handle("GET /api/v1/employees/export/pdf", RequirePermission("employees:export")(http.HandlerFunc(cfg.EmployeeHandler.ExportEmployeesPDF)))
@@ -119,6 +135,11 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("POST /api/v1/approvals/{uid}/approve", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.ApproveRequest)))
 	protectedMux.Handle("POST /api/v1/approvals/{uid}/reject", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.RejectRequest)))
 	protectedMux.Handle("GET /api/v1/approvals/{uid}/history", RequirePermission("leave:approve")(http.HandlerFunc(cfg.LeaveRequestHandler.GetApprovalHistory)))
+	protectedMux.Handle("GET /api/v1/profile-change-requests/pending", RequirePermission("employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.ListPending)))
+	protectedMux.Handle("GET /api/v1/profile-change-requests/{requestUid}", RequireAnyPermission("employee-profile-changes:write", "employee-profile-changes:read", "employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.Get)))
+	protectedMux.Handle("POST /api/v1/profile-change-requests/{requestUid}/approve", RequirePermission("employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.Approve)))
+	protectedMux.Handle("POST /api/v1/profile-change-requests/{requestUid}/reject", RequirePermission("employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.Reject)))
+	protectedMux.Handle("GET /api/v1/profile-change-requests/{requestUid}/history", RequireAnyPermission("employee-profile-changes:write", "employee-profile-changes:read", "employee-profile-changes:approve")(http.HandlerFunc(cfg.EmployeeProfileChangeHandler.History)))
 
 	protectedMux.Handle("GET /api/v1/permission-requests/eligibility", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Eligibility)))
 	protectedMux.Handle("POST /api/v1/permission-requests", RequirePermission("permission:request")(http.HandlerFunc(cfg.PermissionRequestHandler.Submit)))

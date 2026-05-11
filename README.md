@@ -119,6 +119,7 @@ curl -X POST http://localhost:8080/api/v1/auth/otp/verify \
 |---|---|---|
 | `GET` | `/api/v1/employees` | `employees:read` |
 | `GET` | `/api/v1/employees/{uid}` | `employees:read` |
+| `PUT` | `/api/v1/employees/me/profile` | Authenticated employee only |
 | `POST` | `/api/v1/employees/import` | `employees:import` |
 | `GET` | `/api/v1/employees/export` | `employees:export` |
 | `GET` | `/api/v1/employees/export/pdf` | `employees:export` |

@@ -232,8 +232,8 @@ func main() {
 	)
 	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo, generateDocumentDownloadURLUC)
 	createEmployeeUC := usecases.NewCreateEmployeeUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
-	updateOwnEmployeeProfileUC := usecases.NewUpdateOwnEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, auditor)
-	updateEmployeeProfileUC := usecases.NewUpdateEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
+	updateOwnEmployeeProfileUC := usecases.NewUpdateOwnEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, generateDocumentUploadURLUC, auditor)
+	updateEmployeeProfileUC := usecases.NewUpdateEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
 	listEmployeePenaltiesUC := usecases.NewListEmployeePenaltiesUseCase(sqliteDB, employeeRepo, penaltyRepo, generateDocumentDownloadURLUC)
 	createEmployeePenaltyUC := usecases.NewCreateEmployeePenaltyUseCase(sqliteDB, employeeRepo, penaltyRepo, generateDocumentUploadURLUC)
 	createEmployeePenaltyRemovalUC := usecases.NewCreateEmployeePenaltyRemovalUseCase(sqliteDB, penaltyRepo, generateDocumentUploadURLUC)
@@ -430,7 +430,7 @@ func main() {
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
 		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
-		getEmployeeUC,listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,i18nService,
+		getEmployeeUC, listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC, i18nService,
 	)
 	permissionRequestHandler := httpAdapter.NewPermissionRequestHandler(
 		submitPermissionUC, updatePermissionUC, cancelPermissionUC,
@@ -487,7 +487,7 @@ func main() {
 			ExportEmployeeReportUC:   exportEmployeeAttendanceReportUC,
 		},
 	)
-    getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo, i18nService)
+	getAuditTrailUC := usecases.NewGetAuditTrailUseCase(sqliteDB, auditLogRepo, employeeRepo, i18nService)
 	getActorAuditEventsUC := usecases.NewGetActorAuditEventsUseCase(sqliteDB, auditLogRepo, i18nService)
 	listAllAuditLogsUC := usecases.NewListAllAuditLogsUseCase(auditLogRepo, sqliteDB, i18nService)
 	listEnrichedAuditLogsUC := usecases.NewListEnrichedAuditLogsUseCase(
@@ -502,31 +502,31 @@ func main() {
 	)
 
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
-		LeaveHandler:            leaveHandler,
-		EmployeeHandler:         employeeHandler,
-		AuthHandler:             authHandler,
-		UserHandler:             userHandler,
-		RoleHandler:             roleHandler,
-		DashboardHandler:        dashboardHandler,
-		ApprovalFlowHandler:     approvalFlowHandler,
-		LeaveRequestHandler:     leaveRequestHandler,
-		PermissionRequestHandler: permissionRequestHandler,
-		MeHandler:                meHandler,
-		DepartmentHandler:       departmentHandler,
-		DeviceTokenHandler:      deviceTokenHandler,
-		AttendanceDeviceHandler: attendanceDeviceHandler,
-		LeaveTypeHandler:        leaveTypeHandler,
-		WeekendHandler:          weekendHandler,
-		HolidayHandler:          holidayHandler,
-		ShiftHandler:            shiftHandler,
-		AttendanceHandler:       attendanceHandler,
-		AuditHandler:            auditHandler,
-		DebugHandler:            debugHandler,
-		JWTService:              jwtService,
-		AuthEnabled:             cfg.AuthEnabled,
-    EmployeeProfileChangeHandler: employeeProfileChangeHandler,
-		DocumentHandler:         documentHandler,
-		I18nService:             i18nService,
+		LeaveHandler:                 leaveHandler,
+		EmployeeHandler:              employeeHandler,
+		AuthHandler:                  authHandler,
+		UserHandler:                  userHandler,
+		RoleHandler:                  roleHandler,
+		DashboardHandler:             dashboardHandler,
+		ApprovalFlowHandler:          approvalFlowHandler,
+		LeaveRequestHandler:          leaveRequestHandler,
+		PermissionRequestHandler:     permissionRequestHandler,
+		MeHandler:                    meHandler,
+		DepartmentHandler:            departmentHandler,
+		DeviceTokenHandler:           deviceTokenHandler,
+		AttendanceDeviceHandler:      attendanceDeviceHandler,
+		LeaveTypeHandler:             leaveTypeHandler,
+		WeekendHandler:               weekendHandler,
+		HolidayHandler:               holidayHandler,
+		ShiftHandler:                 shiftHandler,
+		AttendanceHandler:            attendanceHandler,
+		AuditHandler:                 auditHandler,
+		DebugHandler:                 debugHandler,
+		JWTService:                   jwtService,
+		AuthEnabled:                  cfg.AuthEnabled,
+		EmployeeProfileChangeHandler: employeeProfileChangeHandler,
+		DocumentHandler:              documentHandler,
+		I18nService:                  i18nService,
 	})
 
 	var sched *scheduler.Scheduler

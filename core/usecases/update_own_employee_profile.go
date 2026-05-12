@@ -17,34 +17,40 @@ type UpdateOwnEmployeeProfileInput struct {
 	Mobile          string
 	TelephoneNumber *string
 	Email           *string
+	PersonalPhoto   *CreateEmployeeDocumentInput
 }
 
 type UpdateOwnEmployeeProfileOutput struct {
-	UID             string
-	Name            string
-	Mobile          string
-	TelephoneNumber *string
-	Email           *string
+	UID              string
+	Name             string
+	Mobile           string
+	TelephoneNumber  *string
+	Email            *string
+	PersonalPhotoURL *string
+	PersonalPhoto    *CreateEmployeeDocumentOutput
 }
 
 type UpdateOwnEmployeeProfileUseCase struct {
-	db           ports.DB
-	employeeRepo ports.EmployeeRepository
-	userRepo     ports.UserRepository
-	auditor      audit.Auditor
+	db                  ports.DB
+	employeeRepo        ports.EmployeeRepository
+	userRepo            ports.UserRepository
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase
+	auditor             audit.Auditor
 }
 
 func NewUpdateOwnEmployeeProfileUseCase(
 	db ports.DB,
 	employeeRepo ports.EmployeeRepository,
 	userRepo ports.UserRepository,
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
 	auditor audit.Auditor,
 ) *UpdateOwnEmployeeProfileUseCase {
 	return &UpdateOwnEmployeeProfileUseCase{
-		db:           db,
-		employeeRepo: employeeRepo,
-		userRepo:     userRepo,
-		auditor:      auditor,
+		db:                  db,
+		employeeRepo:        employeeRepo,
+		userRepo:            userRepo,
+		documentUploadURLUC: documentUploadURLUC,
+		auditor:             auditor,
 	}
 }
 
@@ -100,6 +106,7 @@ func (uc *UpdateOwnEmployeeProfileUseCase) Execute(ctx context.Context, input Up
 	oldMobile := employee.Mobile
 	oldTelephoneNumber := stringPtrValue(employee.TelephoneNumber)
 	oldEmail := stringPtrValue(employee.Email)
+	oldPersonalPhotoURL := stringPtrValue(employee.PersonalPhotoURL)
 
 	employee.Name = name
 	employee.Mobile = mobile
@@ -107,11 +114,31 @@ func (uc *UpdateOwnEmployeeProfileUseCase) Execute(ctx context.Context, input Up
 	employee.Email = trimStringPtr(input.Email)
 	user.Phone = mobile
 
+	var personalPhoto *CreateEmployeeDocumentOutput
+
 	tx, err := uc.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
+
+	if input.PersonalPhoto != nil {
+		if uc.documentUploadURLUC == nil {
+			return nil, errors.New("document upload use case is not configured")
+		}
+
+		documents, err := prepareEmployeeDocumentUploads(ctx, uc.documentUploadURLUC, user.UID, []CreateEmployeeDocumentInput{{
+			DocumentType: employeeDocumentTypePersonalPhoto,
+			FileName:     input.PersonalPhoto.FileName,
+			ContentType:  input.PersonalPhoto.ContentType,
+		}}, employee)
+		if err != nil {
+			return nil, err
+		}
+		if len(documents) > 0 {
+			personalPhoto = &documents[0]
+		}
+	}
 
 	if err := uc.employeeRepo.Update(ctx, tx, employee); err != nil {
 		return nil, err
@@ -134,15 +161,19 @@ func (uc *UpdateOwnEmployeeProfileUseCase) Execute(ctx context.Context, input Up
 		WithMeta("new_telephone_number", stringPtrValue(employee.TelephoneNumber)).
 		WithMeta("old_email", oldEmail).
 		WithMeta("new_email", stringPtrValue(employee.Email)).
+		WithMeta("old_personal_photo_url", oldPersonalPhotoURL).
+		WithMeta("new_personal_photo_url", stringPtrValue(employee.PersonalPhotoURL)).
 		WithMeta("synced_user_phone", true).
 		Save(ctx)
 
 	return &UpdateOwnEmployeeProfileOutput{
-		UID:             employee.UID,
-		Name:            employee.Name,
-		Mobile:          employee.Mobile,
-		TelephoneNumber: employee.TelephoneNumber,
-		Email:           employee.Email,
+		UID:              employee.UID,
+		Name:             employee.Name,
+		Mobile:           employee.Mobile,
+		TelephoneNumber:  employee.TelephoneNumber,
+		Email:            employee.Email,
+		PersonalPhotoURL: employee.PersonalPhotoURL,
+		PersonalPhoto:    personalPhoto,
 	}, nil
 }
 

@@ -1433,6 +1433,36 @@ func TestEmployeeHandler_CreateAnnualReport(t *testing.T) {
 	}
 }
 
+func TestEmployeeHandler_CreateAnnualReport_NotesOptional(t *testing.T) {
+	db := &mockDB{tx: &mockTx{}}
+	employeeRepo := &mockEmployeeRepo{employees: []*domain.Employee{{UID: "emp_1", Name: "Ahmed"}}}
+	reportRepo := &mockAnnualReportRepo{}
+	uploadUC := usecases.NewGenerateDocumentUploadURLUseCase(&mockObjectStorageService{}, "documents", 15)
+
+	handler := NewEmployeeHandler(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, usecases.NewCreateEmployeeAnnualReportUseCase(db, employeeRepo, reportRepo, uploadUC), nil)
+
+	body := bytes.NewBufferString(`{"reportYear":"2025","reportGrade":"A","reportImage":{"fileName":"report.pdf","contentType":"application/pdf"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/employees/emp_1/annual-reports", body)
+	req.SetPathValue("employeeUid", "emp_1")
+	req = req.WithContext(context.WithValue(req.Context(), ClaimsContextKey, &JWTClaims{UserUID: "user_1"}))
+	rr := httptest.NewRecorder()
+
+	handler.CreateAnnualReport(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, rr.Code, rr.Body.String())
+	}
+
+	items := reportRepo.reports["emp_1"]
+	if len(items) != 1 {
+		t.Fatalf("expected 1 stored report, got %d", len(items))
+	}
+	if items[0].Notes != "" {
+		t.Fatalf("notes = %q, want empty string", items[0].Notes)
+	}
+}
+
 func TestEmployeeHandler_UpdateAnnualReports(t *testing.T) {
 	db := &mockDB{tx: &mockTx{}}
 	employeeRepo := &mockEmployeeRepo{employees: []*domain.Employee{{UID: "emp_1", Name: "Ahmed"}}}
@@ -1464,6 +1494,7 @@ func TestEmployeeHandler_UpdateAnnualReports(t *testing.T) {
 
 func TestEmployeeHandler_UpdateOwnProfile(t *testing.T) {
 	db := &mockDB{tx: &mockTx{}}
+	uploadUC := usecases.NewGenerateDocumentUploadURLUseCase(&mockObjectStorageService{}, "documents", 15)
 	employeeUID := "emp_1"
 	oldEmail := "old@example.com"
 	oldTelephone := "12345"
@@ -1491,7 +1522,7 @@ func TestEmployeeHandler_UpdateOwnProfile(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		usecases.NewUpdateOwnEmployeeProfileUseCase(db, employeeRepo, userRepo, audit.Noop()),
+		usecases.NewUpdateOwnEmployeeProfileUseCase(db, employeeRepo, userRepo, uploadUC, audit.Noop()),
 		nil,
 		nil,
 		nil,
@@ -1510,7 +1541,7 @@ func TestEmployeeHandler_UpdateOwnProfile(t *testing.T) {
 		nil,
 	)
 
-	body := bytes.NewBufferString(`{"name":"New Name","mobile":"01099999999","telephoneNumber":"67890","email":"new@example.com"}`)
+	body := bytes.NewBufferString(`{"name":"New Name","mobile":"01099999999","telephoneNumber":"67890","email":"new@example.com","personalPhoto":{"fileName":"profile.jpg","contentType":"image/jpeg"}}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/v1/employees/me/profile", body)
 	req = req.WithContext(context.WithValue(req.Context(), ClaimsContextKey, &JWTClaims{
 		UserID:      7,
@@ -1541,8 +1572,17 @@ func TestEmployeeHandler_UpdateOwnProfile(t *testing.T) {
 	if response.Email == nil || *response.Email != "new@example.com" {
 		t.Fatalf("email = %v, want new@example.com", response.Email)
 	}
+	if response.PersonalPhoto == nil || response.PersonalPhoto.DocumentType != "personal_photo" || response.PersonalPhoto.StoredURL == "" {
+		t.Fatalf("personalPhoto = %+v, want upload instructions", response.PersonalPhoto)
+	}
+	if response.PersonalPhotoURL == nil || *response.PersonalPhotoURL != response.PersonalPhoto.StoredURL {
+		t.Fatalf("personalPhotoUrl = %v, want %q", response.PersonalPhotoURL, response.PersonalPhoto.StoredURL)
+	}
 	if len(employeeRepo.updatedEmployees) != 1 || employeeRepo.updatedEmployees[0].Mobile != "01099999999" {
 		t.Fatalf("employee update not recorded correctly: %+v", employeeRepo.updatedEmployees)
+	}
+	if employeeRepo.updatedEmployees[0].PersonalPhotoURL == nil || *employeeRepo.updatedEmployees[0].PersonalPhotoURL != response.PersonalPhoto.StoredURL {
+		t.Fatalf("employee personal photo not recorded correctly: %+v", employeeRepo.updatedEmployees[0].PersonalPhotoURL)
 	}
 	if len(userRepo.updatedUsers) != 1 || userRepo.updatedUsers[0].Phone != "01099999999" {
 		t.Fatalf("user update not recorded correctly: %+v", userRepo.updatedUsers)

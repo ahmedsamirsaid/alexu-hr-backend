@@ -23,6 +23,11 @@ type EmployeeProfileChangeHandler struct {
 	getCurrentUserUC *usecases.GetCurrentUserUseCase
 }
 
+type UpdateEmployeeProfileResponse struct {
+	UID       string                           `json:"uid"`
+	Documents []CreateEmployeeDocumentResponse `json:"documents,omitempty"`
+}
+
 func NewEmployeeProfileChangeHandler(
 	submitUC *usecases.SubmitEmployeeProfileChangeRequestUseCase,
 	listByEmpUC *usecases.ListEmployeeProfileChangeRequestsUseCase,
@@ -371,16 +376,25 @@ func (h *EmployeeProfileChangeHandler) UpdateEmployee(w http.ResponseWriter, r *
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	changes, err := parseEmployeeProfilePatchPayload(payload)
+	changes, documentItems, err := parseEmployeeProfilePatchPayload(payload)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	documents := make([]usecases.CreateEmployeeDocumentInput, 0, len(documentItems))
+	for _, document := range documentItems {
+		documents = append(documents, usecases.CreateEmployeeDocumentInput{
+			DocumentType: document.DocumentType,
+			FileName:     document.FileName,
+			ContentType:  document.ContentType,
+		})
 	}
 	output, err := h.updateEmpUC.Execute(r.Context(), usecases.UpdateEmployeeProfileInput{
 		EmployeeUID:      employeeUID,
 		ActorUserID:      claims.UserID,
 		ActorEmployeeUID: *currentUser.EmployeeUID,
 		Changes:          changes,
+		Documents:        documents,
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
@@ -402,7 +416,10 @@ func (h *EmployeeProfileChangeHandler) UpdateEmployee(w http.ResponseWriter, r *
 		writeError(w, status, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"uid": output.Employee.UID})
+	writeJSON(w, http.StatusOK, UpdateEmployeeProfileResponse{
+		UID:       output.Employee.UID,
+		Documents: toCreateEmployeeDocumentResponses(output.Documents),
+	})
 }
 
 func toEmployeeProfileChangeRequestResponse(item *usecases.EmployeeProfileChangeRequestDetails) EmployeeProfileChangeRequestResponse {
@@ -484,14 +501,20 @@ func parseSubmitEmployeeProfileChangeRequest(employeeUID string, actorUserID int
 	return input, nil
 }
 
-func parseEmployeeProfilePatchPayload(payload map[string]json.RawMessage) (map[string]any, error) {
+func parseEmployeeProfilePatchPayload(payload map[string]json.RawMessage) (map[string]any, []CreateEmployeeDocumentItem, error) {
 	changes := make(map[string]any, len(payload))
+	var documents []CreateEmployeeDocumentItem
 	for key, raw := range payload {
 		var (
 			value any
 			err   error
 		)
 		switch key {
+		case "documents":
+			if err := json.Unmarshal(raw, &documents); err != nil {
+				return nil, nil, errors.New("invalid documents value")
+			}
+			continue
 		case "name", "mobile", "governmentId", "universityId", "status", "type", "subType":
 			value, err = decodeRequiredString(raw)
 		case "email", "telephoneNumber", "gender", "religion", "maritalStatus", "address", "placeOfBirth", "placeOfResidence", "policeStation",
@@ -512,14 +535,14 @@ func parseEmployeeProfilePatchPayload(payload map[string]json.RawMessage) (map[s
 		case "decisionNumber":
 			value, err = decodeOptionalInt64Value(raw)
 		default:
-			return nil, errors.New("unsupported field " + key)
+			return nil, nil, errors.New("unsupported field " + key)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		changes[key] = value
 	}
-	return changes, nil
+	return changes, documents, nil
 }
 
 func decodeRequiredString(raw json.RawMessage) (string, error) {

@@ -445,18 +445,21 @@ type GetEmployeeResponse struct {
 }
 
 type UpdateOwnEmployeeProfileRequest struct {
-	Name            string  `json:"name"`
-	Mobile          string  `json:"mobile"`
-	TelephoneNumber *string `json:"telephoneNumber,omitempty"`
-	Email           *string `json:"email,omitempty"`
+	Name            string                           `json:"name"`
+	Mobile          string                           `json:"mobile"`
+	TelephoneNumber *string                          `json:"telephoneNumber,omitempty"`
+	Email           *string                          `json:"email,omitempty"`
+	PersonalPhoto   *EmployeePenaltyDecisionFileItem `json:"personalPhoto,omitempty"`
 }
 
 type UpdateOwnEmployeeProfileResponse struct {
-	UID             string  `json:"uid"`
-	Name            string  `json:"name"`
-	Mobile          string  `json:"mobile"`
-	TelephoneNumber *string `json:"telephoneNumber,omitempty"`
-	Email           *string `json:"email,omitempty"`
+	UID              string                          `json:"uid"`
+	Name             string                          `json:"name"`
+	Mobile           string                          `json:"mobile"`
+	TelephoneNumber  *string                         `json:"telephoneNumber,omitempty"`
+	Email            *string                         `json:"email,omitempty"`
+	PersonalPhotoURL *string                         `json:"personalPhotoUrl,omitempty"`
+	PersonalPhoto    *CreateEmployeeDocumentResponse `json:"personalPhoto,omitempty"`
 }
 
 // EmployeeListResponse represents the list employees API response.
@@ -982,6 +985,16 @@ func (h *EmployeeHandler) UpdateOwnProfile(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if req.PersonalPhoto != nil {
+		if strings.TrimSpace(req.PersonalPhoto.FileName) == "" {
+			writeError(w, http.StatusBadRequest, "personalPhoto.fileName is required")
+			return
+		}
+		if strings.TrimSpace(req.PersonalPhoto.ContentType) == "" {
+			writeError(w, http.StatusBadRequest, "personalPhoto.contentType is required")
+			return
+		}
+	}
 
 	output, err := h.updateOwnProfileUC.Execute(r.Context(), usecases.UpdateOwnEmployeeProfileInput{
 		UserID:          claims.UserID,
@@ -989,6 +1002,7 @@ func (h *EmployeeHandler) UpdateOwnProfile(w http.ResponseWriter, r *http.Reques
 		Mobile:          req.Mobile,
 		TelephoneNumber: req.TelephoneNumber,
 		Email:           req.Email,
+		PersonalPhoto:   toUpdateOwnPersonalPhotoInput(req.PersonalPhoto),
 	})
 	if err != nil {
 		switch {
@@ -1010,11 +1024,13 @@ func (h *EmployeeHandler) UpdateOwnProfile(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, UpdateOwnEmployeeProfileResponse{
-		UID:             output.UID,
-		Name:            output.Name,
-		Mobile:          output.Mobile,
-		TelephoneNumber: output.TelephoneNumber,
-		Email:           output.Email,
+		UID:              output.UID,
+		Name:             output.Name,
+		Mobile:           output.Mobile,
+		TelephoneNumber:  output.TelephoneNumber,
+		Email:            output.Email,
+		PersonalPhotoURL: output.PersonalPhotoURL,
+		PersonalPhoto:    toCreateEmployeeDocumentResponse(output.PersonalPhoto),
 	})
 }
 
@@ -1807,9 +1823,6 @@ func parseEmployeeAnnualReportRequest(req EmployeeAnnualReportRequest) (usecases
 	if strings.TrimSpace(req.ReportGrade) == "" {
 		return usecases.EmployeeAnnualReportInput{}, errors.New("reportGrade is required")
 	}
-	if strings.TrimSpace(req.Notes) == "" {
-		return usecases.EmployeeAnnualReportInput{}, errors.New("notes is required")
-	}
 	hasFileUpload := req.ReportImage != nil
 	hasStoredURL := strings.TrimSpace(req.ReportImageURL) != ""
 	if !hasFileUpload && !hasStoredURL {
@@ -1932,6 +1945,34 @@ func toCreateEmployeeDocumentResponses(documents []usecases.CreateEmployeeDocume
 	}
 
 	return response
+}
+
+func toCreateEmployeeDocumentResponse(document *usecases.CreateEmployeeDocumentOutput) *CreateEmployeeDocumentResponse {
+	if document == nil {
+		return nil
+	}
+
+	return &CreateEmployeeDocumentResponse{
+		DocumentType: document.DocumentType,
+		FileName:     document.FileName,
+		URL:          document.URL,
+		Method:       document.Method,
+		Bucket:       document.Bucket,
+		ObjectKey:    document.ObjectKey,
+		StoredURL:    document.StoredURL,
+	}
+}
+
+func toUpdateOwnPersonalPhotoInput(file *EmployeePenaltyDecisionFileItem) *usecases.CreateEmployeeDocumentInput {
+	if file == nil {
+		return nil
+	}
+
+	return &usecases.CreateEmployeeDocumentInput{
+		DocumentType: "personal_photo",
+		FileName:     file.FileName,
+		ContentType:  file.ContentType,
+	}
 }
 
 func toEmployeeDocumentDownloadResponses(documents []usecases.EmployeeDocumentOutput) []EmployeeDocumentDownloadResponse {

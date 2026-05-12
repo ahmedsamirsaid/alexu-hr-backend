@@ -16,18 +16,21 @@ type UpdateEmployeeProfileInput struct {
 	ActorUserID      int64
 	ActorEmployeeUID string
 	Changes          map[string]any
+	Documents        []CreateEmployeeDocumentInput
 }
 
 type UpdateEmployeeProfileOutput struct {
-	Employee *domain.Employee
+	Employee  *domain.Employee
+	Documents []CreateEmployeeDocumentOutput
 }
 
 type UpdateEmployeeProfileUseCase struct {
-	db           ports.DB
-	employeeRepo ports.EmployeeRepository
-	userRepo     ports.UserRepository
-	roleRepo     ports.RoleRepository
-	auditor      audit.Auditor
+	db                  ports.DB
+	employeeRepo        ports.EmployeeRepository
+	userRepo            ports.UserRepository
+	roleRepo            ports.RoleRepository
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase
+	auditor             audit.Auditor
 }
 
 func NewUpdateEmployeeProfileUseCase(
@@ -35,19 +38,21 @@ func NewUpdateEmployeeProfileUseCase(
 	employeeRepo ports.EmployeeRepository,
 	userRepo ports.UserRepository,
 	roleRepo ports.RoleRepository,
+	documentUploadURLUC *GenerateDocumentUploadURLUseCase,
 	auditor audit.Auditor,
 ) *UpdateEmployeeProfileUseCase {
 	return &UpdateEmployeeProfileUseCase{
-		db:           db,
-		employeeRepo: employeeRepo,
-		userRepo:     userRepo,
-		roleRepo:     roleRepo,
-		auditor:      auditor,
+		db:                  db,
+		employeeRepo:        employeeRepo,
+		userRepo:            userRepo,
+		roleRepo:            roleRepo,
+		documentUploadURLUC: documentUploadURLUC,
+		auditor:             auditor,
 	}
 }
 
 func (uc *UpdateEmployeeProfileUseCase) Execute(ctx context.Context, input UpdateEmployeeProfileInput) (*UpdateEmployeeProfileOutput, error) {
-	if len(input.Changes) == 0 {
+	if len(input.Changes) == 0 && len(input.Documents) == 0 {
 		return nil, ErrNoProfileChangesRequested
 	}
 
@@ -75,6 +80,7 @@ func (uc *UpdateEmployeeProfileUseCase) Execute(ctx context.Context, input Updat
 
 	oldValues := make(map[string]any)
 	newValues := make(map[string]any)
+	var documents []CreateEmployeeDocumentOutput
 
 	for field, value := range input.Changes {
 		changed, err := applyEmployeeProfileChangeField(employee, field, value, oldValues, newValues)
@@ -87,7 +93,19 @@ func (uc *UpdateEmployeeProfileUseCase) Execute(ctx context.Context, input Updat
 		}
 	}
 
-	if len(newValues) == 0 {
+	if len(input.Documents) > 0 {
+		if uc.documentUploadURLUC == nil {
+			return nil, fmt.Errorf("document upload use case is not configured")
+		}
+		documentOldValues := captureEmployeeDocumentOldValues(employee, input.Documents)
+		documents, err = prepareEmployeeDocumentUploads(ctx, uc.documentUploadURLUC, employee.UID, input.Documents, employee)
+		if err != nil {
+			return nil, err
+		}
+		applyEmployeeDocumentAuditChanges(employee, documents, documentOldValues, oldValues, newValues)
+	}
+
+	if len(newValues) == 0 && len(documents) == 0 {
 		return nil, ErrNoProfileChangesRequested
 	}
 
@@ -128,7 +146,10 @@ func (uc *UpdateEmployeeProfileUseCase) Execute(ctx context.Context, input Updat
 		WithMeta("new_values", newValues).
 		Save(ctx)
 
-	return &UpdateEmployeeProfileOutput{Employee: employee}, nil
+	return &UpdateEmployeeProfileOutput{
+		Employee:  employee,
+		Documents: documents,
+	}, nil
 }
 
 func applyEmployeeProfileChangeField(employee *domain.Employee, field string, value any, oldValues, newValues map[string]any) (bool, error) {
@@ -416,6 +437,36 @@ func validateUpdatedEmployeeUniqueness(ctx context.Context, q ports.Querier, emp
 		}
 	}
 	return nil
+}
+
+func captureEmployeeDocumentOldValues(employee *domain.Employee, documents []CreateEmployeeDocumentInput) map[string]any {
+	oldValues := make(map[string]any, len(documents))
+	for _, document := range documents {
+		fieldName := employeeDocumentFieldName(document.DocumentType)
+		if fieldName == "" {
+			continue
+		}
+		oldValues[fieldName] = stringPtrToAny(employeeDocumentFieldValue(employee, document.DocumentType))
+	}
+	return oldValues
+}
+
+func applyEmployeeDocumentAuditChanges(employee *domain.Employee, documents []CreateEmployeeDocumentOutput, documentOldValues, oldValues, newValues map[string]any) {
+	for _, document := range documents {
+		fieldName := employeeDocumentFieldName(document.DocumentType)
+		if fieldName == "" {
+			continue
+		}
+		oldValues[fieldName] = documentOldValues[fieldName]
+		newValues[fieldName] = stringPtrToAny(employeeDocumentFieldValue(employee, document.DocumentType))
+	}
+}
+
+func stringPtrToAny(value *string) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }
 
 func setStringPtrField(field string, target **string, value any, oldValues, newValues map[string]any) (bool, error) {

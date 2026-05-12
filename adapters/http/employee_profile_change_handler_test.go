@@ -68,7 +68,7 @@ func TestEmployeeProfileChangeHandler_SubmitApproveAndReject(t *testing.T) {
 	approveUC := usecases.NewApproveEmployeeProfileChangeRequestUseCase(db, employeeRepo, changeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, audit.Noop())
 	rejectUC := usecases.NewRejectEmployeeProfileChangeRequestUseCase(db, changeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, audit.Noop())
 	historyUC := usecases.NewGetApprovalHistoryUseCase(db, approvalRequestRepo, approvalActionRepo, employeeRepo)
-	updateUC := usecases.NewUpdateEmployeeProfileUseCase(db, employeeRepo, userRepo, roleRepo, audit.Noop())
+	updateUC := usecases.NewUpdateEmployeeProfileUseCase(db, employeeRepo, userRepo, roleRepo, nil, audit.Noop())
 
 	handler := NewEmployeeProfileChangeHandler(
 		submitUC,
@@ -203,7 +203,7 @@ func TestEmployeeProfileChangeHandler_DirectUpdate(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		usecases.NewUpdateEmployeeProfileUseCase(db, employeeRepo, userRepo, roleRepo, audit.Noop()),
+		usecases.NewUpdateEmployeeProfileUseCase(db, employeeRepo, userRepo, roleRepo, nil, audit.Noop()),
 		usecases.NewGetCurrentUserUseCase(db, userRepo, roleRepo, permissionRepo, employeeRepo),
 	)
 
@@ -226,6 +226,82 @@ func TestEmployeeProfileChangeHandler_DirectUpdate(t *testing.T) {
 	}
 	if target.MaritalStatus == nil || *target.MaritalStatus != "Divorced" {
 		t.Fatalf("marital status = %v, want Divorced", target.MaritalStatus)
+	}
+}
+
+func TestEmployeeProfileChangeHandler_DirectUpdate_WithDocuments(t *testing.T) {
+	db := &profileChangeMockDB{}
+	employeeRepo := &profileChangeMockEmployeeRepo{
+		employeesByUID: map[string]*domain.Employee{
+			"emp_target": {UID: "emp_target", Name: "Target"},
+			"emp_ic":     {UID: "emp_ic", Name: "IC User"},
+		},
+	}
+	userRepo := &profileChangeMockUserRepo{
+		usersByID:          map[int64]*domain.User{},
+		usersByEmployeeUID: map[string]*domain.User{},
+	}
+	roleRepo := newProfileChangeMockRoleRepo()
+	permissionRepo := &profileChangeMockPermissionRepo{}
+	icUser := &domain.User{ID: 2, UID: "usr_ic", Phone: "0102", EmployeeUID: ptrString("emp_ic"), IsActive: true}
+	userRepo.usersByID[2] = icUser
+	userRepo.usersByEmployeeUID["emp_ic"] = icUser
+	roleRepo.assignRole(2, &domain.Role{UID: "role_information_center", Name: "Information Center"})
+
+	uploadUC := usecases.NewGenerateDocumentUploadURLUseCase(&mockObjectStorageService{}, "documents", 15)
+	handler := NewEmployeeProfileChangeHandler(
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		usecases.NewUpdateEmployeeProfileUseCase(db, employeeRepo, userRepo, roleRepo, uploadUC, audit.Noop()),
+		usecases.NewGetCurrentUserUseCase(db, userRepo, roleRepo, permissionRepo, employeeRepo),
+	)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/employees/emp_target", bytes.NewBufferString(`{
+		"documents": [
+			{
+				"documentType": "personal_photo",
+				"fileName": "photo.png",
+				"contentType": "image/png"
+			},
+			{
+				"documentType": "decision_file",
+				"fileName": "decision.pdf",
+				"contentType": "application/pdf"
+			}
+		]
+	}`))
+	req.SetPathValue("uid", "emp_target")
+	req = req.WithContext(context.WithValue(req.Context(), ClaimsContextKey, &JWTClaims{
+		UserID:      2,
+		UserUID:     icUser.UID,
+		EmployeeUID: ptrString("emp_ic"),
+	}))
+	rr := httptest.NewRecorder()
+	handler.UpdateEmployee(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+
+	var response UpdateEmployeeProfileResponse
+	if err := json.NewDecoder(rr.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Documents) != 2 {
+		t.Fatalf("documents len = %d, want 2", len(response.Documents))
+	}
+
+	target := employeeRepo.employeesByUID["emp_target"]
+	if target.PersonalPhotoURL == nil || *target.PersonalPhotoURL == "" {
+		t.Fatalf("personal photo url not updated: %+v", target.PersonalPhotoURL)
+	}
+	if target.DecisionFileURL == nil || *target.DecisionFileURL == "" {
+		t.Fatalf("decision file url not updated: %+v", target.DecisionFileURL)
 	}
 }
 

@@ -78,6 +78,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("GET /api/v1/employees/import/template", RequirePermission("employees:import")(http.HandlerFunc(cfg.EmployeeHandler.DownloadImportTemplate)))
 	protectedMux.Handle("PUT /api/v1/employees/{uid}/department", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.AssignDepartment)))
 	protectedMux.Handle("DELETE /api/v1/employees/{uid}/department", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.RemoveDepartment)))
+	protectedMux.Handle("PUT /api/v1/employees/{uid}/manager", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.SetManager)))
+	protectedMux.Handle("GET /api/v1/employees/manager-candidates", RequirePermission("employees:write")(http.HandlerFunc(cfg.EmployeeHandler.ListManagerCandidates)))
 
 	protectedMux.Handle("GET /api/v1/users", RequirePermission("users:read")(http.HandlerFunc(cfg.UserHandler.ListUsers)))
 	protectedMux.Handle("POST /api/v1/users", RequirePermission("users:write")(http.HandlerFunc(cfg.UserHandler.CreateUser)))
@@ -106,11 +108,13 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("PATCH /api/v1/admin/shifts/{uid}", RequirePermission("shift:write")(http.HandlerFunc(cfg.ShiftHandler.Update)))
 
 	protectedMux.Handle("GET /api/v1/admin/departments", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.ListDepartments)))
+	protectedMux.Handle("GET /api/v1/admin/departments/org-chart", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.GetOrgChart)))
 	protectedMux.Handle("GET /api/v1/admin/departments/{uid}", RequirePermission("departments:read")(http.HandlerFunc(cfg.DepartmentHandler.GetDepartment)))
 	protectedMux.Handle("POST /api/v1/admin/departments", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.CreateDepartment)))
 	protectedMux.Handle("PATCH /api/v1/admin/departments/{uid}", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.UpdateDepartment)))
 	protectedMux.Handle("POST /api/v1/admin/departments/{uid}/manager", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.AssignManager)))
 	protectedMux.Handle("DELETE /api/v1/admin/departments/{uid}/manager", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.RemoveManager)))
+
 
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.UpdateLeaveType)))

@@ -57,6 +57,10 @@ type RoleRepository interface {
 
 	// GetManagedDepartmentUIDs returns department UIDs from any department-scoped role assignments
 	GetManagedDepartmentUIDs(ctx context.Context, q Querier, userID int64) ([]string, error)
+
+	// GetRoleNamesByEmployeeUIDs returns a map of employee_uid → primary role name for a batch
+	// of employees. The "primary" role is the highest-priority non-employee role found.
+	GetRoleNamesByEmployeeUIDs(ctx context.Context, q Querier, employeeUIDs []string) (map[string]string, error)
 }
 
 type PermissionRepository interface {

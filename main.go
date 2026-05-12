@@ -153,6 +153,8 @@ func main() {
 
 	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(sqliteDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
 
+	setEmployeeManagerUC := usecases.NewSetEmployeeManagerUseCase(sqliteDB, employeeRepo, roleRepo, auditor)
+	listManagerCandidatesUC := usecases.NewListManagerCandidatesUseCase(sqliteDB, employeeRepo, roleRepo)
 	listEmployeesUC := usecases.NewListEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo)
 	importEmployeesUC := usecases.NewImportEmployeesUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, auditor)
 	exportEmployeesUC := usecases.NewExportEmployeesUseCase(sqliteDB, employeeRepo)
@@ -210,6 +212,7 @@ func main() {
 	updateDepartmentUC := usecases.NewUpdateDepartmentUseCase(sqliteDB, departmentRepo, auditor)
 	assignDepartmentManagerUC := usecases.NewAssignDepartmentManagerUseCase(sqliteDB, departmentRepo, userRepo, roleRepo, employeeRepo, auditor)
 	removeDepartmentManagerUC := usecases.NewRemoveDepartmentManagerUseCase(sqliteDB, departmentRepo, roleRepo, userRepo, employeeRepo, auditor)
+	orgChartUC := usecases.NewOrgChartUseCase(sqliteDB, employeeRepo, departmentRepo, roleRepo)
 
 	getLeaveTypeDetailsUC := usecases.NewGetLeaveTypeDetailsUseCase(sqliteDB, leaveTypeRepo, approvalFlowRepo, approvalFlowStepRepo, roleRepo)
 	listLeaveTypesUC := usecases.NewListLeaveTypesUseCase(sqliteDB, leaveTypeRepo)
@@ -230,7 +233,7 @@ func main() {
 		cfg.MinIODocumentsBucket,
 		cfg.MinIODownloadExpiryMinutes,
 	)
-	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo, generateDocumentDownloadURLUC)
+	getEmployeeUC := usecases.NewGetEmployeeUseCase(sqliteDB, employeeRepo, generateDocumentDownloadURLUC, roleRepo)
 	createEmployeeUC := usecases.NewCreateEmployeeUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
 	updateOwnEmployeeProfileUC := usecases.NewUpdateOwnEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, generateDocumentUploadURLUC, auditor)
 	updateEmployeeProfileUC := usecases.NewUpdateEmployeeProfileUseCase(sqliteDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
@@ -395,7 +398,6 @@ func main() {
 		holidayDefinitionRepo,
 		cfg.HolidaySyncTimezone,
 	)
-
 	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC, i18nService)
 	employeeHandler := httpAdapter.NewEmployeeHandler(
 		createEmployeeUC,
@@ -418,6 +420,8 @@ func main() {
 		listEmployeeAnnualReportsUC,
 		createEmployeeAnnualReportUC,
 		updateEmployeeAnnualReportsUC,
+		setEmployeeManagerUC,
+		listManagerCandidatesUC,
 	)
 	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, i18nService)
 	meHandler := httpAdapter.NewMeHandler(updateUserUC)
@@ -451,7 +455,7 @@ func main() {
 	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
 		listDepartmentsUC, getDepartmentUC, createDepartmentUC, updateDepartmentUC,
-		assignDepartmentManagerUC, removeDepartmentManagerUC, i18nService,
+		assignDepartmentManagerUC, removeDepartmentManagerUC, i18nService, orgChartUC,
 	)
 	deviceTokenHandler := httpAdapter.NewDeviceTokenHandler(registerDeviceTokenUC, unregisterDeviceTokenUC)
 	attendanceDeviceHandler := httpAdapter.NewAttendanceDeviceHandler(

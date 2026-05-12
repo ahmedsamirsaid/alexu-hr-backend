@@ -28,7 +28,7 @@ const employeeSelectColumns = `
 	job_title_before_placement, financial_grade, previous_financial_grade, job_level,
 	decision_date, decision_number, grade_grant_date, nature_of_appointment, notes, reappointment, decision_file_url,
 	appointment_seniority_or_grade_withdrawal,
-	department_uid, shift_uid, created_at, updated_at`
+	department_uid, shift_uid, manager_uid, created_at, updated_at`
 
 func NewEmployeeRepository() *EmployeeRepository {
 	return &EmployeeRepository{}
@@ -52,11 +52,7 @@ func (r *EmployeeRepository) GetByUIDs(ctx context.Context, q ports.Querier, uid
 	}
 
 	// Build IN clause with placeholders
-	query := `
-		SELECT id, uid, name, mobile, government_id, university_id, email,
-		       hire_date, status, type, sub_type, department_uid, shift_uid, created_at, updated_at
-		FROM employees
-		WHERE uid IN (`
+	query := `SELECT ` + employeeSelectColumns + ` FROM employees WHERE uid IN (`
 
 	args := make([]any, len(uids))
 	for i, uid := range uids {
@@ -109,7 +105,7 @@ func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employ
 			job_title_before_placement, financial_grade, previous_financial_grade, job_level,
 			decision_date, decision_number, grade_grant_date, nature_of_appointment, notes, reappointment, decision_file_url,
 			appointment_seniority_or_grade_withdrawal,
-			department_uid, shift_uid, created_at, updated_at
+			department_uid, shift_uid, manager_uid, created_at, updated_at
 		)
 		VALUES (
 			?, ?, ?, ?, ?, ?,
@@ -150,7 +146,7 @@ func (r *EmployeeRepository) Create(ctx context.Context, q ports.Querier, employ
 		employee.JobTitleBeforePlacement, employee.FinancialGrade, employee.PreviousFinancialGrade, employee.JobLevel,
 		nullableDate(employee.DecisionDate), employee.DecisionNumber, nullableDate(employee.GradeGrantDate), employee.NatureOfAppointment, employee.Notes, employee.Reappointment, employee.DecisionFileURL,
 		employee.AppointmentSeniorityOrGradeWithdrawal,
-		employee.DepartmentUID, employee.ShiftUID, employee.CreatedAt, employee.UpdatedAt)
+		employee.DepartmentUID, employee.ShiftUID, employee.ManagerUID, employee.CreatedAt, employee.UpdatedAt)
 	if err != nil {
 		slog.Error("employee_repository.Create.exec_query", "error", err, "uid", employee.UID)
 		return err
@@ -181,7 +177,7 @@ func (r *EmployeeRepository) Update(ctx context.Context, q ports.Querier, employ
 		    member_number = ?, insurance_code = ?, job_group = ?, qualitative_group = ?, job_title_at_level = ?,
 		    job_title_before_placement = ?, financial_grade = ?, previous_financial_grade = ?, job_level = ?,
 		    decision_date = ?, decision_number = ?, grade_grant_date = ?, nature_of_appointment = ?, notes = ?, reappointment = ?, decision_file_url = ?,
-		    appointment_seniority_or_grade_withdrawal = ?, department_uid = ?, shift_uid = ?, updated_at = ?
+		    appointment_seniority_or_grade_withdrawal = ?, department_uid = ?, shift_uid = ?, manager_uid = ?, updated_at = ?
 		WHERE id = ?`
 
 	employee.ApplyClassificationDefaults()
@@ -201,7 +197,7 @@ func (r *EmployeeRepository) Update(ctx context.Context, q ports.Querier, employ
 		employee.MemberNumber, employee.InsuranceCode, employee.JobGroup, employee.QualitativeGroup, employee.JobTitleAtLevel,
 		employee.JobTitleBeforePlacement, employee.FinancialGrade, employee.PreviousFinancialGrade, employee.JobLevel,
 		nullableDate(employee.DecisionDate), employee.DecisionNumber, nullableDate(employee.GradeGrantDate), employee.NatureOfAppointment, employee.Notes, employee.Reappointment, employee.DecisionFileURL,
-		employee.AppointmentSeniorityOrGradeWithdrawal, employee.DepartmentUID, employee.ShiftUID, employee.UpdatedAt, employee.ID)
+		employee.AppointmentSeniorityOrGradeWithdrawal, employee.DepartmentUID, employee.ShiftUID, employee.ManagerUID, employee.UpdatedAt, employee.ID)
 	if err != nil {
 		slog.Error("employee_repository.Update.exec_query", "error", err, "uid", employee.UID)
 	}
@@ -344,7 +340,7 @@ func (r *EmployeeRepository) scanEmployee(row *sql.Row) (*domain.Employee, error
 		&jobTitleBeforePlacement, &financialGrade, &previousFinancialGrade, &jobLevel,
 		&decisionDate, &decisionNumber, &gradeGrantDate, &natureOfAppointment, &notes, &e.Reappointment, &decisionFileURL,
 		&e.AppointmentSeniorityOrGradeWithdrawal,
-		&e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
+		&e.DepartmentUID, &e.ShiftUID, &e.ManagerUID, &createdAt, &updatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -435,7 +431,7 @@ func (r *EmployeeRepository) scanEmployeeRow(rows *sql.Rows) (*domain.Employee, 
 		&jobTitleBeforePlacement, &financialGrade, &previousFinancialGrade, &jobLevel,
 		&decisionDate, &decisionNumber, &gradeGrantDate, &natureOfAppointment, &notes, &e.Reappointment, &decisionFileURL,
 		&e.AppointmentSeniorityOrGradeWithdrawal,
-		&e.DepartmentUID, &e.ShiftUID, &createdAt, &updatedAt)
+		&e.DepartmentUID, &e.ShiftUID, &e.ManagerUID, &createdAt, &updatedAt)
 	if err != nil {
 		return nil, err
 	}

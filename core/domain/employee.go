@@ -90,6 +90,7 @@ type Employee struct {
 	AppointmentSeniorityOrGradeWithdrawal bool
 	DepartmentUID                         *string
 	ShiftUID                              *string
+	ManagerUID                            *string
 	CreatedAt                             time.Time
 	UpdatedAt                             time.Time
 }

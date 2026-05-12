@@ -37,6 +37,8 @@ type EmployeeHandler struct {
 	listAnnualReportsUC      *usecases.ListEmployeeAnnualReportsUseCase
 	createAnnualReportUC     *usecases.CreateEmployeeAnnualReportUseCase
 	updateAnnualReportsUC    *usecases.UpdateEmployeeAnnualReportsUseCase
+	setManagerUC             *usecases.SetEmployeeManagerUseCase
+	listManagerCandUC        *usecases.ListManagerCandidatesUseCase
 }
 
 // NewEmployeeHandler creates a new employee handler.
@@ -61,6 +63,8 @@ func NewEmployeeHandler(
 	listAnnualReportsUC *usecases.ListEmployeeAnnualReportsUseCase,
 	createAnnualReportUC *usecases.CreateEmployeeAnnualReportUseCase,
 	updateAnnualReportsUC *usecases.UpdateEmployeeAnnualReportsUseCase,
+	setManagerUC *usecases.SetEmployeeManagerUseCase,
+	listManagerCandUC *usecases.ListManagerCandidatesUseCase,
 ) *EmployeeHandler {
 	return &EmployeeHandler{
 		createUC:                 createUC,
@@ -83,6 +87,8 @@ func NewEmployeeHandler(
 		listAnnualReportsUC:      listAnnualReportsUC,
 		createAnnualReportUC:     createAnnualReportUC,
 		updateAnnualReportsUC:    updateAnnualReportsUC,
+		setManagerUC:             setManagerUC,
+		listManagerCandUC:        listManagerCandUC,
 	}
 }
 
@@ -442,6 +448,9 @@ type GetEmployeeResponse struct {
 	AppointmentSeniorityOrGradeWithdrawal bool                               `json:"appointmentSeniorityOrGradeWithdrawal"`
 	DepartmentUID                         *string                            `json:"departmentUid,omitempty"`
 	ShiftUID                              *string                            `json:"shiftUid,omitempty"`
+	ManagerUID                            *string                            `json:"managerUid,omitempty"`
+	ManagerName                           *string                            `json:"managerName,omitempty"`
+	RoleName                              *string                            `json:"roleName,omitempty"`
 }
 
 type UpdateOwnEmployeeProfileRequest struct {
@@ -847,6 +856,9 @@ func (h *EmployeeHandler) GetEmployee(w http.ResponseWriter, r *http.Request) {
 		AppointmentSeniorityOrGradeWithdrawal: output.AppointmentSeniorityOrGradeWithdrawal,
 		DepartmentUID:                         output.DepartmentUID,
 		ShiftUID:                              output.ShiftUID,
+		ManagerUID:                            output.ManagerUID,
+		ManagerName:                           output.ManagerName,
+		RoleName:                              output.RoleName,
 	})
 }
 
@@ -1158,6 +1170,16 @@ func (h *EmployeeHandler) DownloadImportTemplate(w http.ResponseWriter, r *http.
 type AssignDepartmentRequest struct {
 	DepartmentUID string  `json:"departmentUid"`
 	ShiftUID      *string `json:"shiftUid,omitempty"`
+}
+
+type SetManagerRequest struct {
+	ManagerUID *string `json:"managerUid"`
+}
+
+type ManagerCandidateResponse struct {
+	EmployeeUID string `json:"employeeUid"`
+	Name        string `json:"name"`
+	RoleName    string `json:"roleName"`
 }
 
 // AssignDepartment handles PUT /api/v1/employees/{uid}/department
@@ -2179,4 +2201,63 @@ func toCreateEmployeeAnnualReportResponse(output *usecases.CreateEmployeeAnnualR
 		}
 	}
 	return response
+}
+
+// SetManager handles PUT /api/v1/employees/{uid}/manager
+func (h *EmployeeHandler) SetManager(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	if uid == "" {
+		writeJSONError(w, http.StatusBadRequest, "invalid_request", "uid is required")
+		return
+	}
+
+	var req SetManagerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_request", "Failed to decode request body")
+		return
+	}
+
+	err := h.setManagerUC.Execute(r.Context(), usecases.SetEmployeeManagerInput{
+		EmployeeUID: uid,
+		ManagerUID:  req.ManagerUID,
+	})
+	if err != nil {
+		switch err.Error() {
+		case "cannot_change_manager_for_regular_employee":
+			writeJSONError(w, http.StatusUnprocessableEntity, "cannot_change_manager_for_regular_employee",
+				"Manager cannot be changed for ordinary employees — only the department can be updated")
+		case "manager_must_have_leadership_role":
+			writeJSONError(w, http.StatusUnprocessableEntity, "manager_must_have_leadership_role",
+				"The selected manager must hold a leadership role (President, Vice President, or Dean)")
+		case "employee_cannot_be_own_manager":
+			writeJSONError(w, http.StatusUnprocessableEntity, "employee_cannot_be_own_manager",
+				"An employee cannot be their own manager")
+		default:
+			slog.Error("employee_handler.SetManager.execute_usecase", "error", err)
+			writeError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ListManagerCandidates handles GET /api/v1/employees/manager-candidates
+func (h *EmployeeHandler) ListManagerCandidates(w http.ResponseWriter, r *http.Request) {
+	candidates, err := h.listManagerCandUC.Execute(r.Context())
+	if err != nil {
+		slog.Error("employee_handler.ListManagerCandidates.execute_usecase", "error", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	resp := make([]ManagerCandidateResponse, 0, len(candidates))
+	for _, c := range candidates {
+		resp = append(resp, ManagerCandidateResponse{
+			EmployeeUID: c.EmployeeUID,
+			Name:        c.Name,
+			RoleName:    c.RoleName,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"candidates": resp})
 }

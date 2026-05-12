@@ -81,6 +81,9 @@ type GetEmployeeOutput struct {
 	AppointmentSeniorityOrGradeWithdrawal bool
 	DepartmentUID                         *string
 	ShiftUID                              *string
+	ManagerUID                            *string
+	ManagerName                           *string
+	RoleName                              *string // primary non-employee role name; nil for ordinary employees
 }
 
 type EmployeeDocumentOutput struct {
@@ -96,6 +99,7 @@ type EmployeeDocumentOutput struct {
 type GetEmployeeUseCase struct {
 	db                 ports.DB
 	employeeRepo       ports.EmployeeRepository
+	roleRepo           ports.RoleRepository
 	documentDownloadUC *GenerateDocumentDownloadURLUseCase
 }
 
@@ -104,10 +108,12 @@ func NewGetEmployeeUseCase(
 	db ports.DB,
 	employeeRepo ports.EmployeeRepository,
 	documentDownloadUC *GenerateDocumentDownloadURLUseCase,
+	roleRepo ports.RoleRepository,
 ) *GetEmployeeUseCase {
 	return &GetEmployeeUseCase{
 		db:                 db,
 		employeeRepo:       employeeRepo,
+		roleRepo:           roleRepo,
 		documentDownloadUC: documentDownloadUC,
 	}
 }
@@ -127,7 +133,7 @@ func (uc *GetEmployeeUseCase) Execute(ctx context.Context, input GetEmployeeInpu
 		return nil, err
 	}
 
-	return &GetEmployeeOutput{
+	output := &GetEmployeeOutput{
 		UID:                                   employee.UID,
 		Name:                                  employee.Name,
 		Mobile:                                employee.Mobile,
@@ -193,7 +199,46 @@ func (uc *GetEmployeeUseCase) Execute(ctx context.Context, input GetEmployeeInpu
 		AppointmentSeniorityOrGradeWithdrawal: employee.AppointmentSeniorityOrGradeWithdrawal,
 		DepartmentUID:                         employee.DepartmentUID,
 		ShiftUID:                              employee.ShiftUID,
-	}, nil
+		ManagerUID:                            employee.ManagerUID,
+	}
+
+	if err := uc.enrichWithManagerAndRole(ctx, output); err != nil {
+		return nil, err
+	}
+
+	return output, nil
+}
+
+func (uc *GetEmployeeUseCase) enrichWithManagerAndRole(ctx context.Context, output *GetEmployeeOutput) error {
+	if uc.roleRepo == nil {
+		return nil
+	}
+
+	uidLookup := []string{output.UID}
+	if output.ManagerUID != nil {
+		uidLookup = append(uidLookup, *output.ManagerUID)
+	}
+
+	roleNames, err := uc.roleRepo.GetRoleNamesByEmployeeUIDs(ctx, uc.db, uidLookup)
+	if err != nil {
+		return err
+	}
+
+	if name := roleNames[output.UID]; name != "" {
+		output.RoleName = &name
+	}
+
+	if output.ManagerUID != nil {
+		mgr, err := uc.employeeRepo.GetByUID(ctx, uc.db, *output.ManagerUID)
+		if err != nil {
+			return err
+		}
+		if mgr != nil {
+			output.ManagerName = &mgr.Name
+		}
+	}
+
+	return nil
 }
 
 func (uc *GetEmployeeUseCase) buildEmployeeDocuments(ctx context.Context, employee *domain.Employee) ([]EmployeeDocumentOutput, error) {

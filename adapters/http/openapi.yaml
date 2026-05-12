@@ -193,7 +193,13 @@ components:
         subType:
           type: string
           enum:
-            [normal, special_needs, separation_termination_for_budget, comprehensive_bonus, contract_employees]
+            [
+              normal,
+              special_needs,
+              separation_termination_for_budget,
+              comprehensive_bonus,
+              contract_employees,
+            ]
           example: normal
 
     EmployeeListItem:
@@ -537,6 +543,67 @@ components:
           type: string
           nullable: true
           example: "Manager Name"
+
+    OrgChartPerson:
+      type: object
+      properties:
+        userUid:
+          type: string
+          example: "usr_001"
+        employeeUid:
+          type: string
+          nullable: true
+          example: "emp_001"
+        name:
+          type: string
+          example: "Dr. Amina Ali"
+        phone:
+          type: string
+          example: "+201000000000"
+
+    OrgChartEmployee:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "emp_001"
+        name:
+          type: string
+          example: "Employee Name"
+
+    OrgChartDepartment:
+      type: object
+      properties:
+        department:
+          $ref: "#/components/schemas/Department"
+        manager:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/OrgChartPerson"
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartEmployee"
+
+    DepartmentOrgChart:
+      type: object
+      properties:
+        president:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        vicePresidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        deans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartDepartment"
 
     ApprovalFlow:
       type: object
@@ -2931,6 +2998,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/Department"
 
+  /api/v1/admin/departments/org-chart:
+    get:
+      tags: [Departments]
+      summary: Get organization chart
+      responses:
+        "200":
+          description: Organization chart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentOrgChart"
+
   /api/v1/admin/departments/{uid}:
     get:
       tags: [Departments]
@@ -4794,7 +4873,7 @@ paths:
         Retrieves all audit logs with optional filtering capabilities.
         Returns paginated results ordered by occurrence time (newest first).
         Requires `audit:read` permission.
-        
+
         This endpoint allows filtering by:
         - Entity type (category)
         - Actor UID (who performed the action)

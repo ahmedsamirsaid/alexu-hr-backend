@@ -19,7 +19,7 @@ var (
 	ErrAttendanceImportInvalidFile    = errors.New("invalid file type: only xlsx files are supported")
 	ErrAttendanceImportFileTooLarge   = errors.New("file exceeds maximum size of 20MB")
 	ErrAttendanceImportEmptyFile      = errors.New("file contains no data rows")
-	ErrAttendanceImportInvalidHeaders = errors.New("invalid or missing column headers — expected: رقم البصمه, الرقم, الإسم, الميعاد, نوع الحركه")
+	ErrAttendanceImportInvalidHeaders = errors.New("invalid or missing column headers — expected at least: الرقم, الإسم, الميعاد, نوع الحركه")
 	ErrAttendanceImportValidation     = errors.New("import validation failed")
 )
 
@@ -133,17 +133,28 @@ func (uc *ImportAttendanceLogsUseCase) Execute(ctx context.Context, input Import
 
 	// Validate headers
 	headerRow := rows[0]
-	if !validateAttendanceHeaders(headerRow) {
+	indices, err := parseAttendanceHeaders(headerRow)
+	if err != nil {
 		return nil, ErrAttendanceImportInvalidHeaders
 	}
 
 	// Parse and validate data rows
 	dataRows := rows[1:]
-	parsed, validationErrors := uc.parseAttendanceRows(dataRows)
+	parsed, validationErrors := uc.parseAttendanceRows(dataRows, indices)
 
 	totalRows := len(dataRows)
 	invalidRows := len(validationErrors)
 	validRows := totalRows - invalidRows
+
+	// Filter out empty rows from totalRows and validRows
+	emptyRows := 0
+	for _, row := range dataRows {
+		if isRowEmpty(row) {
+			emptyRows++
+		}
+	}
+	totalRows -= emptyRows
+	validRows -= emptyRows
 
 	if len(validationErrors) > 0 {
 		return &ImportAttendanceLogsOutput{
@@ -239,38 +250,60 @@ func (uc *ImportAttendanceLogsUseCase) Execute(ctx context.Context, input Import
 
 const EntityAttendanceImport = "attendance_import"
 
-func validateAttendanceHeaders(headers []string) bool {
-	if len(headers) < len(expectedAttendanceHeaders) {
-		return false
-	}
-	for i, expected := range expectedAttendanceHeaders {
-		actual := strings.TrimSpace(headers[i])
-		if actual != expected {
+func isRowEmpty(row []string) bool {
+	for _, cell := range row {
+		if strings.TrimSpace(cell) != "" {
 			return false
 		}
 	}
 	return true
 }
 
-func (uc *ImportAttendanceLogsUseCase) parseAttendanceRows(rows [][]string) ([]*parsedAttendanceRow, []AttendanceImportError) {
+func parseAttendanceHeaders(headers []string) (map[string]int, error) {
+	required := map[string]bool{
+		"الرقم":       true,
+		"الإسم":       true,
+		"الميعاد":     true,
+		"نوع الحركه": true,
+	}
+	indices := make(map[string]int)
+
+	for i, h := range headers {
+		indices[strings.TrimSpace(h)] = i
+	}
+
+	for req := range required {
+		if _, ok := indices[req]; !ok {
+			return nil, ErrAttendanceImportInvalidHeaders
+		}
+	}
+	return indices, nil
+}
+
+func (uc *ImportAttendanceLogsUseCase) parseAttendanceRows(rows [][]string, indices map[string]int) ([]*parsedAttendanceRow, []AttendanceImportError) {
 	var parsed []*parsedAttendanceRow
 	var validationErrors []AttendanceImportError
 
 	for i, row := range rows {
 		rowNum := i + 2 // 1-indexed, plus header row
 
-		getValue := func(idx int) string {
-			if idx < len(row) {
+		if isRowEmpty(row) {
+			continue // Skip completely empty rows
+		}
+
+		getValue := func(colName string) string {
+			idx, ok := indices[colName]
+			if ok && idx < len(row) {
 				return strings.TrimSpace(row[idx])
 			}
 			return ""
 		}
 
-		deviceNumber := getValue(0)
-		governmentID := getValue(1)
-		employeeName := getValue(2)
-		timeStr := getValue(3)
-		punchTypeStr := getValue(4)
+		deviceNumber := getValue("رقم البصمه")
+		governmentID := getValue("الرقم")
+		employeeName := getValue("الإسم")
+		timeStr := getValue("الميعاد")
+		punchTypeStr := getValue("نوع الحركه")
 
 		rowHasErrors := false
 		addError := func(column, value, message string) {

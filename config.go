@@ -103,12 +103,12 @@ func LoadConfig() *AppConfig {
 		LegacyDBUser:      getEnv("BANU_MUSA_LEGACY_DB_USER", ""),
 		LegacyDBPassword:  getEnv("BANU_MUSA_LEGACY_DB_PASSWORD", ""),
 			// PostgreSQL config
-		PostgresHost:     getEnv("BANU_MUSA_POSTGRES_HOST", "localhost"),
-		PostgresPort:     getEnv("BANU_MUSA_POSTGRES_PORT", "5432"),
-		PostgresUser:     getEnv("BANU_MUSA_POSTGRES_USER", "banumusa"),
-		PostgresPassword: getEnv("BANU_MUSA_POSTGRES_PASSWORD", "banumusa-secret"),
-		PostgresDB:       getEnv("BANU_MUSA_POSTGRES_DB", "banumusa"),
-		PostgresSSLMode:  getEnv("BANU_MUSA_POSTGRES_SSLMODE", "disable"),
+		PostgresHost:     getEnv("BANU_MUSA_POSTGRES_HOST", "hopper.proxy.rlwy.net"),
+		PostgresPort:     getEnv("BANU_MUSA_POSTGRES_PORT", "51483"),
+		PostgresUser:     getEnv("BANU_MUSA_POSTGRES_USER", "postgres"),
+		PostgresPassword: getEnv("BANU_MUSA_POSTGRES_PASSWORD", "YClMGMicYWbjylMrBQPsltWixhOBFYgR"),
+		PostgresDB:       getEnv("BANU_MUSA_POSTGRES_DB", "railway"),
+		PostgresSSLMode:  getEnv("BANU_MUSA_POSTGRES_SSLMODE", "require"),
 		// pgBouncer config
 		PgBouncerEnabled: getEnvBool("BANU_MUSA_PGBOUNCER_ENABLED", false),
 		PgBouncerHost:    getEnv("BANU_MUSA_PGBOUNCER_HOST", "localhost"),

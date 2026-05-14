@@ -3,11 +3,18 @@ package http
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
+
 	"github.com/banumusa/backend/core/audit"
+	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/i18n"
 	"github.com/banumusa/backend/core/ports"
+	"golang.org/x/time/rate"
 )
 
 type contextKey string
@@ -22,14 +29,14 @@ func LanguageMiddleware(i18nService ports.I18nService) func(http.Handler) http.H
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			acceptLang := r.Header.Get("Accept-Language")
 			locale := i18n.ParseAcceptLanguage(acceptLang, i18nService.GetSupportedLocales())
-			
+
 			// Add debug logging for detected locale
 			slog.Debug("language.middleware.locale_detected",
 				"accept_language", acceptLang,
 				"detected_locale", locale,
 				"path", r.URL.Path,
 			)
-			
+
 			ctx := i18n.WithLocale(r.Context(), locale)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -145,6 +152,97 @@ func CORSMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+type ipVisitor struct {
+	limiter      *rate.Limiter
+	lastSeen     time.Time
+	blockedUntil time.Time
+}
+
+type IPRateLimiter struct {
+	mu               sync.Mutex
+	visitors         map[string]*ipVisitor
+	limit            rate.Limit
+	burst            int
+	lockdownDuration time.Duration
+	now              func() time.Time
+}
+
+func NewIPRateLimiter(requestsPerMinute int, lockdownDuration time.Duration) *IPRateLimiter {
+	if requestsPerMinute <= 0 {
+		requestsPerMinute = 100
+	}
+	if lockdownDuration <= 0 {
+		lockdownDuration = 15 * time.Minute
+	}
+	return &IPRateLimiter{
+		visitors:         make(map[string]*ipVisitor),
+		limit:            rate.Every(time.Minute / time.Duration(requestsPerMinute)),
+		burst:            requestsPerMinute,
+		lockdownDuration: lockdownDuration,
+		now:              time.Now,
+	}
+}
+
+func (l *IPRateLimiter) allow(ip string) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	now := l.now()
+	visitor, ok := l.visitors[ip]
+	if !ok {
+		visitor = &ipVisitor{
+			limiter:  rate.NewLimiter(l.limit, l.burst),
+			lastSeen: now,
+		}
+		l.visitors[ip] = visitor
+	}
+	visitor.lastSeen = now
+
+	if visitor.blockedUntil.After(now) {
+		return false, visitor.blockedUntil.Sub(now)
+	}
+
+	if !visitor.limiter.Allow() {
+		visitor.blockedUntil = now.Add(l.lockdownDuration)
+		return false, l.lockdownDuration
+	}
+
+	return true, 0
+}
+
+func RateLimitMiddleware(limiter *IPRateLimiter, i18nService ports.I18nService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ip := clientIP(r)
+			allowed, retryAfter := limiter.allow(ip)
+			if !allowed {
+				slog.Warn("http.rate_limit.ip_exceeded", "ip", ip, "path", r.URL.Path)
+				w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+				writeLocalizedError(w, http.StatusTooManyRequests, domain.ErrRateLimitExceeded, i18nService, r.Context())
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func clientIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		parts := strings.Split(forwarded, ",")
+		if ip := strings.TrimSpace(parts[0]); ip != "" {
+			return ip
+		}
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code, message string) {

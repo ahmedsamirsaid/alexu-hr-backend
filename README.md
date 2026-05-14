@@ -26,6 +26,8 @@ Server starts on **http://localhost:8080**
 
 > `BANU_MUSA_FCM_ENABLED=false` disables Firebase push notifications — required locally unless you have the Firebase service account file.
 
+`config.json` is optional. This repo now reads `rateLimit.lockdownMinutes` from it, defaulting to `15` when the file or setting is absent.
+
 ## Environment Variables
 
 All variables are optional with sensible defaults for local development.
@@ -42,6 +44,7 @@ All variables are optional with sensible defaults for local development.
 | `BANU_MUSA_REFRESH_TOKEN_DAYS` | `90` | JWT refresh token lifetime |
 | `BANU_MUSA_FCM_ENABLED` | `true` | Enable Firebase push notifications |
 | `BANU_MUSA_FCM_SERVICE_ACCOUNT_PATH` | `./firebase/staging-banumusa-firebase-adminsdk-*.json` | Path to Firebase service account JSON |
+| `BANU_MUSA_RATE_LIMIT_LOCKDOWN_MINUTES` | `15` | Lockdown duration applied after rate-limit violations |
 | `BANU_MUSA_SCHEDULER_ENABLED` | `true` | Enable background job scheduler |
 | `BANU_MUSA_SCHEDULER_INTERVAL_HOURS` | `1` | How often scheduler runs (hours) |
 | `BANU_MUSA_EXPIRED_LEAVE_GRACE_DAYS` | `1` | Days before auto-rejecting expired leave requests |

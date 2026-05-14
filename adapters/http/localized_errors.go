@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/banumusa/backend/core/domain"
 	"github.com/banumusa/backend/core/ports"
@@ -14,6 +16,15 @@ import (
 type localizedErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+func writeRateLimitedError(w http.ResponseWriter, r *http.Request, err error, retryAfter time.Duration, i18nService ports.I18nService) {
+	seconds := int(retryAfter.Seconds())
+	if seconds < 1 {
+		seconds = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	writeLocalizedError(w, http.StatusTooManyRequests, err, i18nService, r.Context())
 }
 
 // writeLocalizedError inspects err for a *domain.LocalizedError, translates it using

@@ -22,7 +22,10 @@
       "unauthorized": "وصول غير مصرح به",
       "invalid_otp": "رمز التحقق غير صالح",
       "otp_expired": "انتهت صلاحية رمز التحقق",
-      "account_disabled": "تم تعطيل الحساب"
+      "account_disabled": "تم تعطيل الحساب",
+      "otp_request_rate_limited": "تم تجاوز عدد طلبات رمز التحقق. يرجى المحاولة لاحقًا.",
+      "otp_verify_rate_limited": "تم تجاوز عدد محاولات التحقق الفاشلة. يرجى المحاولة لاحقًا.",
+      "login_rate_limited": "تم تجاوز عدد محاولات تسجيل الدخول. يرجى المحاولة لاحقًا."
     },
     "validation": {
       "required_field": "{{.Field}} مطلوب",
@@ -55,7 +58,8 @@
       "not_found": "المورد غير موجود",
       "forbidden": "الوصول محظور",
       "bad_request": "طلب غير صالح",
-      "conflict": "تعارض في المورد"
+      "conflict": "تعارض في المورد",
+      "rate_limit_exceeded": "عدد الطلبات كبير جدًا. يرجى المحاولة لاحقًا."
     }
   }
 }

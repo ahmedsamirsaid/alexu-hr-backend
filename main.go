@@ -187,7 +187,7 @@ func main() {
 	updateShiftUC := usecases.NewUpdateShiftUseCase(pgDB, shiftRepo)
 
 	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret, cfg.AccessTokenMinutes)
-	rateLimitService := usecases.NewRateLimitService(sqliteDB, rateLimitRepo, usecases.RateLimitConfig{
+	rateLimitService := usecases.NewRateLimitService(pgDB, rateLimitRepo, usecases.RateLimitConfig{
 		OTPRequestLimit:  cfg.OTPRequestLimit,
 		OTPRequestWindow: cfg.OTPRequestWindow,
 		OTPRequestLock:   cfg.RateLimitLockdownDuration,

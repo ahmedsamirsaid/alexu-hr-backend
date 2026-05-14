@@ -22,7 +22,10 @@
       "unauthorized": "Unauthorized access",
       "invalid_otp": "Invalid OTP code",
       "otp_expired": "OTP code has expired",
-      "account_disabled": "Account has been disabled"
+      "account_disabled": "Account has been disabled",
+      "otp_request_rate_limited": "Too many OTP requests. Please try again later.",
+      "otp_verify_rate_limited": "Too many invalid OTP attempts. Please try again later.",
+      "login_rate_limited": "Too many login attempts. Please try again later."
     },
     "validation": {
       "required_field": "{{.Field}} is required",
@@ -55,7 +58,8 @@
       "not_found": "Resource not found",
       "forbidden": "Access forbidden",
       "bad_request": "Invalid request",
-      "conflict": "Resource conflict"
+      "conflict": "Resource conflict",
+      "rate_limit_exceeded": "Too many requests. Please try again later."
     }
   }
 }

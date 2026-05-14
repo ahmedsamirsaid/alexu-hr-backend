@@ -93,6 +93,7 @@ func (tdb *TestDB) clearSeedData() {
 		"role_permissions",
 		"refresh_tokens",
 		"otp_codes",
+		"rate_limit_records",
 		"leave_balance_transactions",
 		"leave_records",
 		"leave_balances",

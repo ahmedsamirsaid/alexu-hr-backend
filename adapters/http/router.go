@@ -1,45 +1,47 @@
 package http
 
 import (
-	"net/http"
 	"github.com/banumusa/backend/core/ports"
+	"net/http"
 )
 
 type RouterConfig struct {
-	LeaveHandler            *LeaveHandler
-	EmployeeHandler         *EmployeeHandler
-	ShiftHandler            *ShiftHandler
-	AuthHandler             *AuthHandler
-	UserHandler             *UserHandler
-	RoleHandler             *RoleHandler
-	DashboardHandler        *DashboardHandler
-	ApprovalFlowHandler     *ApprovalFlowHandler
-	LeaveRequestHandler     *LeaveRequestHandler
-	DepartmentHandler       *DepartmentHandler
-	DeviceTokenHandler      *DeviceTokenHandler
-	AttendanceDeviceHandler *AttendanceDeviceHandler
-	LeaveTypeHandler        *LeaveTypeHandler
-	WeekendHandler          *WeekendHandler
-	AttendanceHandler       *AttendanceHandler
-	HolidayHandler          *HolidayHandler
-	DebugHandler            *DebugHandler
-	AuditHandler            *AuditHandler
-	JWTService              *JWTService
-	AuthEnabled             bool
-	DocumentHandler         *DocumentHandler
-	I18nService             ports.I18nService
-	PermissionRequestHandler *PermissionRequestHandler
-  EmployeeProfileChangeHandler *EmployeeProfileChangeHandler
-	MeHandler                *MeHandler
+	LeaveHandler                 *LeaveHandler
+	EmployeeHandler              *EmployeeHandler
+	ShiftHandler                 *ShiftHandler
+	AuthHandler                  *AuthHandler
+	UserHandler                  *UserHandler
+	RoleHandler                  *RoleHandler
+	DashboardHandler             *DashboardHandler
+	ApprovalFlowHandler          *ApprovalFlowHandler
+	LeaveRequestHandler          *LeaveRequestHandler
+	DepartmentHandler            *DepartmentHandler
+	DeviceTokenHandler           *DeviceTokenHandler
+	AttendanceDeviceHandler      *AttendanceDeviceHandler
+	LeaveTypeHandler             *LeaveTypeHandler
+	WeekendHandler               *WeekendHandler
+	AttendanceHandler            *AttendanceHandler
+	HolidayHandler               *HolidayHandler
+	DebugHandler                 *DebugHandler
+	AuditHandler                 *AuditHandler
+	JWTService                   *JWTService
+	AuthEnabled                  bool
+	DocumentHandler              *DocumentHandler
+	I18nService                  ports.I18nService
+	PermissionRequestHandler     *PermissionRequestHandler
+	EmployeeProfileChangeHandler *EmployeeProfileChangeHandler
+	MeHandler                    *MeHandler
+	IPRateLimiter                *IPRateLimiter
 }
 
 func NewRouter(cfg RouterConfig) http.Handler {
 	mux := http.NewServeMux()
+	publicMux := http.NewServeMux()
 
 	mux.HandleFunc("POST /api/v1/auth/otp/request", cfg.AuthHandler.RequestOTP)
 	mux.HandleFunc("POST /api/v1/auth/otp/verify", cfg.AuthHandler.VerifyOTP)
 	mux.HandleFunc("POST /api/v1/auth/login", cfg.AuthHandler.LoginPassword)
-	mux.HandleFunc("POST /api/v1/auth/refresh", cfg.AuthHandler.RefreshToken)
+	publicMux.HandleFunc("POST /api/v1/auth/refresh", cfg.AuthHandler.RefreshToken)
 
 	protectedMux := http.NewServeMux()
 
@@ -114,7 +116,6 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	protectedMux.Handle("PATCH /api/v1/admin/departments/{uid}", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.UpdateDepartment)))
 	protectedMux.Handle("POST /api/v1/admin/departments/{uid}/manager", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.AssignManager)))
 	protectedMux.Handle("DELETE /api/v1/admin/departments/{uid}/manager", RequirePermission("departments:write")(http.HandlerFunc(cfg.DepartmentHandler.RemoveManager)))
-
 
 	protectedMux.Handle("GET /api/v1/admin/leave-types", RequirePermission("leave-types:read")(http.HandlerFunc(cfg.LeaveTypeHandler.ListLeaveTypes)))
 	protectedMux.Handle("PATCH /api/v1/admin/leave-types/{uid}", RequirePermission("leave-types:write")(http.HandlerFunc(cfg.LeaveTypeHandler.UpdateLeaveType)))
@@ -196,9 +197,10 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 	authMiddleware := AuthMiddleware(cfg.JWTService, cfg.AuthEnabled)
 	languageMiddleware := LanguageMiddleware(cfg.I18nService)
-	
-	// Apply language middleware to all routes, then auth middleware to protected routes
-	mux.Handle("/api/v1/", languageMiddleware(authMiddleware(protectedMux)))
+	rateLimitMiddleware := RateLimitMiddleware(cfg.IPRateLimiter, cfg.I18nService)
+
+	publicMux.Handle("/api/v1/", rateLimitMiddleware(languageMiddleware(authMiddleware(protectedMux))))
+	mux.Handle("/api/v1/", languageMiddleware(publicMux))
 
 	RegisterSwaggerRoutes(mux)
 

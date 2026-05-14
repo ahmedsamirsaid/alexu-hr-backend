@@ -18,6 +18,7 @@ type AuthHandler struct {
 	refreshTokenUC   *usecases.RefreshTokenUseCase
 	logoutUC         *usecases.LogoutUseCase
 	getCurrentUserUC *usecases.GetCurrentUserUseCase
+	rateLimitService *usecases.RateLimitService
 	i18nService      ports.I18nService
 }
 
@@ -28,6 +29,7 @@ func NewAuthHandler(
 	refreshTokenUC *usecases.RefreshTokenUseCase,
 	logoutUC *usecases.LogoutUseCase,
 	getCurrentUserUC *usecases.GetCurrentUserUseCase,
+	rateLimitService *usecases.RateLimitService,
 	i18nService ports.I18nService,
 ) *AuthHandler {
 	return &AuthHandler{
@@ -37,6 +39,7 @@ func NewAuthHandler(
 		refreshTokenUC:   refreshTokenUC,
 		logoutUC:         logoutUC,
 		getCurrentUserUC: getCurrentUserUC,
+		rateLimitService: rateLimitService,
 		i18nService:      i18nService,
 	}
 }
@@ -58,7 +61,19 @@ func (h *AuthHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.requestOTPUC.Execute(r.Context(), usecases.RequestOTPInput{
+	subjectKey := authRateLimitSubject(r, req.Phone)
+	result, err := h.rateLimitService.AllowOTPRequest(r.Context(), subjectKey)
+	if err != nil {
+		slog.Error("auth_handler.RequestOTP.rate_limit", "error", err)
+		writeLocalizedError(w, http.StatusInternalServerError, domain.NewLocalizedError("internal_error", "error.general.internal_error", nil), h.i18nService, r.Context())
+		return
+	}
+	if !result.Allowed {
+		writeRateLimitedError(w, r, domain.ErrOTPRequestRateLimited, result.RetryAfter, h.i18nService)
+		return
+	}
+
+	_, err = h.requestOTPUC.Execute(r.Context(), usecases.RequestOTPInput{
 		Phone: req.Phone,
 	})
 	if err != nil {
@@ -96,11 +111,32 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subjectKey := authRateLimitSubject(r, req.Phone)
+	checkResult, err := h.rateLimitService.CheckOTPVerify(r.Context(), subjectKey)
+	if err != nil {
+		slog.Error("auth_handler.VerifyOTP.rate_limit_check", "error", err)
+		writeLocalizedError(w, http.StatusInternalServerError, domain.NewLocalizedError("internal_error", "error.general.internal_error", nil), h.i18nService, r.Context())
+		return
+	}
+	if !checkResult.Allowed {
+		writeRateLimitedError(w, r, domain.ErrOTPVerifyRateLimited, checkResult.RetryAfter, h.i18nService)
+		return
+	}
+
 	output, err := h.verifyOTPUC.Execute(r.Context(), usecases.VerifyOTPInput{
 		Phone: req.Phone,
 		OTP:   req.OTP,
 	})
 	if err != nil {
+		if errors.Is(err, usecases.ErrInvalidOTP) {
+			result, rateLimitErr := h.rateLimitService.RegisterOTPVerifyFailure(r.Context(), subjectKey)
+			if rateLimitErr != nil {
+				slog.Error("auth_handler.VerifyOTP.register_failure", "error", rateLimitErr)
+			} else if !result.Allowed {
+				writeRateLimitedError(w, r, domain.ErrOTPVerifyRateLimited, result.RetryAfter, h.i18nService)
+				return
+			}
+		}
 		var statusCode int
 		switch {
 		case errors.Is(err, usecases.ErrInvalidOTP):
@@ -122,6 +158,10 @@ func (h *AuthHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
+	}
+
+	if err := h.rateLimitService.ResetOTPVerify(r.Context(), subjectKey); err != nil {
+		slog.Error("auth_handler.VerifyOTP.reset_rate_limit", "error", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -150,11 +190,32 @@ func (h *AuthHandler) LoginPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subjectKey := authRateLimitSubject(r, req.Phone)
+	checkResult, err := h.rateLimitService.CheckLogin(r.Context(), subjectKey)
+	if err != nil {
+		slog.Error("auth_handler.LoginPassword.rate_limit_check", "error", err)
+		writeLocalizedError(w, http.StatusInternalServerError, domain.NewLocalizedError("internal_error", "error.general.internal_error", nil), h.i18nService, r.Context())
+		return
+	}
+	if !checkResult.Allowed {
+		writeRateLimitedError(w, r, domain.ErrLoginRateLimited, checkResult.RetryAfter, h.i18nService)
+		return
+	}
+
 	output, err := h.loginPasswordUC.Execute(r.Context(), usecases.LoginPasswordInput{
 		Phone:    req.Phone,
 		Password: req.Password,
 	})
 	if err != nil {
+		if usecases.IsCredentialRateLimitError(err) {
+			result, rateLimitErr := h.rateLimitService.RegisterLoginFailure(r.Context(), subjectKey)
+			if rateLimitErr != nil {
+				slog.Error("auth_handler.LoginPassword.register_failure", "error", rateLimitErr)
+			} else if !result.Allowed {
+				writeRateLimitedError(w, r, domain.ErrLoginRateLimited, result.RetryAfter, h.i18nService)
+				return
+			}
+		}
 		var statusCode int
 		switch {
 		case errors.Is(err, usecases.ErrInvalidCredentials):
@@ -176,6 +237,10 @@ func (h *AuthHandler) LoginPassword(w http.ResponseWriter, r *http.Request) {
 		}
 		writeLocalizedError(w, statusCode, err, h.i18nService, r.Context())
 		return
+	}
+
+	if err := h.rateLimitService.ResetLogin(r.Context(), subjectKey); err != nil {
+		slog.Error("auth_handler.LoginPassword.reset_rate_limit", "error", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -256,6 +321,18 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Logged out"})
+}
+
+func authRateLimitSubject(r *http.Request, phone string) string {
+	ip := clientIP(r)
+	normalizedPhone := usecases.NormalizePhoneForRateLimit(phone)
+	if ip == "" {
+		return normalizedPhone
+	}
+	if normalizedPhone == "" {
+		return ip
+	}
+	return ip + "|" + normalizedPhone
 }
 
 func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {

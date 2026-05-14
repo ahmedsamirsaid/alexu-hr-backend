@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type AppConfig struct {
@@ -50,21 +53,44 @@ type AppConfig struct {
 	// Seed config
 	SeedDevData bool
 	// Storage config
-	MinIOEndpoint                string
-	MinIOAccessKey               string
-	MinIOSecretKey               string
-	MinIOUseSSL                  bool
-	MinIODocumentsBucket         string
-	MinIOAutoCreateBucket        bool
-	MinIOUploadExpiryMinutes     int
-	MinIODownloadExpiryMinutes   int
-	I18nLocalesPath      string
-	I18nDefaultLocale    string
-	I18nSupportedLocales []string
-	I18nHotReload        bool
+	MinIOEndpoint              string
+	MinIOAccessKey             string
+	MinIOSecretKey             string
+	MinIOUseSSL                bool
+	MinIODocumentsBucket       string
+	MinIOAutoCreateBucket      bool
+	MinIOUploadExpiryMinutes   int
+	MinIODownloadExpiryMinutes int
+	I18nLocalesPath            string
+	I18nDefaultLocale          string
+	I18nSupportedLocales       []string
+	I18nHotReload              bool
+	GeneralRateLimitPerMinute  int
+	RateLimitLockdownDuration  time.Duration
+	OTPRequestLimit            int
+	OTPRequestWindow           time.Duration
+	OTPVerifyLimit             int
+	OTPVerifyWindow            time.Duration
+	OTPVerifyLockDuration      time.Duration
+	LoginRateLimit             int
+	LoginRateLimitWindow       time.Duration
+}
+
+type jsonConfig struct {
+	RateLimit *jsonRateLimitConfig `json:"rateLimit"`
+}
+
+type jsonRateLimitConfig struct {
+	LockdownMinutes int `json:"lockdownMinutes"`
 }
 
 func LoadConfig() *AppConfig {
+	jsonCfg := loadJSONConfig()
+	lockdownMinutes := 15
+	if jsonCfg.RateLimit != nil && jsonCfg.RateLimit.LockdownMinutes > 0 {
+		lockdownMinutes = jsonCfg.RateLimit.LockdownMinutes
+	}
+
 	return &AppConfig{
 		Port:              getEnv("BANU_MUSA_PORT", "8080"),
 		DBPath:            getEnv("BANU_MUSA_DB_PATH", "./data/banumusa.db"),
@@ -111,9 +137,9 @@ func LoadConfig() *AppConfig {
 		SeedDevData: getEnvBool("BANU_MUSA_SEED_DEV", true),
 
 		// Storage config
-		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "bucket-production-62aa.up.railway.app"),
-		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "hgZN6FTEHjaeg0nJX8H5NmCc1IHOIcqp"),
-		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "vkiYoESOd5vr0wdo1J34t9JOzphCkoh3mBMqQ7V739UOCr4K"),
+		MinIOEndpoint:              getEnv("BANU_MUSA_MINIO_ENDPOINT", "bucket-production-a04a.up.railway.app"),
+		MinIOAccessKey:             getEnv("BANU_MUSA_MINIO_ACCESS_KEY", "mU8a1ES7JKx1Q00kox7P2QCqAjiizE4o"),
+		MinIOSecretKey:             getEnv("BANU_MUSA_MINIO_SECRET_KEY", "ko5FnnLKOPq9QX51iPeARDEbnCeMbPYl5RC6EGz2LWuuddCa"),
 		MinIOUseSSL:                getEnvBool("BANU_MUSA_MINIO_USE_SSL", true),
 		MinIODocumentsBucket:       getEnv("BANU_MUSA_MINIO_DOCUMENTS_BUCKET", "documents"),
 		MinIOAutoCreateBucket:      getEnvBool("BANU_MUSA_MINIO_AUTO_CREATE_BUCKET", true),
@@ -121,11 +147,39 @@ func LoadConfig() *AppConfig {
 		MinIODownloadExpiryMinutes: getEnvInt("BANU_MUSA_MINIO_DOWNLOAD_EXPIRY_MINUTES", 15),
 
 		// I18n config
-		I18nLocalesPath:      getEnv("BANU_MUSA_I18N_LOCALES_PATH", "./locales"),
-		I18nDefaultLocale:    getEnv("BANU_MUSA_I18N_DEFAULT_LOCALE", "en"),
-		I18nSupportedLocales: getEnvStringSlice("BANU_MUSA_I18N_SUPPORTED_LOCALES", []string{"en", "ar"}),
-		I18nHotReload:        getEnvBool("BANU_MUSA_I18N_HOT_RELOAD", false),
+		I18nLocalesPath:           getEnv("BANU_MUSA_I18N_LOCALES_PATH", "./locales"),
+		I18nDefaultLocale:         getEnv("BANU_MUSA_I18N_DEFAULT_LOCALE", "en"),
+		I18nSupportedLocales:      getEnvStringSlice("BANU_MUSA_I18N_SUPPORTED_LOCALES", []string{"en", "ar"}),
+		I18nHotReload:             getEnvBool("BANU_MUSA_I18N_HOT_RELOAD", false),
+		GeneralRateLimitPerMinute: getEnvInt("BANU_MUSA_RATE_LIMIT_GENERAL_PER_MINUTE", 100),
+		RateLimitLockdownDuration: getEnvDurationMinutes("BANU_MUSA_RATE_LIMIT_LOCKDOWN_MINUTES", lockdownMinutes),
+		OTPRequestLimit:           getEnvInt("BANU_MUSA_RATE_LIMIT_OTP_REQUEST_LIMIT", 3),
+		OTPRequestWindow:          getEnvDurationMinutes("BANU_MUSA_RATE_LIMIT_OTP_REQUEST_WINDOW_MINUTES", 15),
+		OTPVerifyLimit:            getEnvInt("BANU_MUSA_RATE_LIMIT_OTP_VERIFY_LIMIT", 5),
+		OTPVerifyWindow:           getEnvDurationMinutes("BANU_MUSA_RATE_LIMIT_OTP_VERIFY_WINDOW_MINUTES", 10),
+		OTPVerifyLockDuration:     getEnvDurationMinutes("BANU_MUSA_RATE_LIMIT_OTP_VERIFY_LOCK_MINUTES", lockdownMinutes),
+		LoginRateLimit:            getEnvInt("BANU_MUSA_RATE_LIMIT_LOGIN_LIMIT", 10),
+		LoginRateLimitWindow:      getEnvDurationMinutes("BANU_MUSA_RATE_LIMIT_LOGIN_WINDOW_MINUTES", 15),
 	}
+}
+
+func loadJSONConfig() jsonConfig {
+	var cfg jsonConfig
+	paths := []string{
+		"config.json",
+		filepath.Join(".", "config.json"),
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return jsonConfig{}
+		}
+		return cfg
+	}
+	return jsonConfig{}
 }
 
 func getEnv(key, defaultValue string) string {
@@ -177,4 +231,8 @@ func getEnvStringSlice(key string, defaultValue []string) []string {
 		return result
 	}
 	return defaultValue
+}
+
+func getEnvDurationMinutes(key string, defaultMinutes int) time.Duration {
+	return time.Duration(getEnvInt(key, defaultMinutes)) * time.Minute
 }

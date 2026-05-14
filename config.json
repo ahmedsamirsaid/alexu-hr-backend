@@ -1,0 +1,5 @@
+{
+  "rateLimit": {
+    "lockdownMinutes": 15
+  }
+}

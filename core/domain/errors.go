@@ -37,26 +37,30 @@ func NewLocalizedError(code, key string, params map[string]interface{}) *Localiz
 
 var (
 	// Employee errors
-	ErrEmployeeNotFound = NewLocalizedError("employee_not_found", "error.employee.not_found", nil)
+	ErrEmployeeNotFound      = NewLocalizedError("employee_not_found", "error.employee.not_found", nil)
 	ErrEmployeeAlreadyExists = NewLocalizedError("employee_already_exists", "error.employee.already_exists", nil)
 
 	// Leave errors
-	ErrInsufficientBalance    = NewLocalizedError("insufficient_leave_balance", "error.leave.insufficient_balance", nil)
-	ErrInvalidDateRange       = NewLocalizedError("invalid_date_range", "error.leave.invalid_date_range", nil)
-	ErrExceedsConsecutiveDays = NewLocalizedError("exceeds_consecutive_days", "error.leave.exceeds_consecutive_days", nil)
+	ErrInsufficientBalance     = NewLocalizedError("insufficient_leave_balance", "error.leave.insufficient_balance", nil)
+	ErrInvalidDateRange        = NewLocalizedError("invalid_date_range", "error.leave.invalid_date_range", nil)
+	ErrExceedsConsecutiveDays  = NewLocalizedError("exceeds_consecutive_days", "error.leave.exceeds_consecutive_days", nil)
 	ErrRecordingDeadlinePassed = NewLocalizedError("recording_deadline_passed", "error.leave.recording_deadline_passed", nil)
-	ErrLeaveNotFound          = NewLocalizedError("leave_not_found", "error.leave.not_found", nil)
-	ErrLeaveOverlapping       = NewLocalizedError("leave_overlapping", "error.leave.overlapping_dates", nil)
+	ErrLeaveNotFound           = NewLocalizedError("leave_not_found", "error.leave.not_found", nil)
+	ErrLeaveOverlapping        = NewLocalizedError("leave_overlapping", "error.leave.overlapping_dates", nil)
 
 	// Auth errors
-	ErrInvalidCredentials = NewLocalizedError("invalid_credentials", "error.auth.invalid_credentials", nil)
-	ErrTokenExpired       = NewLocalizedError("token_expired", "error.auth.token_expired", nil)
-	ErrUnauthorized       = NewLocalizedError("unauthorized", "error.auth.unauthorized", nil)
-	ErrInvalidOTP         = NewLocalizedError("invalid_otp", "error.auth.invalid_otp", nil)
-	ErrOTPExpired         = NewLocalizedError("otp_expired", "error.auth.otp_expired", nil)
+	ErrInvalidCredentials    = NewLocalizedError("invalid_credentials", "error.auth.invalid_credentials", nil)
+	ErrTokenExpired          = NewLocalizedError("token_expired", "error.auth.token_expired", nil)
+	ErrUnauthorized          = NewLocalizedError("unauthorized", "error.auth.unauthorized", nil)
+	ErrInvalidOTP            = NewLocalizedError("invalid_otp", "error.auth.invalid_otp", nil)
+	ErrOTPExpired            = NewLocalizedError("otp_expired", "error.auth.otp_expired", nil)
+	ErrRateLimitExceeded     = NewLocalizedError("rate_limit_exceeded", "error.general.rate_limit_exceeded", nil)
+	ErrOTPRequestRateLimited = NewLocalizedError("otp_request_rate_limited", "error.auth.otp_request_rate_limited", nil)
+	ErrOTPVerifyRateLimited  = NewLocalizedError("otp_verify_rate_limited", "error.auth.otp_verify_rate_limited", nil)
+	ErrLoginRateLimited      = NewLocalizedError("login_rate_limited", "error.auth.login_rate_limited", nil)
 
 	// Approval errors
-	ErrApprovalNotFound     = NewLocalizedError("approval_not_found", "error.approval.not_found", nil)
+	ErrApprovalNotFound      = NewLocalizedError("approval_not_found", "error.approval.not_found", nil)
 	ErrNotAuthorizedApprover = NewLocalizedError("not_authorized_approver", "error.approval.not_authorized", nil)
 
 	// Department errors

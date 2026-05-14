@@ -115,6 +115,7 @@ func main() {
 	roleRepo := db.NewRoleRepository()
 	permissionRepo := db.NewPermissionRepository()
 	otpRepo := db.NewOTPRepository()
+	rateLimitRepo := db.NewRateLimitRepository()
 	refreshTokenRepo := db.NewRefreshTokenRepository()
 
 	departmentRepo := db.NewDepartmentRepository()
@@ -186,6 +187,18 @@ func main() {
 	updateShiftUC := usecases.NewUpdateShiftUseCase(pgDB, shiftRepo)
 
 	jwtService := httpAdapter.NewJWTService(cfg.JWTSecret, cfg.AccessTokenMinutes)
+	rateLimitService := usecases.NewRateLimitService(sqliteDB, rateLimitRepo, usecases.RateLimitConfig{
+		OTPRequestLimit:  cfg.OTPRequestLimit,
+		OTPRequestWindow: cfg.OTPRequestWindow,
+		OTPRequestLock:   cfg.RateLimitLockdownDuration,
+		OTPVerifyLimit:   cfg.OTPVerifyLimit,
+		OTPVerifyWindow:  cfg.OTPVerifyWindow,
+		OTPVerifyLock:    cfg.OTPVerifyLockDuration,
+		LoginLock:        cfg.RateLimitLockdownDuration,
+		LoginLimit:       cfg.LoginRateLimit,
+		LoginWindow:      cfg.LoginRateLimitWindow,
+	})
+	ipRateLimiter := httpAdapter.NewIPRateLimiter(cfg.GeneralRateLimitPerMinute, cfg.RateLimitLockdownDuration)
 
 	requestOTPUC := usecases.NewRequestOTPUseCase(pgDB, otpRepo, userRepo)
 	verifyOTPUC := usecases.NewVerifyOTPUseCase(
@@ -444,7 +457,7 @@ func main() {
 		setEmployeeManagerUC,
 		listManagerCandidatesUC,
 	)
-	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, i18nService)
+	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, rateLimitService, i18nService)
 	meHandler := httpAdapter.NewMeHandler(updateUserUC)
 
 	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
@@ -552,6 +565,7 @@ func main() {
 		EmployeeProfileChangeHandler: employeeProfileChangeHandler,
 		DocumentHandler:              documentHandler,
 		I18nService:                  i18nService,
+		IPRateLimiter:                ipRateLimiter,
 	})
 
 	var sched *scheduler.Scheduler

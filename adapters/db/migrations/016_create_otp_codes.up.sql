@@ -3,7 +3,7 @@ CREATE TABLE otp_codes (
     phone TEXT NOT NULL,
     code TEXT NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    used INTEGER DEFAULT 0,
+    used BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

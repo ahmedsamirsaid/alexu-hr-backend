@@ -185,6 +185,7 @@ func (uc *LoginPasswordUseCase) toUserOutput(ctx context.Context, user *domain.U
 		UID:                   user.UID,
 		Phone:                 user.Phone,
 		EmployeeUID:           user.EmployeeUID,
+		PreferredLanguage:     user.PreferredLanguage,
 		AccessScope:           determineAccessScope(user.Roles),
 		Roles:                 roleNames,
 		Permissions:           permissions,

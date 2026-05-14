@@ -57,7 +57,9 @@ INSERT INTO permissions (uid, code, description) VALUES
     ('perm_shift_write',              'shift:write',              'Create/update shifts'),
     ('perm_permission_request',       'permission:request',       'Submit permission/excuse requests'),
     ('perm_permission_approve',       'permission:approve',       'Approve/reject permission requests'),
-    ('perm_permission_read',          'permission:read',          'View all permission requests across the org')
+    ('perm_permission_read',          'permission:read',          'View all permission requests across the org'),
+    ('perm_employee_profile_changes_read',  'employee-profile-changes:read',  'View employee profile change requests'),
+    ('perm_employee_profile_changes_write', 'employee-profile-changes:write', 'Submit employee profile change requests')
 ON CONFLICT (code) DO NOTHING;
 
 -- ============================================================================
@@ -1197,14 +1199,7 @@ ON CONFLICT (uid) DO NOTHING;
 -- ============================================================================
 -- Attendance Exceptions (053, 054, 055, 056, 064)
 -- ============================================================================
--- Fixed-date exceptions from 053/054
-INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at) VALUES
-    ('aex_seed_20260413_emp02_late',    'emp_00000000000000000000000000000002','2026-04-13','late_arrival',    '2026-04-13 09:18:00','2026-04-13 17:06:00',15,3,  CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('aex_seed_20260414_emp07_early',   'emp_00000000000000000000000000000007','2026-04-14','early_departure', '2026-04-14 08:35:00','2026-04-14 16:40:00',15,5,  CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('aex_seed_20260415_emp02_late',    'emp_00000000000000000000000000000002','2026-04-15','late_arrival',    '2026-04-15 09:24:00','2026-04-15 16:56:00',15,9,  CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('aex_seed_20260415_emp04_miss_out','emp_00000000000000000000000000000004','2026-04-15','missed_punch_out','2026-04-15 08:58:00',NULL,                  15,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
-    ('aex_seed_20260415_emp07_early',   'emp_00000000000000000000000000000007','2026-04-15','early_departure', '2026-04-15 08:28:00','2026-04-15 16:21:00',15,24, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-ON CONFLICT (uid) DO NOTHING;
+-- Fixed-date exceptions from 053/054 (removed duplicates that conflict with 064 generated data)
 
 -- Case exceptions from 055
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at) VALUES
@@ -1213,24 +1208,54 @@ INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception
     ('aex_case_20260420_late',       'emp_00000000000000000000000000000003','2026-04-20','late_arrival',    '2026-04-20 09:22:00', '2026-04-20 17:06:00',15,7,  CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
     ('aex_case_20260420_early',      'emp_00000000000000000000000000000004','2026-04-20','early_departure',  '2026-04-20 08:55:00', '2026-04-20 16:34:00',15,11, CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
     ('aex_case_20260420_absence',    'emp_00000000000000000000000000000005','2026-04-20','absence',          NULL,                   NULL,                  NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-ON CONFLICT (uid) DO NOTHING;
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO UPDATE SET
+    uid = EXCLUDED.uid,
+    check_in = EXCLUDED.check_in,
+    check_out = EXCLUDED.check_out,
+    grace_minutes = EXCLUDED.grace_minutes,
+    minutes_delta = EXCLUDED.minutes_delta,
+    updated_at = CURRENT_TIMESTAMP;
 
 -- Dept exceptions Day B 2026-04-22 (056)
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at)
 SELECT 'aex56_late_'    ||e.uid,e.uid,'2026-04-22','late_arrival',    '2026-04-22 09:25:00','2026-04-22 17:02:00',15,10,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM employees e WHERE e.uid LIKE 'emp56_%_02' ON CONFLICT (uid) DO NOTHING;
+FROM employees e WHERE e.uid LIKE 'emp56_%_02'
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO UPDATE SET
+    uid = EXCLUDED.uid,
+    check_in = EXCLUDED.check_in,
+    check_out = EXCLUDED.check_out,
+    grace_minutes = EXCLUDED.grace_minutes,
+    minutes_delta = EXCLUDED.minutes_delta,
+    updated_at = CURRENT_TIMESTAMP;
 
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at)
 SELECT 'aex56_miss_out_'||e.uid,e.uid,'2026-04-22','missed_punch_out','2026-04-22 08:58:00',NULL,                  15,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM employees e WHERE e.uid LIKE 'emp56_%_03' ON CONFLICT (uid) DO NOTHING;
+FROM employees e WHERE e.uid LIKE 'emp56_%_03'
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO UPDATE SET
+    uid = EXCLUDED.uid,
+    check_in = EXCLUDED.check_in,
+    check_out = EXCLUDED.check_out,
+    grace_minutes = EXCLUDED.grace_minutes,
+    minutes_delta = EXCLUDED.minutes_delta,
+    updated_at = CURRENT_TIMESTAMP;
 
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at)
 SELECT 'aex56_miss_in_' ||e.uid,e.uid,'2026-04-22','missed_punch_in', NULL,'2026-04-22 16:55:00',15,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM employees e WHERE e.uid LIKE 'emp56_%_04' ON CONFLICT (uid) DO NOTHING;
+FROM employees e WHERE e.uid LIKE 'emp56_%_04'
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO UPDATE SET
+    uid = EXCLUDED.uid,
+    check_in = EXCLUDED.check_in,
+    check_out = EXCLUDED.check_out,
+    grace_minutes = EXCLUDED.grace_minutes,
+    minutes_delta = EXCLUDED.minutes_delta,
+    updated_at = CURRENT_TIMESTAMP;
 
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at)
 SELECT 'aex56_absence_' ||e.uid,e.uid,'2026-04-22','absence',          NULL,NULL,NULL,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
-FROM employees e WHERE e.uid LIKE 'emp56_%_05' ON CONFLICT (uid) DO NOTHING;
+FROM employees e WHERE e.uid LIKE 'emp56_%_05'
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO UPDATE SET
+    uid = EXCLUDED.uid,
+    updated_at = CURRENT_TIMESTAMP;
 
 -- Long-range exceptions 180 days (064)
 INSERT INTO attendance_exceptions (uid, employee_uid, attendance_date, exception_type, check_in, check_out, grace_minutes, minutes_delta, created_at, updated_at)
@@ -1276,7 +1301,7 @@ SELECT 'aex60_early_'|| br.employee_uid || '_' || REPLACE(br.day_date::text,'-',
     br.employee_uid, br.day_date, 'early_departure',
     (br.day_date::text||' 08:47:00')::TIMESTAMP,(br.day_date::text||' 15:38:00')::TIMESTAMP,0,82,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP
 FROM base_rows br WHERE NOT br.is_absent AND NOT br.is_missed_punch_out AND NOT br.is_missed_punch_in AND br.is_early_departure
-ON CONFLICT (uid) DO NOTHING;
+ON CONFLICT (employee_uid, attendance_date, exception_type) DO NOTHING;
 
 -- ============================================================================
 -- OTP Code Variants (055)
@@ -1637,3 +1662,199 @@ WHERE lt.code = 'SPECIAL_PAID'
   AND NOT EXISTS (SELECT 1 FROM sub_leave_types s WHERE s.leave_type_uid=lt.uid AND s.name_ar=slt.name_ar)
 ON CONFLICT DO NOTHING;
 
+
+-- SPECIAL_UNPAID sub-types (slt_042-055) – 20260428001722
+INSERT INTO sub_leave_types (uid, leave_type_uid, name_en, name_ar)
+SELECT slt.uid, lt.uid, slt.name_en, slt.name_ar
+FROM leave_types lt
+JOIN (VALUES
+    ('slt_00000000000000000000000000000042','Accompanying a Sick Relative','مرافقة مريض من الأقارب'),
+    ('slt_00000000000000000000000000000043','Accompanying a Sick Spouse','مرافقة الزوج المريض'),
+    ('slt_00000000000000000000000000000044','Accompanying a Sick Child','مرافقة الطفل المريض'),
+    ('slt_00000000000000000000000000000045','Accompanying a Sick Parent','مرافقة الوالد المريض'),
+    ('slt_00000000000000000000000000000046','Accompanying a Sick Sibling','مرافقة الأخ المريض'),
+    ('slt_00000000000000000000000000000047','Accompanying a Sick Grandparent','مرافقة الجد المريض'),
+    ('slt_00000000000000000000000000000048','Accompanying a Sick Grandchild','مرافقة الحفيد المريض'),
+    ('slt_00000000000000000000000000000049','Accompanying a Sick Uncle/Aunt','مرافقة العم/الخال المريض'),
+    ('slt_00000000000000000000000000000050','Accompanying a Sick Nephew/Niece','مرافقة ابن الأخ/الأخت المريض'),
+    ('slt_00000000000000000000000000000051','Accompanying a Sick Cousin','مرافقة ابن العم/الخال المريض'),
+    ('slt_00000000000000000000000000000052','Accompanying a Sick In-Law','مرافقة الحماة/الحمو المريض'),
+    ('slt_00000000000000000000000000000053','Accompanying a Sick Brother/Sister-in-Law','مرافقة الصهر/الزوجة المريض'),
+    ('slt_00000000000000000000000000000054','Accompanying a Sick Son/Daughter-in-Law','مرافقة الكنة/الصهر المريض'),
+    ('slt_00000000000000000000000000000055','Other','أخرى')
+) AS slt(uid, name_en, name_ar) ON TRUE
+WHERE lt.code = 'SPECIAL_UNPAID'
+  AND NOT EXISTS (SELECT 1 FROM sub_leave_types s WHERE s.leave_type_uid=lt.uid AND s.name_ar=slt.name_ar)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- Shifts
+-- (051_add_shifts_and_assignments)
+-- ============================================================================
+INSERT INTO shifts (uid, start_time, end_time, grace_minutes, created_at, updated_at) VALUES
+    ('shf_general_seed', '08:00', '16:00', 15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (uid) DO NOTHING;
+
+-- ============================================================================
+-- HR Staff Role
+-- (20260508123000_create_hr_staff_role_for_profile_changes)
+-- ============================================================================
+INSERT INTO roles (uid, name, description, scope_type, is_system, created_at, updated_at)
+VALUES (
+    'role_hr_staff',
+    'HR Staff',
+    'HR staff with employee visibility and profile change submission access',
+    'global',
+    FALSE,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+) ON CONFLICT (uid) DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id, created_at)
+SELECT r.id, p.id, CURRENT_TIMESTAMP
+FROM roles r
+JOIN permissions p ON p.code IN (
+    'employees:read',
+    'employee-profile-changes:read',
+    'employee-profile-changes:write'
+)
+WHERE r.uid = 'role_hr_staff'
+ON CONFLICT DO NOTHING;
+
+-- Clean up profile change permissions from other roles (they should use HR Staff role)
+DELETE FROM role_permissions
+WHERE role_id IN (
+    SELECT id
+    FROM roles
+    WHERE uid IN ('role_university_human_resources', 'role_hr_manager', 'role_department_manager')
+)
+  AND permission_id IN (
+    SELECT id
+    FROM permissions
+    WHERE code IN ('employee-profile-changes:read', 'employee-profile-changes:write')
+);
+
+-- ============================================================================
+-- University Leadership Roles (Restored)
+-- (20260510130000_restore_leadership_roles, 20260511090000_seed_university_leadership_roles)
+-- ============================================================================
+INSERT INTO roles (uid, name, description, is_system, created_at, updated_at)
+VALUES
+    ('role_university_president', 'University President', 'University President role', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('role_vice_president',       'Vice President',       'Vice President role',       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (uid) DO NOTHING;
+
+-- Grant department read access so leaders can view the org chart
+INSERT INTO role_permissions (role_id, permission_id, created_at)
+SELECT r.id, p.id, CURRENT_TIMESTAMP
+FROM roles r
+JOIN permissions p ON p.code IN ('departments:read')
+WHERE r.uid IN ('role_university_president', 'role_vice_president', 'role_dean')
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- University Leadership People
+-- (20260511100000_seed_university_leadership_people)
+-- ============================================================================
+INSERT INTO employees (
+    uid, name, mobile, government_id, university_id, email,
+    hire_date, status, department_uid, shift_uid, created_at, updated_at
+)
+VALUES
+    (
+        'emp_university_president_20260508', 'احمد عادل عبد الحكيم',
+        '+201000000074', '299000000074', 'U20260508PRES',
+        'president.seed@university.edu.eg',
+        '2026-05-08', 'active', NULL, 'shf_general_seed',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    ),
+    (
+        'emp_vice_president_20260508', 'عفاف العوفي',
+        '+201000000075', '299000000075', 'U20260508VP',
+        'vice.president.seed@university.edu.eg',
+        '2026-05-08', 'active', NULL, 'shf_general_seed',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    ),
+    (
+        'emp_dean_engineering_20260508', 'وائل المغلاني',
+        '+201000000076', '299000000076', 'U20260508DEANENG',
+        'dean.engineering.seed@university.edu.eg',
+        '2026-05-08', 'active', NULL, 'shf_general_seed',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    )
+ON CONFLICT (uid) DO NOTHING;
+
+INSERT INTO users (uid, phone, employee_uid, is_active, created_at, updated_at)
+VALUES
+    ('usr_university_president_20260508', '+201000000074', 'emp_university_president_20260508', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('usr_vice_president_20260508',       '+201000000075', 'emp_vice_president_20260508',       TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('usr_dean_engineering_20260508',     '+201000000076', 'emp_dean_engineering_20260508',     TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT (phone) DO NOTHING;
+
+-- Assign base employee role
+INSERT INTO user_roles (user_id, role_id, department_uid, created_at)
+SELECT u.id, r.id, NULL, CURRENT_TIMESTAMP
+FROM users u, roles r
+WHERE u.uid IN ('usr_university_president_20260508', 'usr_vice_president_20260508', 'usr_dean_engineering_20260508')
+  AND r.uid = 'role_employee'
+ON CONFLICT DO NOTHING;
+
+-- Assign leadership roles
+INSERT INTO user_roles (user_id, role_id, department_uid, created_at)
+SELECT u.id, r.id, NULL, CURRENT_TIMESTAMP FROM users u, roles r
+WHERE u.uid = 'usr_university_president_20260508' AND r.uid = 'role_university_president'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id, department_uid, created_at)
+SELECT u.id, r.id, NULL, CURRENT_TIMESTAMP FROM users u, roles r
+WHERE u.uid = 'usr_vice_president_20260508' AND r.uid = 'role_vice_president'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO user_roles (user_id, role_id, department_uid, created_at)
+SELECT u.id, r.id, NULL, CURRENT_TIMESTAMP FROM users u, roles r
+WHERE u.uid = 'usr_dean_engineering_20260508' AND r.uid = 'role_dean'
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
+-- Leadership Manager Relationships
+-- (20260511110000_seed_leadership_manager_relationships)
+-- ============================================================================
+-- Wire the three seeded leaders into a reporting chain
+UPDATE employees SET manager_uid = 'emp_university_president_20260508'
+    WHERE uid = 'emp_vice_president_20260508';
+
+UPDATE employees SET manager_uid = 'emp_vice_president_20260508'
+    WHERE uid = 'emp_dean_engineering_20260508';
+
+-- Bootstrap existing department managers → dean
+UPDATE employees
+SET manager_uid = 'emp_dean_engineering_20260508'
+WHERE uid IN (
+    SELECT e.uid FROM employees e
+    JOIN users u ON u.employee_uid = e.uid
+    JOIN user_roles ur ON ur.user_id = u.id
+    JOIN roles r ON r.id = ur.role_id AND r.uid = 'role_department_manager'
+);
+
+-- Bootstrap regular employees → their department manager
+UPDATE employees
+SET manager_uid = (
+    SELECT mgr_emp.uid FROM users mgr_u
+    JOIN user_roles ur ON ur.user_id = mgr_u.id
+    JOIN roles r ON r.id = ur.role_id AND r.uid = 'role_department_manager'
+    JOIN employees mgr_emp ON mgr_emp.uid = mgr_u.employee_uid
+    WHERE ur.department_uid = employees.department_uid
+    LIMIT 1
+)
+WHERE manager_uid IS NULL
+    AND department_uid IS NOT NULL
+    AND uid NOT IN (
+        SELECT e.uid FROM employees e
+        JOIN users u ON u.employee_uid = e.uid
+        JOIN user_roles ur ON ur.user_id = u.id
+        JOIN roles r ON r.id = ur.role_id AND r.uid = 'role_department_manager'
+    );
+
+-- ============================================================================
+-- END OF CONSOLIDATED SEED DATA
+-- ============================================================================

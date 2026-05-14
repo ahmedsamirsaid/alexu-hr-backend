@@ -99,10 +99,11 @@ func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateUserRequest struct {
-	Phone       *string `json:"phone"`
-	Password    *string `json:"password"`
-	EmployeeUID *string `json:"employeeUid"`
-	IsActive    *bool   `json:"isActive"`
+	Phone             *string `json:"phone"`
+	Password          *string `json:"password"`
+	EmployeeUID       *string `json:"employeeUid"`
+	IsActive          *bool   `json:"isActive"`
+	PreferredLanguage *string `json:"preferredLanguage"`
 }
 
 func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
@@ -120,11 +121,12 @@ func (h *UserHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.updateUserUC.Execute(r.Context(), usecases.UpdateUserInput{
-		UserUID:     userUID,
-		Phone:       req.Phone,
-		Password:    req.Password,
-		EmployeeUID: req.EmployeeUID,
-		IsActive:    req.IsActive,
+		UserUID:           userUID,
+		Phone:             req.Phone,
+		Password:          req.Password,
+		EmployeeUID:       req.EmployeeUID,
+		IsActive:          req.IsActive,
+		PreferredLanguage: req.PreferredLanguage,
 	})
 	if err != nil {
 		switch {

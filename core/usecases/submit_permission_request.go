@@ -388,7 +388,7 @@ func (uc *SubmitPermissionRequestUseCase) notifyApprovers(roleUID string, employ
 	}
 	params := map[string]interface{}{
 		"EmployeeName":   employee.Name,
-		"PermissionType": request.Type.NameAR(),
+		"PermissionType": ports.LocalizableString{Ar: request.Type.NameAR(), En: request.Type.NameEN()},
 	}
 	data := ports.NotificationData{
 		"type":       "pending_permission",

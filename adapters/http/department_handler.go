@@ -19,6 +19,7 @@ type DepartmentHandler struct {
 	assignMgrUC  *usecases.AssignDepartmentManagerUseCase
 	removeMgrUC  *usecases.RemoveDepartmentManagerUseCase
 	i18nService  ports.I18nService
+	orgChartUC   *usecases.OrgChartUseCase
 }
 
 func NewDepartmentHandler(
@@ -29,6 +30,7 @@ func NewDepartmentHandler(
 	assignMgrUC *usecases.AssignDepartmentManagerUseCase,
 	removeMgrUC *usecases.RemoveDepartmentManagerUseCase,
 	i18nService ports.I18nService,
+	orgChartUC *usecases.OrgChartUseCase,
 ) *DepartmentHandler {
 	return &DepartmentHandler{
 		listDeptUC:   listDeptUC,
@@ -38,6 +40,7 @@ func NewDepartmentHandler(
 		assignMgrUC:  assignMgrUC,
 		removeMgrUC:  removeMgrUC,
 		i18nService:  i18nService,
+		orgChartUC:   orgChartUC,
 	}
 }
 
@@ -82,6 +85,20 @@ type DepartmentDetailResponse struct {
 	Manager         *DepartmentManagerResponse `json:"manager"`
 	CreatedAt       string                     `json:"createdAt"`
 	UpdatedAt       string                     `json:"updatedAt"`
+}
+
+type OrgChartNodeResponse struct {
+	UID              string                 `json:"uid"`
+	Name             string                 `json:"name"`
+	RoleName         *string                `json:"roleName,omitempty"`
+	DepartmentUID    *string                `json:"departmentUid,omitempty"`
+	DepartmentNameEN string                 `json:"departmentNameEn,omitempty"`
+	DepartmentNameAR *string                `json:"departmentNameAr,omitempty"`
+	DirectReports    []OrgChartNodeResponse `json:"directReports"`
+}
+
+type OrgChartResponse struct {
+	Roots []OrgChartNodeResponse `json:"roots"`
 }
 
 type ListDepartmentsResponse struct {
@@ -382,6 +399,30 @@ func (h *DepartmentHandler) RemoveManager(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusOK)
 }
 
+// GetOrgChart handles GET /api/v1/admin/departments/org-chart
+func (h *DepartmentHandler) GetOrgChart(w http.ResponseWriter, r *http.Request) {
+	claims := GetClaims(r)
+
+	input := usecases.OrgChartInput{}
+	if claims != nil && !claims.HasPermission("*") && claims.IsDepartmentScope() {
+		input.DepartmentUIDs = append([]string(nil), claims.ManagedDepartmentUIDs...)
+	}
+
+	output, err := h.orgChartUC.Execute(r.Context(), input)
+	if err != nil {
+		slog.Error("department_handler.GetOrgChart.execute_usecase", "error", err)
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	roots := make([]OrgChartNodeResponse, 0, len(output.Roots))
+	for _, node := range output.Roots {
+		roots = append(roots, toOrgChartNodeResponse(node))
+	}
+
+	writeJSON(w, http.StatusOK, OrgChartResponse{Roots: roots})
+}
+
 func canAccessDepartment(claims *JWTClaims, departmentUID string) bool {
 	if claims == nil {
 		return false
@@ -393,4 +434,20 @@ func canAccessDepartment(claims *JWTClaims, departmentUID string) bool {
 		return claims.HasDepartmentAccess(departmentUID)
 	}
 	return false
+}
+
+func toOrgChartNodeResponse(node *usecases.OrgChartNode) OrgChartNodeResponse {
+	reports := make([]OrgChartNodeResponse, 0, len(node.DirectReports))
+	for _, child := range node.DirectReports {
+		reports = append(reports, toOrgChartNodeResponse(child))
+	}
+	return OrgChartNodeResponse{
+		UID:              node.UID,
+		Name:             node.Name,
+		RoleName:         node.RoleName,
+		DepartmentUID:    node.DepartmentUID,
+		DepartmentNameEN: node.DepartmentNameEN,
+		DepartmentNameAR: node.DepartmentNameAR,
+		DirectReports:    reports,
+	}
 }

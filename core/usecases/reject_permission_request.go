@@ -181,7 +181,7 @@ func (uc *RejectPermissionRequestUseCase) notifyRequesterRejected(employeeUID st
 		return
 	}
 	params := map[string]interface{}{
-		"PermissionType": permission.Type.NameAR(),
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
 	}
 	if comments != nil && *comments != "" {
 		params["Comments"] = *comments

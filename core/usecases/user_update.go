@@ -9,11 +9,12 @@ import (
 )
 
 type UpdateUserInput struct {
-	UserUID     string
-	Phone       *string
-	Password    *string
-	EmployeeUID *string
-	IsActive    *bool
+	UserUID           string
+	Phone             *string
+	Password          *string
+	EmployeeUID       *string
+	IsActive          *bool
+	PreferredLanguage *string
 }
 
 type UpdateUserUseCase struct {
@@ -109,6 +110,11 @@ func (uc *UpdateUserUseCase) Execute(ctx context.Context, input UpdateUserInput)
 			changedFields = append(changedFields, status)
 		}
 		user.IsActive = *input.IsActive
+	}
+
+	if input.PreferredLanguage != nil && *input.PreferredLanguage != user.PreferredLanguage {
+		changedFields = append(changedFields, fmt.Sprintf("preferred_language (%s → %s)", user.PreferredLanguage, *input.PreferredLanguage))
+		user.PreferredLanguage = *input.PreferredLanguage
 	}
 
 	if passwordChanged {

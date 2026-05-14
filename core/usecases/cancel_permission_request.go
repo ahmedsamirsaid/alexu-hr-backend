@@ -172,7 +172,7 @@ func (uc *CancelPermissionRequestUseCase) notifyApproverCancelled(approverEmploy
 		return
 	}
 	params := map[string]interface{}{
-		"PermissionType": request.Type.NameAR(),
+		"PermissionType": ports.LocalizableString{Ar: request.Type.NameAR(), En: request.Type.NameEN()},
 		"Date":           request.PermissionDate.Format("2006-01-02"),
 	}
 	data := ports.NotificationData{

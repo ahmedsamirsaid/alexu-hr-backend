@@ -185,8 +185,10 @@ func (r *HolidayDefinitionRepository) scanHolidayDefinition(row *sql.Row) (*doma
 		return nil, err
 	}
 	def.Date = dateValue.Time
+	def.Date = dateValue.Time
 	def.CreatedAt = createdAt.Time
 	def.UpdatedAt = updatedAt.Time
+	def.DepartmentUIDs = parseDepartmentUIDs(departmentUIDs)
 	def.DepartmentUIDs = parseDepartmentUIDs(departmentUIDs)
 	return &def, nil
 }
@@ -202,8 +204,10 @@ func (r *HolidayDefinitionRepository) scanHolidayDefinitionRow(rows *sql.Rows) (
 		return nil, err
 	}
 	def.Date = dateValue.Time
+	def.Date = dateValue.Time
 	def.CreatedAt = createdAt.Time
 	def.UpdatedAt = updatedAt.Time
+	def.DepartmentUIDs = parseDepartmentUIDs(departmentUIDs)
 	def.DepartmentUIDs = parseDepartmentUIDs(departmentUIDs)
 	return &def, nil
 }
@@ -242,6 +246,7 @@ func (r *HolidayDefinitionRepository) replaceHolidayDepartments(ctx context.Cont
 	return nil
 }
 
+
 func parseDepartmentUIDs(value sql.NullString) []string {
 	if !value.Valid || strings.TrimSpace(value.String) == "" {
 		return nil
@@ -265,7 +270,6 @@ func parseDepartmentUIDs(value sql.NullString) []string {
 	sort.Strings(result)
 	return result
 }
-
 func normalizeDepartmentUIDs(departmentUIDs []string) []string {
 	if len(departmentUIDs) == 0 {
 		return nil

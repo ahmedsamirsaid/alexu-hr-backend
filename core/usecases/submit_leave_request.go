@@ -477,7 +477,7 @@ func (uc *SubmitLeaveRequestUseCase) handleApprovalFlow(
 	}
 
 	if step1RoleUID != "" {
-		go uc.notifyApprovers(step1RoleUID, departmentUID, employee.Name, leaveType.NameAR, leaveRequest.UID)
+		go uc.notifyApprovers(step1RoleUID, departmentUID, employee.Name, leaveType.NameAR, leaveType.NameEN, leaveRequest.UID)
 	}
 
 	return &SubmitLeaveRequestOutput{
@@ -678,7 +678,8 @@ func (uc *SubmitLeaveRequestUseCase) createLeaveRequestDocuments(
 	return outputs, nil
 }
 
-func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeName, requestUID string) {
+
+func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, employeeName, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("submit_leave_request.notifyApprovers.get_approvers", "error", err)
@@ -696,7 +697,7 @@ func (uc *SubmitLeaveRequestUseCase) notifyApprovers(roleUID, departmentUID, emp
 
 	params := map[string]interface{}{
 		"EmployeeName":  employeeName,
-		"LeaveTypeName": leaveTypeName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
 	}
 	data := ports.NotificationData{
 		"type":       "pending_approval",

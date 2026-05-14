@@ -297,32 +297,32 @@ func newDepartmentReportTestDB(t *testing.T) *dbadapter.SQLiteDB {
 	ctx := context.Background()
 	statements := []string{
 		`CREATE TABLE employees (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
 			uid TEXT UNIQUE NOT NULL,
 			name TEXT NOT NULL,
 			mobile TEXT NOT NULL,
 			government_id TEXT NOT NULL,
 			university_id TEXT NOT NULL,
 			email TEXT,
-			hire_date TEXT NOT NULL,
+			hire_date DATE NOT NULL,
 			status TEXT NOT NULL,
 			department_uid TEXT,
 			shift_uid TEXT,
-			created_at TEXT DEFAULT (datetime('now')),
-			updated_at TEXT DEFAULT (datetime('now'))
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE TABLE attendance_exceptions (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
 			uid TEXT UNIQUE NOT NULL,
 			employee_uid TEXT NOT NULL,
-			attendance_date TEXT NOT NULL,
+			attendance_date DATE NOT NULL,
 			exception_type TEXT NOT NULL,
 			check_in TEXT,
 			check_out TEXT,
 			grace_minutes INTEGER,
 			minutes_delta INTEGER,
-			created_at TEXT DEFAULT (datetime('now')),
-			updated_at TEXT DEFAULT (datetime('now')),
+			created_at TIMESTAMP,
+			updated_at TIMESTAMP,
 			UNIQUE(employee_uid, attendance_date, exception_type)
 		);`,
 	}
@@ -342,7 +342,7 @@ func seedReportEmployee(t *testing.T, db ports.DB, uid, name, departmentUID, hir
 		INSERT INTO employees (
 			uid, name, mobile, government_id, university_id, hire_date, status, department_uid
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`, uid, name, "01000000000", uid+"_gov", uid+"_uni", hireDate, domain.EmployeeStatusActive, departmentUID)
 	if err != nil {
 		t.Fatalf("failed to seed employee %s: %v", uid, err)

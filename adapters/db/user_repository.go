@@ -68,14 +68,14 @@ func (r *UserRepository) Create(ctx context.Context, q ports.Querier, user *doma
 func (r *UserRepository) Update(ctx context.Context, q ports.Querier, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET phone = $1, password_hash = $2, employee_uid = $3, is_active = $4, updated_at = $5
-		WHERE id = $6`
+		SET phone = $1, password_hash = $2, employee_uid = $3, is_active = $4, preferred_language = $5, updated_at = $6
+		WHERE id = $7`
 
 	user.UpdatedAt = time.Now()
 
 	_, err := q.ExecContext(ctx, query,
 		user.Phone, user.PasswordHash, user.EmployeeUID,
-		user.IsActive, user.UpdatedAt, user.ID)
+		user.IsActive, user.PreferredLanguage, user.UpdatedAt, user.ID)
 	if err != nil {
 		slog.Error("user_repository.Update.exec_query", "error", err, "uid", user.UID)
 	}

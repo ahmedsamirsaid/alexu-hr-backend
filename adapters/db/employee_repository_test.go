@@ -231,6 +231,123 @@ func TestEmployeeRepository_Create_WithEmail(t *testing.T) {
 	}
 }
 
+func TestEmployeeRepository_Create_WithExtendedProfileFields(t *testing.T) {
+	tdb := NewTestDB(t)
+	defer tdb.Close()
+
+	repo := NewEmployeeRepository()
+	ctx := context.Background()
+
+	telephone := "0223456789"
+	gender := "male"
+	yearObtained := 2012
+	appointmentDecisionNumber := "12345"
+	appointmentType := "new"
+	departmentName := "xxx"
+	natureOfAppointment := "permanent"
+	grade := "3.5"
+	workEntity := "HR"
+	decisionNumber := int64(42)
+	personalPhotoURL := "minio://employees/photo.jpg"
+	dateOfBirth := time.Date(1990, 5, 10, 0, 0, 0, 0, time.UTC)
+	subscriptionDate := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	actualAppointmentReappointmentDate := time.Date(2015, 2, 2, 0, 0, 0, 0, time.UTC)
+	appointmentDecisionDate := time.Date(2015, 2, 2, 0, 0, 0, 0, time.UTC)
+
+	employee := domain.NewEmployee(
+		"Ahmed",
+		"01077777777",
+		"gov-profile-1",
+		"uni-profile-1",
+		time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	employee.TelephoneNumber = &telephone
+	employee.PersonWithSpecialNeeds = true
+	employee.DateOfBirth = &dateOfBirth
+	employee.Gender = &gender
+	employee.YearObtained = &yearObtained
+	employee.ActualAppointmentReappointmentDate = &actualAppointmentReappointmentDate
+	employee.AppointmentDecisionDate = &appointmentDecisionDate
+	employee.AppointmentDecisionNumber = &appointmentDecisionNumber
+	employee.AppointmentType = &appointmentType
+	employee.DepartmentName = &departmentName
+	employee.Grade = &grade
+	employee.WorkEntity = &workEntity
+	employee.SolidarityFund = true
+	employee.SubscriptionDate = &subscriptionDate
+	employee.DecisionNumber = &decisionNumber
+	employee.NatureOfAppointment = &natureOfAppointment
+	employee.PersonalPhotoURL = &personalPhotoURL
+	employee.Reappointment = true
+	employee.AppointmentSeniorityOrGradeWithdrawal = true
+
+	if err := repo.Create(ctx, tdb.SQLiteDB, employee); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	found, err := repo.GetByID(ctx, tdb.SQLiteDB, employee.ID)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if found.TelephoneNumber == nil || *found.TelephoneNumber != telephone {
+		t.Fatalf("TelephoneNumber = %v, want %q", found.TelephoneNumber, telephone)
+	}
+	if !found.PersonWithSpecialNeeds {
+		t.Fatal("PersonWithSpecialNeeds = false, want true")
+	}
+	if found.DateOfBirth == nil || !found.DateOfBirth.Equal(dateOfBirth) {
+		t.Fatalf("DateOfBirth = %v, want %v", found.DateOfBirth, dateOfBirth)
+	}
+	if found.Gender == nil || *found.Gender != gender {
+		t.Fatalf("Gender = %v, want %q", found.Gender, gender)
+	}
+	if found.YearObtained == nil || *found.YearObtained != yearObtained {
+		t.Fatalf("YearObtained = %v, want %d", found.YearObtained, yearObtained)
+	}
+	if found.ActualAppointmentReappointmentDate == nil || !found.ActualAppointmentReappointmentDate.Equal(actualAppointmentReappointmentDate) {
+		t.Fatalf("ActualAppointmentReappointmentDate = %v, want %v", found.ActualAppointmentReappointmentDate, actualAppointmentReappointmentDate)
+	}
+	if found.AppointmentDecisionDate == nil || !found.AppointmentDecisionDate.Equal(appointmentDecisionDate) {
+		t.Fatalf("AppointmentDecisionDate = %v, want %v", found.AppointmentDecisionDate, appointmentDecisionDate)
+	}
+	if found.AppointmentDecisionNumber == nil || *found.AppointmentDecisionNumber != appointmentDecisionNumber {
+		t.Fatalf("AppointmentDecisionNumber = %v, want %q", found.AppointmentDecisionNumber, appointmentDecisionNumber)
+	}
+	if found.AppointmentType == nil || *found.AppointmentType != appointmentType {
+		t.Fatalf("AppointmentType = %v, want %q", found.AppointmentType, appointmentType)
+	}
+	if found.DepartmentName == nil || *found.DepartmentName != departmentName {
+		t.Fatalf("DepartmentName = %v, want %q", found.DepartmentName, departmentName)
+	}
+	if found.Grade == nil || *found.Grade != grade {
+		t.Fatalf("Grade = %v, want %v", found.Grade, grade)
+	}
+	if found.WorkEntity == nil || *found.WorkEntity != workEntity {
+		t.Fatalf("WorkEntity = %v, want %q", found.WorkEntity, workEntity)
+	}
+	if !found.SolidarityFund {
+		t.Fatal("SolidarityFund = false, want true")
+	}
+	if found.SubscriptionDate == nil || !found.SubscriptionDate.Equal(subscriptionDate) {
+		t.Fatalf("SubscriptionDate = %v, want %v", found.SubscriptionDate, subscriptionDate)
+	}
+	if found.DecisionNumber == nil || *found.DecisionNumber != decisionNumber {
+		t.Fatalf("DecisionNumber = %v, want %d", found.DecisionNumber, decisionNumber)
+	}
+	if found.NatureOfAppointment == nil || *found.NatureOfAppointment != natureOfAppointment {
+		t.Fatalf("NatureOfAppointment = %v, want %q", found.NatureOfAppointment, natureOfAppointment)
+	}
+	if found.PersonalPhotoURL == nil || *found.PersonalPhotoURL != personalPhotoURL {
+		t.Fatalf("PersonalPhotoURL = %v, want %q", found.PersonalPhotoURL, personalPhotoURL)
+	}
+	if !found.Reappointment {
+		t.Fatal("Reappointment = false, want true")
+	}
+	if !found.AppointmentSeniorityOrGradeWithdrawal {
+		t.Fatal("AppointmentSeniorityOrGradeWithdrawal = false, want true")
+	}
+}
+
 func TestEmployeeRepository_Transaction(t *testing.T) {
 	tdb := NewTestDB(t)
 	defer tdb.Close()

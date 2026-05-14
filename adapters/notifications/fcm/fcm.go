@@ -127,10 +127,32 @@ func (s *FCMNotificationService) userLocale(userUID string) string {
 	return user.PreferredLanguage
 }
 
+// resolveParams replaces any LocalizableString values in params with the string
+// appropriate for the given locale, returning a new map safe for template execution.
+func resolveParams(params map[string]interface{}, locale string) map[string]interface{} {
+	if len(params) == 0 {
+		return params
+	}
+	resolved := make(map[string]interface{}, len(params))
+	for k, v := range params {
+		if ls, ok := v.(ports.LocalizableString); ok {
+			if locale == "en" {
+				resolved[k] = ls.En
+			} else {
+				resolved[k] = ls.Ar
+			}
+		} else {
+			resolved[k] = v
+		}
+	}
+	return resolved
+}
+
 // translate resolves a translation key with optional params for the given locale.
 func (s *FCMNotificationService) translate(locale, key string, params map[string]interface{}) string {
-	if len(params) > 0 {
-		return s.i18n.TLocaleWithParams(locale, key, params)
+	resolved := resolveParams(params, locale)
+	if len(resolved) > 0 {
+		return s.i18n.TLocaleWithParams(locale, key, resolved)
 	}
 	return s.i18n.TLocale(locale, key)
 }

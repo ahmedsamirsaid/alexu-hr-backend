@@ -269,7 +269,7 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Get data for notification before commit
 	var requesterUID string
-	var leaveTypeNameNotif string
+	var leaveTypeNameAR, leaveTypeNameEN string
 	var nextStepRoleUID string
 	var departmentUID string
 	var requesterNameNotif string
@@ -277,7 +277,8 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	if leaveRequest != nil {
 		lt, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if lt != nil {
-			leaveTypeNameNotif = lt.NameAR
+			leaveTypeNameAR = lt.NameAR
+			leaveTypeNameEN = lt.NameEN
 		}
 	}
 
@@ -298,9 +299,9 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 
 	// Send notification after commit (non-blocking, uses background context)
 	if isFinalApproval && requesterUID != "" {
-		go uc.notifyRequesterApproved(requesterUID, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyRequesterApproved(requesterUID, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	} else if nextStepRoleUID != "" {
-		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterNameNotif, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyNextStepApprovers(nextStepRoleUID, departmentUID, requesterNameNotif, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	}
 
 	return &ApproveRequestOutput{
@@ -309,7 +310,7 @@ func (uc *ApproveRequestUseCase) Execute(ctx context.Context, input ApproveReque
 	}, nil
 }
 
-func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeName, requestUID string) {
+func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("approve_request.notifyRequesterApproved.no_user", "employee_uid", employeeUID)
@@ -317,7 +318,7 @@ func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeN
 	}
 
 	params := map[string]interface{}{
-		"LeaveTypeName": leaveTypeName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
 	}
 	data := ports.NotificationData{
 		"type":       "request_approved",
@@ -336,7 +337,7 @@ func (uc *ApproveRequestUseCase) notifyRequesterApproved(employeeUID, leaveTypeN
 	}
 }
 
-func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID, requesterName, leaveTypeName, requestUID string) {
+func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID, requesterName, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	approvers, err := uc.roleRepo.GetUsersByRoleAndDepartment(context.Background(), uc.db, roleUID, &departmentUID)
 	if err != nil {
 		slog.Error("approve_request.notifyNextStepApprovers.get_approvers", "error", err, "role_uid", roleUID)
@@ -355,7 +356,7 @@ func (uc *ApproveRequestUseCase) notifyNextStepApprovers(roleUID, departmentUID,
 
 	params := map[string]interface{}{
 		"EmployeeName":  requesterName,
-		"LeaveTypeName": leaveTypeName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
 	}
 	data := ports.NotificationData{
 		"type":       "pending_approval",

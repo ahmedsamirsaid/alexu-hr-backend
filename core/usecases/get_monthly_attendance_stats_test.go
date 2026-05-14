@@ -345,7 +345,7 @@ func TestGetMonthlyAttendanceStatsUseCaseExecute_WithWorkingDayBreakdown(t *test
 	ctx := context.Background()
 	for _, statement := range []string{
 		`CREATE TABLE leave_types (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
 			uid TEXT UNIQUE NOT NULL,
 			name_en TEXT NOT NULL
 		);`,

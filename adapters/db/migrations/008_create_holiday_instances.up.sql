@@ -5,7 +5,7 @@ CREATE TABLE holiday_instances (
     year INTEGER NOT NULL,
     actual_date TEXT NOT NULL,
     observed_date TEXT NOT NULL,
-    is_confirmed INTEGER DEFAULT 0,
+    is_confirmed BOOLEAN DEFAULT false,
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

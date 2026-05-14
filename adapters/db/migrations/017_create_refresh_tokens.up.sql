@@ -3,7 +3,7 @@ CREATE TABLE refresh_tokens (
     token_hash TEXT UNIQUE NOT NULL,
     user_id INTEGER NOT NULL,
     expires_at TIMESTAMP NOT NULL,
-    revoked INTEGER DEFAULT 0,
+    revoked BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

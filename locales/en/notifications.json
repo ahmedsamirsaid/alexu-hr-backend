@@ -10,7 +10,31 @@
     },
     "pending_approval": {
       "title": "Pending Approval",
-      "body": "{{.EmployeeName}} submitted a leave request requiring your approval"
+      "body": "{{.EmployeeName}} submitted a {{.LeaveTypeName}} leave request requiring your approval"
+    },
+    "permission_approved": {
+      "title": "Permission Request Approved",
+      "body": "Your {{.PermissionType}} request has been approved"
+    },
+    "permission_rejected": {
+      "title": "Permission Request Rejected",
+      "body": "Your {{.PermissionType}} request has been rejected"
+    },
+    "permission_cancelled": {
+      "title": "Approved Permission Cancelled",
+      "body": "{{.PermissionType}} — {{.Date}}"
+    },
+    "pending_permission": {
+      "title": "Permission Request Pending Approval",
+      "body": "{{.EmployeeName}} submitted a {{.PermissionType}} request requiring your approval"
+    },
+    "missing_check_in": {
+      "title": "Check-In Reminder",
+      "body": "Grace period ended and check-in has not been recorded yet"
+    },
+    "missing_check_out": {
+      "title": "Check-Out Reminder",
+      "body": "Work time has ended and check-out has not been recorded yet"
     },
     "attendance_reminder": {
       "title": "Attendance Reminder",

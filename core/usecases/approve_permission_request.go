@@ -216,7 +216,7 @@ func (uc *ApprovePermissionRequestUseCase) notifyRequesterApproved(employeeUID s
 		return
 	}
 	params := map[string]interface{}{
-		"PermissionType": permission.Type.NameAR(),
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
 	}
 	data := ports.NotificationData{
 		"type":       "permission_approved",
@@ -244,7 +244,7 @@ func (uc *ApprovePermissionRequestUseCase) notifyNextStepApprovers(roleUID, depa
 		userUIDs[i] = u.UID
 	}
 	params := map[string]interface{}{
-		"PermissionType": permission.Type.NameAR(),
+		"PermissionType": ports.LocalizableString{Ar: permission.Type.NameAR(), En: permission.Type.NameEN()},
 		"EmployeeName":   requester.Name,
 	}
 	data := ports.NotificationData{

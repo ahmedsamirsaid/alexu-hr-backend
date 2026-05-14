@@ -6,7 +6,7 @@ CREATE TABLE employees (
     government_id TEXT UNIQUE NOT NULL,
     university_id TEXT UNIQUE NOT NULL,
     email TEXT,
-    hire_date TEXT NOT NULL,
+    hire_date DATE NOT NULL,
     status TEXT DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

@@ -4,7 +4,7 @@ CREATE TABLE departments (
     code TEXT UNIQUE NOT NULL,
     name_en TEXT NOT NULL,
     name_ar TEXT,
-    is_active INTEGER DEFAULT 1,
+    is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -63,21 +63,22 @@ const (
 // ---------------------------------------------------------------------------
 
 const (
-	EntityAttendanceRecord = "attendance_record"
-	EntityLeaveRequest     = "leave_request"
-	EntityLeaveRecord      = "leave_record"
-	EntityApprovalRequest  = "approval_request"
-	EntityEmployee         = "employee"
-	EntityUser             = "user"
-	EntityDepartment       = "department"
-	EntityRole             = "role"
-	EntityApprovalFlow     = "approval_flow"
-	EntityApprovalFlowStep = "approval_flow_step"
-	EntityLeaveType        = "leave_type"
-	EntityShift            = "shift"
-	EntityAttendanceDevice = "attendance_device"
-	EntityLeaveBalance     = "leave_balance"
-	EntityHoliday          = "holiday"
+	EntityAttendanceRecord             = "attendance_record"
+	EntityLeaveRequest                 = "leave_request"
+	EntityLeaveRecord                  = "leave_record"
+	EntityApprovalRequest              = "approval_request"
+	EntityEmployee                     = "employee"
+	EntityUser                         = "user"
+	EntityDepartment                   = "department"
+	EntityRole                         = "role"
+	EntityApprovalFlow                 = "approval_flow"
+	EntityApprovalFlowStep             = "approval_flow_step"
+	EntityLeaveType                    = "leave_type"
+	EntityShift                        = "shift"
+	EntityAttendanceDevice             = "attendance_device"
+	EntityLeaveBalance                 = "leave_balance"
+	EntityHoliday                      = "holiday"
+	EntityEmployeeProfileChangeRequest = "employee_profile_change_request"
 )
 
 // ---------------------------------------------------------------------------
@@ -225,7 +226,7 @@ func (a *auditorImpl) persist(ctx context.Context, b *Builder) {
 		OccurredAt: time.Now(),
 	}
 
-	// Retry logic for database busy errors
+	// Retry logic for SQLite busy errors
 	maxRetries := 3
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		err := a.repo.Create(ctx, a.db, entry)

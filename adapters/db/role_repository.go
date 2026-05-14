@@ -395,3 +395,63 @@ func (r *RoleRepository) GetManagedDepartmentUIDs(ctx context.Context, q ports.Q
 
 	return managedDepartmentUIDs, nil
 }
+
+
+// GetRoleNamesByEmployeeUIDs returns a map of employee_uid → primary role name for the given
+// employee UIDs. Role priority order (highest to lowest):
+//   role_university_president > role_vice_president > role_dean >
+//   role_department_manager > (anything else non-employee)
+// The first matching role in that order is used per employee.
+
+func (r *RoleRepository) GetRoleNamesByEmployeeUIDs(ctx context.Context, q ports.Querier, employeeUIDs []string) (map[string]string, error) {
+	if len(employeeUIDs) == 0 {
+		return map[string]string{}, nil
+	}
+
+	placeholders := make([]byte, 0, len(employeeUIDs)*2)
+	args := make([]any, len(employeeUIDs))
+	for i, uid := range employeeUIDs {
+		if i > 0 {
+			placeholders = append(placeholders, ',')
+		}
+		placeholders = append(placeholders, '?')
+		args[i] = uid
+	}
+
+	query := `
+		SELECT u.employee_uid, r.uid AS role_uid, r.name AS role_name
+		FROM users u
+		JOIN user_roles ur ON ur.user_id = u.id
+		JOIN roles r ON r.id = ur.role_id
+		WHERE u.employee_uid IN (` + string(placeholders) + `)
+		  AND r.uid != 'role_employee'
+		ORDER BY
+			CASE r.uid
+				WHEN 'role_university_president' THEN 1
+				WHEN 'role_vice_president'        THEN 2
+				WHEN 'role_dean'                  THEN 3
+				WHEN 'role_department_manager'    THEN 4
+				ELSE 5
+			END ASC`
+
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		slog.Error("role_repository.GetRoleNamesByEmployeeUIDs.query", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]string, len(employeeUIDs))
+	for rows.Next() {
+		var empUID, roleUID, roleName string
+		if err := rows.Scan(&empUID, &roleUID, &roleName); err != nil {
+			slog.Error("role_repository.GetRoleNamesByEmployeeUIDs.scan", "error", err)
+			return nil, err
+		}
+		// Keep only the first (highest-priority) role per employee
+		if _, exists := result[empUID]; !exists {
+			result[empUID] = roleName
+		}
+	}
+	return result, rows.Err()
+}

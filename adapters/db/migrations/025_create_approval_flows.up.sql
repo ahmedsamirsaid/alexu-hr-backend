@@ -5,7 +5,7 @@ CREATE TABLE approval_flows (
     name_en TEXT NOT NULL,
     name_ar TEXT,
     description TEXT,
-    is_active INTEGER DEFAULT 1,
+    is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

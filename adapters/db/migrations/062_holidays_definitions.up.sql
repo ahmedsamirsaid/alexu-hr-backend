@@ -8,7 +8,7 @@ CREATE TABLE holiday_definitions (
     name_en TEXT NOT NULL,
     name_ar TEXT NOT NULL,
     date TEXT NOT NULL,
-    is_manual INTEGER NOT NULL DEFAULT 1,
+    is_manual BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

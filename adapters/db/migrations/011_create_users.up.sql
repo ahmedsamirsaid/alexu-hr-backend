@@ -4,7 +4,7 @@ CREATE TABLE users (
     phone TEXT UNIQUE NOT NULL,
     password_hash TEXT,
     employee_uid TEXT,
-    is_active INTEGER DEFAULT 1,
+    is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -92,7 +92,7 @@ func LoadConfig() *AppConfig {
 		DevOTPBypass:       getEnvBool("BANU_MUSA_DEV_OTP_BYPASS", true),
 		DevBypassOTP:       getEnv("BANU_MUSA_DEV_BYPASS_OTP", "112233"),
 		JWTSecret:          getEnv("BANU_MUSA_JWT_SECRET", "dev-secret-change-in-production"),
-		AccessTokenMinutes: getEnvInt("BANU_MUSA_ACCESS_TOKEN_MINUTES", 60),
+		AccessTokenMinutes: getEnvInt("BANU_MUSA_ACCESS_TOKEN_MINUTES", 10080),
 		RefreshTokenDays:   getEnvInt("BANU_MUSA_REFRESH_TOKEN_DAYS", 90),
 		// FCM config
 		FCMEnabled:            getEnvBool("BANU_MUSA_FCM_ENABLED", false),

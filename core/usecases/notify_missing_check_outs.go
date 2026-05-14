@@ -180,8 +180,8 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployeeMissingCheckIn(ctx contex
 		return false, err
 	}
 
-	title := "notification.attendance_reminder.title"
-	body := "notification.attendance_reminder.body"
+	title := "notification.missing_check_in.title"
+	body := "notification.missing_check_in.body"
 	data := ports.NotificationData{
 		"type":           "missing_check_in_reminder",
 		"employeeUid":    employee.UID,
@@ -233,8 +233,8 @@ func (uc *NotifyMissingCheckOutsUseCase) notifyEmployee(ctx context.Context, now
 		return false, err
 	}
 
-	title := "notification.attendance_reminder.title"
-	body := "notification.attendance_reminder.body"
+	title := "notification.missing_check_out.title"
+	body := "notification.missing_check_out.body"
 	data := ports.NotificationData{
 		"type":           "missing_check_out_reminder",
 		"employeeUid":    group.EmployeeUID,

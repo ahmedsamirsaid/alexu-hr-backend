@@ -214,7 +214,6 @@ func (r *LeaveRequestRepository) List(ctx context.Context, q ports.Querier, filt
 	}
 
 	query, args = applyLeaveRequestDepartmentScope(query, args, filter.DepartmentUIDs)
-
 	query += ` ORDER BY lr.submitted_at DESC LIMIT ` + nextPlaceholder(args) + ` OFFSET ` + nextPlaceholder(append(args, nil))
 	args = append(args, limit, offset)
 

@@ -3,6 +3,14 @@ package ports
 // NotificationData contains additional data to include in the push notification payload.
 type NotificationData map[string]string
 
+// LocalizableString holds the Arabic and English variants of a dynamic notification param.
+// The NotificationService implementation resolves it to the recipient's preferred language
+// before applying it to the template, so callers never need to do language selection themselves.
+type LocalizableString struct {
+	Ar string
+	En string
+}
+
 // NotificationService defines the interface for sending push notifications.
 // Callers pass i18n translation keys (e.g. "notification.leave_approved.title") so that
 // the implementation can translate them to each recipient's preferred language.

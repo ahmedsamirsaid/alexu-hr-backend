@@ -123,6 +123,7 @@ func main() {
 	approvalFlowStepRepo := db.NewApprovalFlowStepRepository()
 	approvalRequestRepo := db.NewApprovalRequestRepository()
 	approvalActionRepo := db.NewApprovalActionRepository()
+	profileChangeRequestRepo := db.NewEmployeeProfileChangeRequestRepository()
 	leaveRequestRepo := db.NewLeaveRequestRepository()
 	permissionRequestRepo := db.NewPermissionRequestRepository()
 	leaveRequestDocumentRepo := db.NewLeaveRequestDocumentRepository()
@@ -133,6 +134,9 @@ func main() {
 	attendanceRecordRepo := db.NewAttendanceRecordRepository()
 	shiftRepo := db.NewShiftRepository()
 	attendanceDeviceRepo := db.NewAttendanceDeviceRepository()
+	penaltyRepo := db.NewPenaltyRepository()
+	incentiveBonusRepo := db.NewIncentiveBonusRepository()
+	annualReportRepo := db.NewAnnualReportRepository()
 	auditLogRepo := db.NewAuditLogRepository()
 	auditor := audit.NewAuditor(pgDB, auditLogRepo)
 	var notificationService ports.NotificationService
@@ -167,7 +171,8 @@ func main() {
 
 	getDashboardStatsUC := usecases.NewGetDashboardStatsUseCase(pgDB, employeeRepo, leaveRecordRepo, leaveRequestRepo, attendanceRecordRepo)
 
-	getEmployeeUC := usecases.NewGetEmployeeUseCase(pgDB, employeeRepo)
+	setEmployeeManagerUC := usecases.NewSetEmployeeManagerUseCase(pgDB, employeeRepo, roleRepo, auditor)
+	listManagerCandidatesUC := usecases.NewListManagerCandidatesUseCase(pgDB, employeeRepo, roleRepo)
 	listEmployeesUC := usecases.NewListEmployeesUseCase(pgDB, employeeRepo, userRepo, roleRepo)
 	importEmployeesUC := usecases.NewImportEmployeesUseCase(pgDB, employeeRepo, userRepo, roleRepo, auditor)
 	exportEmployeesUC := usecases.NewExportEmployeesUseCase(pgDB, employeeRepo)
@@ -245,9 +250,23 @@ func main() {
 		cfg.MinIODocumentsBucket,
 		cfg.MinIODownloadExpiryMinutes,
 	)
+	getEmployeeUC := usecases.NewGetEmployeeUseCase(pgDB, employeeRepo, generateDocumentDownloadURLUC, roleRepo)
+	createEmployeeUC := usecases.NewCreateEmployeeUseCase(pgDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
+	updateOwnEmployeeProfileUC := usecases.NewUpdateOwnEmployeeProfileUseCase(pgDB, employeeRepo, userRepo, generateDocumentUploadURLUC, auditor)
+	updateEmployeeProfileUC := usecases.NewUpdateEmployeeProfileUseCase(pgDB, employeeRepo, userRepo, roleRepo, generateDocumentUploadURLUC, auditor)
+	listEmployeePenaltiesUC := usecases.NewListEmployeePenaltiesUseCase(pgDB, employeeRepo, penaltyRepo, generateDocumentDownloadURLUC)
+	createEmployeePenaltyUC := usecases.NewCreateEmployeePenaltyUseCase(pgDB, employeeRepo, penaltyRepo, generateDocumentUploadURLUC)
+	createEmployeePenaltyRemovalUC := usecases.NewCreateEmployeePenaltyRemovalUseCase(pgDB, penaltyRepo, generateDocumentUploadURLUC)
+	updateEmployeePenaltiesUC := usecases.NewUpdateEmployeePenaltiesUseCase(pgDB, employeeRepo, penaltyRepo)
+	listEmployeeIncentiveBonusesUC := usecases.NewListEmployeeIncentiveBonusesUseCase(pgDB, employeeRepo, incentiveBonusRepo, generateDocumentDownloadURLUC)
+	createEmployeeIncentiveBonusUC := usecases.NewCreateEmployeeIncentiveBonusUseCase(pgDB, employeeRepo, incentiveBonusRepo, generateDocumentUploadURLUC)
+	updateEmployeeIncentiveBonusesUC := usecases.NewUpdateEmployeeIncentiveBonusesUseCase(pgDB, employeeRepo, incentiveBonusRepo)
+	listEmployeeAnnualReportsUC := usecases.NewListEmployeeAnnualReportsUseCase(pgDB, employeeRepo, annualReportRepo, generateDocumentDownloadURLUC)
+	createEmployeeAnnualReportUC := usecases.NewCreateEmployeeAnnualReportUseCase(pgDB, employeeRepo, annualReportRepo, generateDocumentUploadURLUC)
+	updateEmployeeAnnualReportsUC := usecases.NewUpdateEmployeeAnnualReportsUseCase(pgDB, employeeRepo, annualReportRepo)
 	updateHolidayUC := usecases.NewUpdateHolidayUseCase(pgDB, holidayDefinitionRepo, weekendRepo, auditor)
 	deleteHolidayUC := usecases.NewDeleteHolidayUseCase(pgDB, holidayDefinitionRepo, auditor)
-
+	
 	submitLeaveRequestUC := usecases.NewSubmitLeaveRequestUseCase(
 		pgDB, userRepo, employeeRepo, leaveTypeRepo, leaveBalanceRepo, leaveRequestRepo, leaveRecordRepo,
 		balanceTxRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, leaveRequestDocumentRepo, workingDaysCalc,
@@ -317,7 +336,26 @@ func main() {
 	getApprovalHistoryUC := usecases.NewGetApprovalHistoryUseCase(
 		pgDB, approvalRequestRepo, approvalActionRepo, employeeRepo,
 	)
+	submitEmployeeProfileChangeRequestUC := usecases.NewSubmitEmployeeProfileChangeRequestUseCase(
+		pgDB, employeeRepo, roleRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, profileChangeRequestRepo, auditor,
+	)
+	getEmployeeProfileChangeRequestUC := usecases.NewGetEmployeeProfileChangeRequestUseCase(
+		pgDB, roleRepo, profileChangeRequestRepo, approvalRequestRepo, employeeRepo,
+	)
+	listEmployeeProfileChangeRequestsUC := usecases.NewListEmployeeProfileChangeRequestsUseCase(
+		pgDB, roleRepo, profileChangeRequestRepo, getEmployeeProfileChangeRequestUC,
+	)
+	listPendingEmployeeProfileChangeRequestsUC := usecases.NewListPendingEmployeeProfileChangeRequestsUseCase(
+		pgDB, profileChangeRequestRepo, roleRepo, getEmployeeProfileChangeRequestUC,
+	)
+	approveEmployeeProfileChangeRequestUC := usecases.NewApproveEmployeeProfileChangeRequestUseCase(
+		pgDB, employeeRepo, profileChangeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, auditor,
+	)
+	rejectEmployeeProfileChangeRequestUC := usecases.NewRejectEmployeeProfileChangeRequestUseCase(
+		pgDB, profileChangeRequestRepo, approvalRequestRepo, approvalActionRepo, approvalFlowStepRepo, roleRepo, auditor,
+	)
 
+	// Device token use cases
 	registerDeviceTokenUC := usecases.NewRegisterDeviceTokenUseCase(deviceTokenRepo, pgDB)
 	unregisterDeviceTokenUC := usecases.NewUnregisterDeviceTokenUseCase(deviceTokenRepo, pgDB)
 	notifyMissingCheckOutsUC := usecases.NewNotifyMissingCheckOutsUseCase(
@@ -333,6 +371,7 @@ func main() {
 	departmentAttendanceReportUC := usecases.NewGetDepartmentAttendanceReportUseCase(pgDB, departmentRepo, attendanceRecordRepo, employeeRepo, shiftRepo, weekendRepo, holidayDefinitionRepo)
 	exportDepartmentAttendanceReportUC := usecases.NewExportDepartmentAttendanceReportUseCase(departmentAttendanceReportUC)
 
+	// Attendance device use cases
 	registerAttendanceDeviceUC := usecases.NewRegisterAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo, auditor)
 	listAttendanceDevicesUC := usecases.NewListAttendanceDevicesUseCase(pgDB, attendanceDeviceRepo)
 	getAttendanceDeviceUC := usecases.NewGetAttendanceDeviceUseCase(pgDB, attendanceDeviceRepo)
@@ -358,7 +397,9 @@ func main() {
 		},
 	)
 	exportEmployeeAttendanceReportUC := usecases.NewExportEmployeeAttendanceReportUseCase(getMonthlyAttendanceStatsUC)
+	orgChartUC := usecases.NewOrgChartUseCase(pgDB, employeeRepo, departmentRepo, roleRepo)
 
+	// Scheduler use cases
 	autoRejectExpiredUC := usecases.NewAutoRejectExpiredRequestsUseCase(
 		pgDB, leaveRequestRepo, approvalRequestRepo, approvalActionRepo, cfg.ExpiredLeaveGraceDays,
 	)
@@ -379,8 +420,33 @@ func main() {
 	)
 
 	leaveHandler := httpAdapter.NewLeaveHandler(recordLeaveUC, getBalanceUC, listLeaveRecordsUC, listAllLeaveRecordsUC, i18nService)
-	employeeHandler := httpAdapter.NewEmployeeHandler(getEmployeeUC, listEmployeesUC, importEmployeesUC, exportEmployeesUC, exportEmployeesPDFUC, generateTemplateUC, assignEmployeeDepartmentUC, removeEmployeeDepartmentUC)
+	employeeHandler := httpAdapter.NewEmployeeHandler(
+		createEmployeeUC,
+		getEmployeeUC,
+		listEmployeesUC,
+		updateOwnEmployeeProfileUC,
+		importEmployeesUC,
+		exportEmployeesUC,
+		exportEmployeesPDFUC,
+		generateTemplateUC,
+		assignEmployeeDepartmentUC,
+		removeEmployeeDepartmentUC,
+		listEmployeePenaltiesUC,
+		createEmployeePenaltyUC,
+		createEmployeePenaltyRemovalUC,
+		updateEmployeePenaltiesUC,
+		listEmployeeIncentiveBonusesUC,
+		createEmployeeIncentiveBonusUC,
+		updateEmployeeIncentiveBonusesUC,
+		listEmployeeAnnualReportsUC,
+		createEmployeeAnnualReportUC,
+		updateEmployeeAnnualReportsUC,
+		setEmployeeManagerUC,
+		listManagerCandidatesUC,
+	)
 	authHandler := httpAdapter.NewAuthHandler(requestOTPUC, verifyOTPUC, loginPasswordUC, refreshTokenUC, logoutUC, getCurrentUserUC, i18nService)
+	meHandler := httpAdapter.NewMeHandler(updateUserUC)
+
 	userHandler := httpAdapter.NewUserHandler(listUsersUC, createUserUC, updateUserUC, assignRoleUC, removeRoleUC)
 	roleHandler := httpAdapter.NewRoleHandler(listRolesUC, createRoleUC, setPermissionsUC, setRoleScopeUC, listPermissionsUC)
 	dashboardHandler := httpAdapter.NewDashboardHandler(getDashboardStatsUC)
@@ -390,7 +456,7 @@ func main() {
 	)
 	leaveRequestHandler := httpAdapter.NewLeaveRequestHandler(
 		submitLeaveRequestUC, updateRejectedLeaveRequestUC, cancelLeaveRequestUC, listLeaveRequestsUC, getLeaveRequestUC,
-		getEmployeeUC,listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC,i18nService,
+		getEmployeeUC, listPendingApprovalsUC, approveRequestUC, rejectRequestUC, getApprovalHistoryUC, getCurrentUserUC, i18nService,
 	)
 	permissionRequestHandler := httpAdapter.NewPermissionRequestHandler(
 		submitPermissionUC, updatePermissionUC, cancelPermissionUC,
@@ -398,9 +464,20 @@ func main() {
 		listPendingPermissionApprovalsUC, approvePermissionUC, rejectPermissionUC,
 		getApprovalHistoryUC, permissionEligibilityUC, getCurrentUserUC,
 	)
+	employeeProfileChangeHandler := httpAdapter.NewEmployeeProfileChangeHandler(
+		submitEmployeeProfileChangeRequestUC,
+		listEmployeeProfileChangeRequestsUC,
+		getEmployeeProfileChangeRequestUC,
+		listPendingEmployeeProfileChangeRequestsUC,
+		approveEmployeeProfileChangeRequestUC,
+		rejectEmployeeProfileChangeRequestUC,
+		getApprovalHistoryUC,
+		updateEmployeeProfileUC,
+		getCurrentUserUC,
+	)
 	departmentHandler := httpAdapter.NewDepartmentHandler(
 		listDepartmentsUC, getDepartmentUC, createDepartmentUC, updateDepartmentUC,
-		assignDepartmentManagerUC, removeDepartmentManagerUC, i18nService,
+		assignDepartmentManagerUC, removeDepartmentManagerUC, i18nService, orgChartUC,
 	)
 	deviceTokenHandler := httpAdapter.NewDeviceTokenHandler(registerDeviceTokenUC, unregisterDeviceTokenUC)
 	attendanceDeviceHandler := httpAdapter.NewAttendanceDeviceHandler(
@@ -450,29 +527,31 @@ func main() {
 	)
 
 	router := httpAdapter.NewRouter(httpAdapter.RouterConfig{
-		LeaveHandler:            leaveHandler,
-		EmployeeHandler:         employeeHandler,
-		AuthHandler:             authHandler,
-		UserHandler:             userHandler,
-		RoleHandler:             roleHandler,
-		DashboardHandler:        dashboardHandler,
-		ApprovalFlowHandler:     approvalFlowHandler,
-		LeaveRequestHandler:     leaveRequestHandler,
-		PermissionRequestHandler: permissionRequestHandler,
-		DepartmentHandler:       departmentHandler,
-		DeviceTokenHandler:      deviceTokenHandler,
-		AttendanceDeviceHandler: attendanceDeviceHandler,
-		LeaveTypeHandler:        leaveTypeHandler,
-		WeekendHandler:          weekendHandler,
-		HolidayHandler:          holidayHandler,
-		ShiftHandler:            shiftHandler,
-		AttendanceHandler:       attendanceHandler,
-		AuditHandler:            auditHandler,
-		DebugHandler:            debugHandler,
-		JWTService:              jwtService,
-		AuthEnabled:             cfg.AuthEnabled,
-		DocumentHandler:         documentHandler,
-		I18nService:             i18nService,
+		LeaveHandler:                 leaveHandler,
+		EmployeeHandler:              employeeHandler,
+		AuthHandler:                  authHandler,
+		UserHandler:                  userHandler,
+		RoleHandler:                  roleHandler,
+		DashboardHandler:             dashboardHandler,
+		ApprovalFlowHandler:          approvalFlowHandler,
+		LeaveRequestHandler:          leaveRequestHandler,
+		PermissionRequestHandler:     permissionRequestHandler,
+		MeHandler:                    meHandler,
+		DepartmentHandler:            departmentHandler,
+		DeviceTokenHandler:           deviceTokenHandler,
+		AttendanceDeviceHandler:      attendanceDeviceHandler,
+		LeaveTypeHandler:             leaveTypeHandler,
+		WeekendHandler:               weekendHandler,
+		HolidayHandler:               holidayHandler,
+		ShiftHandler:                 shiftHandler,
+		AttendanceHandler:            attendanceHandler,
+		AuditHandler:                 auditHandler,
+		DebugHandler:                 debugHandler,
+		JWTService:                   jwtService,
+		AuthEnabled:                  cfg.AuthEnabled,
+		EmployeeProfileChangeHandler: employeeProfileChangeHandler,
+		DocumentHandler:              documentHandler,
+		I18nService:                  i18nService,
 	})
 
 	var sched *scheduler.Scheduler

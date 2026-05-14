@@ -232,6 +232,7 @@ func (r *LeaveTypeRepository) scanLeaveTypeRow(rows *sql.Rows) (*domain.LeaveTyp
 	return &lt, nil
 }
 
+
 func (r *LeaveTypeRepository) scanSubLeaveType(row *sql.Row) (*domain.SubLeaveType, error) {
 	var subLeaveType domain.SubLeaveType
 	var createdAt, updatedAt domain.Time

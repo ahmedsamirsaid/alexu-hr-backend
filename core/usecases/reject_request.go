@@ -196,12 +196,13 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 
 	// Get data for notification
 	var requesterUID string
-	var leaveTypeNameNotif string
+	var leaveTypeNameAR, leaveTypeNameEN string
 	if leaveRequest != nil {
 		requesterUID = approvalRequest.RequesterUID
 		leaveType, _ := uc.leaveTypeRepo.GetByUID(ctx, tx, leaveRequest.LeaveTypeUID)
 		if leaveType != nil {
-			leaveTypeNameNotif = leaveType.NameAR
+			leaveTypeNameAR = leaveType.NameAR
+			leaveTypeNameEN = leaveType.NameEN
 		}
 	}
 
@@ -211,7 +212,7 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 
 	// Send notification to requester (after commit, non-blocking)
 	if requesterUID != "" {
-		go uc.notifyRequesterRejected(requesterUID, leaveTypeNameNotif, leaveRequestUID)
+		go uc.notifyRequesterRejected(requesterUID, leaveTypeNameAR, leaveTypeNameEN, leaveRequestUID)
 	}
 
 	return &RejectRequestOutput{
@@ -219,7 +220,7 @@ func (uc *RejectRequestUseCase) Execute(ctx context.Context, input RejectRequest
 	}, nil
 }
 
-func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeName, requestUID string) {
+func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeNameAR, leaveTypeNameEN, requestUID string) {
 	user, err := uc.userRepo.GetByEmployeeUID(context.Background(), uc.db, employeeUID)
 	if err != nil || user == nil {
 		slog.Debug("reject_request.notifyRequesterRejected.no_user", "employee_uid", employeeUID)
@@ -227,7 +228,7 @@ func (uc *RejectRequestUseCase) notifyRequesterRejected(employeeUID, leaveTypeNa
 	}
 
 	params := map[string]interface{}{
-		"LeaveTypeName": leaveTypeName,
+		"LeaveTypeName": ports.LocalizableString{Ar: leaveTypeNameAR, En: leaveTypeNameEN},
 	}
 	data := ports.NotificationData{
 		"type":       "request_rejected",

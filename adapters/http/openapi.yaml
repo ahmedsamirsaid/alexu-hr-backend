@@ -52,6 +52,11 @@ components:
           type: string
           nullable: true
           example: "Ahmed Al-Sayed"
+        preferredLanguage:
+          type: string
+          enum: [ar, en]
+          example: "ar"
+          description: Preferred language for push notifications
         accessScope:
           type: string
           enum: [global, department, self]
@@ -116,6 +121,11 @@ components:
         isActive:
           type: boolean
           example: true
+        preferredLanguage:
+          type: string
+          enum: [ar, en]
+          example: "ar"
+          description: Preferred language for push notifications
         accessScope:
           type: string
           enum: [global, department, self]
@@ -183,7 +193,13 @@ components:
         subType:
           type: string
           enum:
-            [normal, special_needs, separation_termination_for_budget, comprehensive_bonus, contract_employees]
+            [
+              normal,
+              special_needs,
+              separation_termination_for_budget,
+              comprehensive_bonus,
+              contract_employees,
+            ]
           example: normal
 
     EmployeeListItem:
@@ -527,6 +543,67 @@ components:
           type: string
           nullable: true
           example: "Manager Name"
+
+    OrgChartPerson:
+      type: object
+      properties:
+        userUid:
+          type: string
+          example: "usr_001"
+        employeeUid:
+          type: string
+          nullable: true
+          example: "emp_001"
+        name:
+          type: string
+          example: "Dr. Amina Ali"
+        phone:
+          type: string
+          example: "+201000000000"
+
+    OrgChartEmployee:
+      type: object
+      properties:
+        uid:
+          type: string
+          example: "emp_001"
+        name:
+          type: string
+          example: "Employee Name"
+
+    OrgChartDepartment:
+      type: object
+      properties:
+        department:
+          $ref: "#/components/schemas/Department"
+        manager:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/OrgChartPerson"
+        employees:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartEmployee"
+
+    DepartmentOrgChart:
+      type: object
+      properties:
+        president:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        vicePresidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        deans:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartPerson"
+        departments:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgChartDepartment"
 
     ApprovalFlow:
       type: object
@@ -1750,6 +1827,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /api/v1/employees/me/profile:
+    put:
+      tags: [Employees]
+      summary: Update my employee profile
+      description: Updates the authenticated employee's own profile fields. This endpoint is self-service only and does not accept a target employee UID.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, mobile]
+              properties:
+                name:
+                  type: string
+                  example: "Ahmed Mohamed"
+                mobile:
+                  type: string
+                  example: "01012345678"
+                telephoneNumber:
+                  type: string
+                  nullable: true
+                  example: "0234567890"
+                email:
+                  type: string
+                  nullable: true
+                  example: "ahmed@example.com"
+      responses:
+        "200":
+          description: Updated employee profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  uid:
+                    type: string
+                    example: "emp_xyz789"
+                  name:
+                    type: string
+                    example: "Ahmed Mohamed"
+                  mobile:
+                    type: string
+                    example: "01012345678"
+                  telephoneNumber:
+                    type: string
+                    nullable: true
+                    example: "0234567890"
+                  email:
+                    type: string
+                    nullable: true
+                    example: "ahmed@example.com"
+        "400":
+          description: Invalid request or no linked employee profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Mobile number conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /api/v1/employees/{uid}/department:
     put:
       tags: [Employees]
@@ -2524,6 +2672,11 @@ paths:
                 isActive:
                   type: boolean
                   example: true
+                preferredLanguage:
+                  type: string
+                  enum: [ar, en]
+                  example: "en"
+                  description: Preferred language for push notifications (admin override)
       responses:
         "200":
           description: Updated
@@ -2535,6 +2688,49 @@ paths:
                   message:
                     type: string
                     example: "User updated"
+
+  /api/v1/me/language:
+    put:
+      tags: [Me]
+      summary: Update own notification language preference
+      description: >
+        Sets the preferred language for push notifications for the authenticated user.
+        No special permissions required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  type: string
+                  enum: [ar, en]
+                  example: "en"
+      responses:
+        "200":
+          description: Language updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Language updated"
+        "400":
+          description: Invalid language value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/v1/users/{uid}/roles:
     post:
@@ -2801,6 +2997,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Department"
+
+  /api/v1/admin/departments/org-chart:
+    get:
+      tags: [Departments]
+      summary: Get organization chart
+      responses:
+        "200":
+          description: Organization chart
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DepartmentOrgChart"
 
   /api/v1/admin/departments/{uid}:
     get:
@@ -4665,7 +4873,7 @@ paths:
         Retrieves all audit logs with optional filtering capabilities.
         Returns paginated results ordered by occurrence time (newest first).
         Requires `audit:read` permission.
-        
+
         This endpoint allows filtering by:
         - Entity type (category)
         - Actor UID (who performed the action)

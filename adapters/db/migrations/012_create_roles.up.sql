@@ -3,7 +3,7 @@ CREATE TABLE roles (
     uid TEXT UNIQUE NOT NULL,
     name TEXT UNIQUE NOT NULL,
     description TEXT,
-    is_system INTEGER DEFAULT 0,
+    is_system BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -10,7 +10,31 @@
     },
     "pending_approval": {
       "title": "في انتظار الموافقة",
-      "body": "قدم {{.EmployeeName}} طلب إجازة يتطلب موافقتك"
+      "body": "قدّم {{.EmployeeName}} طلب إجازة {{.LeaveTypeName}} يتطلب موافقتك"
+    },
+    "permission_approved": {
+      "title": "تمت الموافقة على طلب الإذن",
+      "body": "تمت الموافقة على طلب {{.PermissionType}} الخاص بك"
+    },
+    "permission_rejected": {
+      "title": "تم رفض طلب الإذن",
+      "body": "تم رفض طلب {{.PermissionType}} الخاص بك"
+    },
+    "permission_cancelled": {
+      "title": "تم إلغاء طلب إذن سبق اعتماده",
+      "body": "{{.PermissionType}} — {{.Date}}"
+    },
+    "pending_permission": {
+      "title": "طلب إذن بانتظار الموافقة",
+      "body": "قدّم {{.EmployeeName}} طلب {{.PermissionType}} يتطلب موافقتك"
+    },
+    "missing_check_in": {
+      "title": "تذكير بتسجيل الحضور",
+      "body": "انتهت فترة السماح ولم يتم تسجيل الحضور بعد"
+    },
+    "missing_check_out": {
+      "title": "تذكير بتسجيل الانصراف",
+      "body": "انتهى وقت الدوام ولم يتم تسجيل الانصراف بعد"
     },
     "attendance_reminder": {
       "title": "تذكير بالحضور",

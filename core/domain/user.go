@@ -20,9 +20,10 @@ type User struct {
 
 func NewUser(phone string) *User {
 	return &User{
-		UID:      GenerateUID("usr"),
-		Phone:    phone,
-		IsActive: true,
+		UID:               GenerateUID("usr"),
+		Phone:             phone,
+		IsActive:          true,
+		PreferredLanguage: "ar",
 	}
 }
 

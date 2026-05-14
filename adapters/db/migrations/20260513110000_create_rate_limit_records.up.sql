@@ -1,11 +1,11 @@
 CREATE TABLE rate_limit_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     scope TEXT NOT NULL,
     subject_key TEXT NOT NULL,
-    window_started_at TIMESTAMP NOT NULL,
+    window_started_at TIMESTAMPTZ NOT NULL,
     attempt_count INTEGER NOT NULL DEFAULT 0,
-    locked_until TIMESTAMP NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    locked_until TIMESTAMPTZ NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE UNIQUE INDEX idx_rate_limit_records_scope_subject

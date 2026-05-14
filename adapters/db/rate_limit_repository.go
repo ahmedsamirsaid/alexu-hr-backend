@@ -21,7 +21,7 @@ func (r *RateLimitRepository) GetByScopeAndSubject(ctx context.Context, q ports.
 	row := q.QueryRowContext(ctx, `
 		SELECT id, scope, subject_key, window_started_at, attempt_count, locked_until, updated_at
 		FROM rate_limit_records
-		WHERE scope = ? AND subject_key = ?`,
+		WHERE scope = $1 AND subject_key = $2`,
 		scope, subjectKey,
 	)
 
@@ -57,7 +57,7 @@ func (r *RateLimitRepository) Upsert(ctx context.Context, q ports.Querier, recor
 	_, err := q.ExecContext(ctx, `
 		INSERT INTO rate_limit_records (
 			scope, subject_key, window_started_at, attempt_count, locked_until, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+		) VALUES ($1, $2, $3, $4, $5, $6)
 		ON CONFLICT(scope, subject_key) DO UPDATE SET
 			window_started_at = excluded.window_started_at,
 			attempt_count = excluded.attempt_count,
@@ -77,7 +77,7 @@ func (r *RateLimitRepository) Upsert(ctx context.Context, q ports.Querier, recor
 }
 
 func (r *RateLimitRepository) DeleteByScopeAndSubject(ctx context.Context, q ports.Querier, scope, subjectKey string) error {
-	_, err := q.ExecContext(ctx, `DELETE FROM rate_limit_records WHERE scope = ? AND subject_key = ?`, scope, subjectKey)
+	_, err := q.ExecContext(ctx, `DELETE FROM rate_limit_records WHERE scope = $1 AND subject_key = $2`, scope, subjectKey)
 	if err != nil {
 		slog.Error("rate_limit_repository.DeleteByScopeAndSubject.exec", "error", err, "scope", scope)
 	}

@@ -40,6 +40,28 @@ func NewPostgresDB(host, port, user, password, dbname, sslmode string) (*Postgre
 	return &PostgresDB{db: db}, nil
 }
 
+func NewPostgresDBFromDSN(dsn string) (*PostgresDB, error) {
+	slog.Info("postgres.NewPostgresDBFromDSN", "driver", "pgx", "dsn", dsn)
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		slog.Error("postgres.NewPostgresDBFromDSN.open", "error", err)
+		return nil, err
+	}
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(30 * time.Minute)
+
+	if err := db.PingContext(context.Background()); err != nil {
+		slog.Error("postgres.NewPostgresDBFromDSN.ping", "error", err)
+		db.Close()
+		return nil, err
+	}
+
+	return &PostgresDB{db: db}, nil
+}
+
 func (p *PostgresDB) Close() error {
 	return p.db.Close()
 }

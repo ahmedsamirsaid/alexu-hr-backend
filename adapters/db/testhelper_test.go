@@ -11,34 +11,33 @@ import (
 
 	"github.com/banumusa/backend/core/domain"
 	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/sqlite"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-// TestDB wraps a SQLite database for testing
+// TestDB wraps a test database for testing
 type TestDB struct {
-	*SQLiteDB
+	*PostgresDB
 	t *testing.T
 }
 
-var testDBCounter int
-
-// NewTestDB creates an in-memory SQLite database with the schema applied
+// NewTestDB creates a test database connection with migrations applied
 func NewTestDB(t *testing.T) *TestDB {
 	t.Helper()
 
-	// Use a unique name for each test to ensure isolation while using shared cache
-	// Shared cache ensures migrations and queries use the same database connection
-	testDBCounter++
-	dsn := fmt.Sprintf("file:testdb_%d?mode=memory&cache=shared", testDBCounter)
+	// Expect TEST_DATABASE_URL env var, e.g., "postgres://user:pass@localhost:5432/testdb?sslmode=disable"
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+	}
 
-	db, err := NewSQLiteDB(dsn)
+	db, err := NewPostgresDBFromDSN(dsn)
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
 
-	tdb := &TestDB{SQLiteDB: db, t: t}
+	tdb := &TestDB{PostgresDB: db, t: t}
 	tdb.applySchema()
 
 	return tdb
@@ -49,14 +48,14 @@ func (tdb *TestDB) applySchema() {
 
 	migrationsPath := findMigrationsDir(tdb.t)
 
-	driver, err := sqlite.WithInstance(tdb.db, &sqlite.Config{})
+	driver, err := postgres.WithInstance(tdb.db, &postgres.Config{})
 	if err != nil {
 		tdb.t.Fatalf("failed to create migration driver: %v", err)
 	}
 
 	m, err := migrate.NewWithDatabaseInstance(
 		fmt.Sprintf("file://%s", migrationsPath),
-		"sqlite",
+		"postgres",
 		driver,
 	)
 	if err != nil {
@@ -160,7 +159,7 @@ func findMigrationsDir(t *testing.T) string {
 
 // Close cleans up the test database
 func (tdb *TestDB) Close() {
-	if err := tdb.SQLiteDB.Close(); err != nil {
+	if err := tdb.PostgresDB.Close(); err != nil {
 		tdb.t.Errorf("failed to close test database: %v", err)
 	}
 }
